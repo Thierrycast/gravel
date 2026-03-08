@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skills": {
+    "pluggy-integration": {
+      "source": "pluggyai/agent-skills",
+      "sourceType": "github",
+      "computedHash": "75de96bf46c27dd84e1a29ae5b7ad2b827eb342ad8adfe75bdaae8ed1ee05463"
+    },
+    "pluggy-open-finance": {
+      "source": "pluggyai/agent-skills",
+      "sourceType": "github",
+      "computedHash": "97d0cee17b9f7d6d9a4fe428edc3f8baa4db9bda721a20e271b3dfd97f85c330"
+    },
+    "pluggy-payments": {
+      "source": "pluggyai/agent-skills",
+      "sourceType": "github",
+      "computedHash": "1380ecae486a178346daefaecaba4851ec17684aca0dac55bd922ed7abf3b31a"
+    }
+  }
+}
