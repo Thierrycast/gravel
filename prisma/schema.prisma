@@ -1,0 +1,137 @@
+// Prisma schema for the financial dashboard (SQLite for now)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+enum CategoryType {
+  INCOME
+  EXPENSE
+}
+
+enum RecurringType {
+  INCOME
+  EXPENSE
+}
+
+enum RecurringInterval {
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+enum BillStatus {
+  OPEN
+  CLOSED
+  PAID
+}
+
+enum AccountType {
+  BANK
+  CASH
+  CARD
+  INVESTMENT
+  CRYPTO
+}
+
+model Account {
+  id        String        @id @default(cuid())
+  name      String
+  type      AccountType
+  currency  String        @default("BRL")
+  balance   Decimal       @default(0)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  transactions Transaction[]
+  bills        Bill[]
+  recurring    RecurringItem[]
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String
+  type      CategoryType
+  color     String?   // hex or token
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  transactions Transaction[]
+}
+
+model Transaction {
+  id          String          @id @default(cuid())
+  type        TransactionType
+  amount      Decimal
+  description String?
+  date        DateTime
+  createdAt   DateTime        @default(now())
+
+  account   Account   @relation(fields: [accountId], references: [id])
+  accountId String
+
+  category   Category? @relation(fields: [categoryId], references: [id])
+  categoryId String?
+}
+
+model RecurringItem {
+  id          String            @id @default(cuid())
+  title       String
+  type        RecurringType
+  amount      Decimal
+  interval    RecurringInterval
+  nextDate    DateTime
+  active      Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+
+  account   Account? @relation(fields: [accountId], references: [id])
+  accountId String?
+}
+
+model Bill {
+  id          String     @id @default(cuid())
+  periodStart DateTime
+  periodEnd   DateTime
+  dueDate     DateTime
+  total       Decimal
+  status      BillStatus @default(OPEN)
+  createdAt   DateTime   @default(now())
+
+  account   Account @relation(fields: [accountId], references: [id])
+  accountId String
+}
+
+model CryptoAsset {
+  id        String   @id @default(cuid())
+  symbol    String
+  name      String
+  amount    Decimal
+  avgPrice  Decimal
+  lastPrice Decimal
+  updatedAt DateTime @updatedAt
+}
+
+model PortfolioSnapshot {
+  id        String   @id @default(cuid())
+  date      DateTime
+  netWorth  Decimal
+  createdAt DateTime @default(now())
+}
+
+model BalanceProjection {
+  id               String   @id @default(cuid())
+  date             DateTime
+  projectedBalance Decimal
+  createdAt        DateTime @default(now())
+}
