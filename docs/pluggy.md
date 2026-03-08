@@ -25,6 +25,8 @@ Arquivo de exemplo: `.env.example`.
 ## Endpoints internos
 - `POST /api/pluggy/api-key`
   - Retorna apenas `{ apiKey }` usando cache local.
+- `POST /api/pluggy/connect-token`
+  - Gera Connect Token para uso no widget.
 - `POST /api/pluggy/item/create`
   - Cria item com `PLUGGY_CONNECTOR_ID` (ou override via body).
 - `GET /api/pluggy/item`
@@ -42,11 +44,8 @@ Arquivo de exemplo: `.env.example`.
 
 ## Fluxo recomendado (uso pessoal)
 1. Backend gera API key com `PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET`.
-2. Criar Item com `PLUGGY_CONNECTOR_ID` (ou via `POST /api/pluggy/item/create`).
-3. Definir `PLUGGY_OAUTH_REDIRECT_URI` (ex: URL do ngrok apontando para `/api/pluggy/oauth/callback`).
-4. Se o item exigir OAuth, pegar o `oauthUrl` em `GET /api/pluggy/item/oauth?itemId=...` e abrir no navegador.
-5. Apos o login, o Pluggy redireciona para o callback com `itemId` e `status`.
-6. Usar o `itemId` criado como `PLUGGY_ITEM_ID`.
+2. Abrir `/connect` e conectar via widget Pluggy.
+3. Copiar o `itemId` do sucesso e salvar em `PLUGGY_ITEM_ID`.
 
 ## Uso pessoal com item unico
 - Defina `PLUGGY_ITEM_ID` com o item criado no Pluggy (na resposta de criacao).
