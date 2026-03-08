@@ -249,6 +249,11 @@ export async function fetchItems() {
   return pluggyRequest("/items")
 }
 
+export async function updateItem(itemId?: string) {
+  const resolvedItemId = itemId ?? getItemIdFromEnv()
+  return pluggyRequest(`/items/${resolvedItemId}`, { method: "PATCH" })
+}
+
 export async function createItem(input?: {
   connectorId?: number
   parameters?: Record<string, string>
