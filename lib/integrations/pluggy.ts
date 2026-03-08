@@ -21,16 +21,28 @@ function getAuthPath() {
   return process.env.PLUGGY_AUTH_PATH ?? "/auth"
 }
 
-function getConnectTokenPath() {
-  return process.env.PLUGGY_CONNECT_TOKEN_PATH ?? "/connect_token"
-}
-
 function getItemIdFromEnv() {
   const itemId = process.env.PLUGGY_ITEM_ID
   if (!itemId) {
     throw new Error("Missing env var: PLUGGY_ITEM_ID")
   }
   return itemId
+}
+
+function getConnectorIdFromEnv() {
+  const connectorId = process.env.PLUGGY_CONNECTOR_ID
+  if (!connectorId) {
+    throw new Error("Missing env var: PLUGGY_CONNECTOR_ID")
+  }
+  const parsed = Number(connectorId)
+  if (!Number.isFinite(parsed)) {
+    throw new Error("Invalid PLUGGY_CONNECTOR_ID")
+  }
+  return parsed
+}
+
+function getOauthRedirectUriFromEnv() {
+  return process.env.PLUGGY_OAUTH_REDIRECT_URI
 }
 
 function getApiKeyTtlSeconds() {
@@ -237,34 +249,18 @@ export async function fetchItems() {
   return pluggyRequest("/items")
 }
 
-export { getItemIdFromEnv }
-
-type ConnectTokenOptions = {
-  webhookUrl?: string
-  clientUserId?: string
-  oauthRedirectUrl?: string
-  avoidDuplicates?: boolean
-  itemId?: string
-}
-
-export async function createConnectToken(
-  apiKey: string,
-  options?: ConnectTokenOptions
-) {
-  const response = await fetch(`${getBaseUrl()}${getConnectTokenPath()}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      [getHeaderName()]: apiKey,
-    },
-    body: options ? JSON.stringify(options) : undefined,
-    cache: "no-store",
-  })
-
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`Pluggy connect token error: ${response.status} ${text}`)
+export async function createItem(input?: {
+  connectorId?: number
+  parameters?: Record<string, string>
+  oauthRedirectUri?: string
+}) {
+  const body = {
+    connectorId: input?.connectorId ?? getConnectorIdFromEnv(),
+    parameters: input?.parameters ?? {},
+    oauthRedirectUri: input?.oauthRedirectUri ?? getOauthRedirectUriFromEnv(),
   }
 
-  return response.json()
+  return pluggyRequest("/items", { method: "POST", body })
 }
+
+export { getItemIdFromEnv, getConnectorIdFromEnv }

@@ -7,87 +7,60 @@
 
 ## Chaves e tokens
 - API key: criada via autenticacao com `CLIENT_ID` e `CLIENT_SECRET`. Expira em 2 horas.
-- Connect Token: criado com a API key. Expira em 30 minutos e serve para o widget no client.
-
-Regras importantes:
-- Connect Token tem acesso limitado: `GET /items/:id` e acesso reduzido a `GET /accounts?itemId`.
-- Connect Token nao serve para endpoints completos de produtos (retorna 403).
-- Um Connect Token novo nao acessa dados criados com outro token.
 - Para chamadas completas de produtos (transactions, investments, etc), use API key no servidor.
 
 ## Variaveis de ambiente
 - `PLUGGY_CLIENT_ID`
 - `PLUGGY_CLIENT_SECRET`
 - `PLUGGY_ITEM_ID` (item unico da conta pessoal)
+- `PLUGGY_CONNECTOR_ID` (conector do meuPluggy)
+- `PLUGGY_OAUTH_REDIRECT_URI` (opcional, para fluxo OAuth)
 - `PLUGGY_API_BASE` (padrao: https://api.pluggy.ai)
 - `PLUGGY_API_KEY_HEADER` (padrao: X-API-KEY)
 - `PLUGGY_AUTH_PATH` (padrao: /auth)
-- `PLUGGY_CONNECT_TOKEN_PATH` (padrao: /connect_token)
 - `PLUGGY_API_KEY_TTL_SECONDS` (padrao: 7200)
 
 Arquivo de exemplo: `.env.example`.
 
-## Setup rapido (exemplo Next.js)
-1. Criar `.env` a partir de `.env.example` e preencher `PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET`.
-2. Instalar dependencias.
-3. Rodar `pnpm dev` e acessar `http://localhost:3000`.
-
-Dependencias do widget (quando formos para UI):
-- `react-pluggy-connect` no client.
-- `pluggy-sdk` no server para gerar Connect Token.
-
 ## Endpoints internos
 - `POST /api/pluggy/api-key`
   - Retorna apenas `{ apiKey }` usando cache local.
-- `POST /api/pluggy/connect-token`
-  - Cria uma API key e em seguida um Connect Token.
-  - Aceita um body opcional para configurar o token.
-- `GET /api/pluggy/items`
-  - Lista itens da conta Pluggy (use para descobrir `PLUGGY_ITEM_ID`).
+- `POST /api/pluggy/item/create`
+  - Cria item com `PLUGGY_CONNECTOR_ID` (ou override via body).
 - `GET /api/pluggy/item`
-  - Retorna o item configurado em `PLUGGY_ITEM_ID`.
+  - Retorna o item configurado em `PLUGGY_ITEM_ID` (ou `?itemId=`).
+- `GET /api/pluggy/item/oauth?itemId=...`
+  - Retorna `oauthUrl` quando o item exigir login OAuth.
 - `GET /api/pluggy/accounts`
   - Retorna contas do item configurado (status precisa ser `UPDATED`).
 - `GET /api/pluggy/transactions?page=1&pageSize=100`
   - Retorna transacoes do item configurado (status precisa ser `UPDATED`).
 
-Body opcional (exemplo):
-```
-{
-  "webhookUrl": "https://example.com/webhook",
-  "clientUserId": "meu-user-id",
-  "oauthRedirectUrl": "https://example.com/redirect",
-  "avoidDuplicates": true,
-  "itemId": "item_123"
-}
-```
-
 ## Fluxo recomendado (uso pessoal)
 1. Backend gera API key com `PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET`.
-2. Backend gera Connect Token com a API key.
-3. Frontend usa Connect Token no widget Pluggy Connect.
-4. Armazenar `itemId` ao finalizar a conexao (evento `onSuccess`) para referencia futura.
+2. Criar Item com `PLUGGY_CONNECTOR_ID` (ou via `POST /api/pluggy/item/create`).
+3. Se o item exigir OAuth, pegar o `oauthUrl` em `GET /api/pluggy/item/oauth?itemId=...` e abrir no navegador.
+4. Usar o `itemId` criado como `PLUGGY_ITEM_ID`.
 
 ## Uso pessoal com item unico
-- Defina `PLUGGY_ITEM_ID` com o item criado no Pluggy.
+- Defina `PLUGGY_ITEM_ID` com o item criado no Pluggy (na resposta de criacao).
 - Para dados diarios, use os endpoints internos de contas e transacoes.
 - Se o item nao estiver `UPDATED`, os endpoints retornam `409` com o status atual.
-- Se voce nao quiser usar o widget, pegue o `itemId` com `GET /api/pluggy/items` e configure no `.env`.
+- O `itemId` nao e o mesmo que `connectorId`.
 
 ## Open Finance (conector unico)
 - Vamos usar apenas conectores Open Finance via Pluggy Connect.
 - IDs de conectores Open Finance geralmente sao `>= 600` (ex: Itau OF = 601).
-- O fluxo de consentimento abre o login do banco em popup e depois retorna ao widget.
+- O fluxo de consentimento abre o login do banco em popup e depois retorna ao app.
 - O link de consentimento e de uso unico e expira rapido; evitar compartilhar em apps que previsualizam links.
 - Sandbox de Open Finance: ver docs do Pluggy (sandbox open finance flow).
 
-## Update mode
-- Para atualizar um item, o Connect Token precisa ser gerado com o `itemId` alvo ou reutilizar o mesmo token que criou o item.
-- A recomendacao no quickstart e gerar um token novo para cada atualizacao do ultimo item.
+## MeuPluggy (proxy pessoal)
+- O conector `MeuPluggy` (id 200) funciona como proxy e nao marca `isOpenFinance`.
+- Os bancos conectados dentro do MeuPluggy podem ser Open Finance, mas o item retornado vem do proxy.
 
-## Referencias do quickstart (Next.js)
-- O quickstart oficial de Next.js usa `react-pluggy-connect` no client e `pluggy-sdk` no server para gerar Connect Token.
-- Ver `frontend/nextjs/README.md` no repo oficial para o passo a passo e variaveis de ambiente.
+## Referencias
+- Doc de OAuth v2 do Pluggy para fluxos sem widget (login em pop-up e callback). citeturn2open0
 
 ## Observacoes
 - Nunca expor `PLUGGY_CLIENT_SECRET` no client.
