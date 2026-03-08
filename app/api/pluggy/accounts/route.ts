@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { fetchAccounts, fetchItem } from "@/lib/integrations/pluggy"
-import { resolveStoredPluggyItemId } from "@/lib/pluggy-items"
+import { resolveStoredPluggyItemIds } from "@/lib/pluggy-items"
 
 export const dynamic = "force-dynamic"
 
@@ -11,24 +11,36 @@ function isReady(status?: string) {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
-  const itemId = await resolveStoredPluggyItemId(searchParams.get("itemId"))
+  const itemIds = await resolveStoredPluggyItemIds(searchParams.get("itemId"))
 
-  if (!itemId) {
+  if (itemIds.length === 0) {
     return NextResponse.json(
       { error: "Nenhum item Pluggy salvo" },
       { status: 400 }
     )
   }
 
-  const item = await fetchItem(itemId)
+  const items = await Promise.all(
+    itemIds.map(async (itemId) => {
+      const item = await fetchItem(itemId)
+      return {
+        itemId,
+        status: item?.status ?? "UNKNOWN",
+        connector: item?.connector ?? null,
+      }
+    })
+  )
 
-  if (!isReady(item?.status)) {
-    return NextResponse.json(
-      { itemId, status: item?.status ?? "UNKNOWN" },
-      { status: 409 }
-    )
-  }
+  const readyItems = items.filter((item) => isReady(item.status))
+  const accountsByItem = await Promise.all(
+    readyItems.map(async (item) => ({
+      itemId: item.itemId,
+      accounts: await fetchAccounts(item.itemId),
+    }))
+  )
 
-  const accounts = await fetchAccounts(itemId)
-  return NextResponse.json(accounts)
+  return NextResponse.json({
+    items,
+    accounts: accountsByItem.flatMap((entry) => entry.accounts),
+  })
 }
