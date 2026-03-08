@@ -1,0 +1,53 @@
+# Pluggy - Integracao
+
+## Glossario
+- Product: dados padronizados de uma instituicao (Accounts, Credit Cards, Investments, Identity, Transactions).
+- Connector: integracao com instituicao para recuperar produtos.
+- Item: conexao criada pelo usuario via um connector; ponto de acesso aos produtos.
+
+## Chaves e tokens
+- API key: criada via autenticacao com `CLIENT_ID` e `CLIENT_SECRET`. Expira em 2 horas.
+- Connect Token: criado com a API key. Expira em 30 minutos e serve para o widget no client.
+
+Regras importantes:
+- Connect Token tem acesso limitado: `GET /items/:id` e acesso reduzido a `GET /accounts?itemId`.
+- Connect Token nao serve para endpoints completos de produtos (retorna 403).
+- Um Connect Token novo nao acessa dados criados com outro token.
+
+## Variaveis de ambiente
+- `PLUGGY_CLIENT_ID`
+- `PLUGGY_CLIENT_SECRET`
+- `PLUGGY_API_BASE` (padrao: https://api.pluggy.ai)
+- `PLUGGY_API_KEY_HEADER` (padrao: X-API-KEY)
+- `PLUGGY_AUTH_PATH` (padrao: /auth)
+- `PLUGGY_CONNECT_TOKEN_PATH` (padrao: /connect_token)
+
+Arquivo de exemplo: `.env.example`.
+
+## Endpoints internos
+- `POST /api/pluggy/api-key`
+  - Retorna o payload da API key do Pluggy.
+- `POST /api/pluggy/connect-token`
+  - Cria uma API key e em seguida um Connect Token.
+  - Aceita um body opcional para configurar o token.
+
+Body opcional (exemplo):
+```
+{
+  "webhookUrl": "https://example.com/webhook",
+  "clientUserId": "meu-user-id",
+  "oauthRedirectUrl": "https://example.com/redirect",
+  "avoidDuplicates": true
+}
+```
+
+## Fluxo recomendado (uso pessoal)
+1. Backend gera API key com `PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET`.
+2. Backend gera Connect Token com a API key.
+3. Frontend usa Connect Token no widget Pluggy Connect.
+4. Armazenar `itemId` ao finalizar a conexao (evento `onSuccess`) para referencia futura.
+
+## Observacoes
+- Nunca expor `PLUGGY_CLIENT_SECRET` no client.
+- Para chamadas completas de produtos, usar API key no servidor.
+- Quando forem criados webhooks, registrar a URL e salvar `itemId` na base.
