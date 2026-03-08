@@ -71,6 +71,13 @@ Body opcional (exemplo):
 - Para dados diarios, use os endpoints internos de contas e transacoes.
 - Se o item nao estiver `UPDATED`, os endpoints retornam `409` com o status atual.
 
+## Open Finance (conector unico)
+- Vamos usar apenas conectores Open Finance via Pluggy Connect.
+- IDs de conectores Open Finance geralmente sao `>= 600` (ex: Itau OF = 601).
+- O fluxo de consentimento abre o login do banco em popup e depois retorna ao widget.
+- O link de consentimento e de uso unico e expira rapido; evitar compartilhar em apps que previsualizam links.
+- Sandbox de Open Finance: ver docs do Pluggy (sandbox open finance flow).
+
 ## Update mode
 - Para atualizar um item, o Connect Token precisa ser gerado com o `itemId` alvo ou reutilizar o mesmo token que criou o item.
 - A recomendacao no quickstart e gerar um token novo para cada atualizacao do ultimo item.
