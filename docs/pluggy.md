@@ -22,6 +22,7 @@ Regras importantes:
 - `PLUGGY_API_KEY_HEADER` (padrao: X-API-KEY)
 - `PLUGGY_AUTH_PATH` (padrao: /auth)
 - `PLUGGY_CONNECT_TOKEN_PATH` (padrao: /connect_token)
+- `PLUGGY_API_KEY_TTL_SECONDS` (padrao: 7200)
 
 Arquivo de exemplo: `.env.example`.
 
@@ -36,7 +37,7 @@ Dependencias do widget (quando formos para UI):
 
 ## Endpoints internos
 - `POST /api/pluggy/api-key`
-  - Retorna o payload da API key do Pluggy.
+  - Retorna apenas `{ apiKey }` usando cache local.
 - `POST /api/pluggy/connect-token`
   - Cria uma API key e em seguida um Connect Token.
   - Aceita um body opcional para configurar o token.
@@ -70,3 +71,4 @@ Body opcional (exemplo):
 - Nunca expor `PLUGGY_CLIENT_SECRET` no client.
 - Para chamadas completas de produtos, usar API key no servidor.
 - Quando forem criados webhooks, registrar a URL e salvar `itemId` na base.
+- A API key fica em cache em memoria no servidor com TTL (padrao 2h). Em restart, ela e gerada novamente.

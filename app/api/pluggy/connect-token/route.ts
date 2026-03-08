@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { createApiKey, createConnectToken } from "@/lib/integrations/pluggy"
+import { createConnectToken, getApiKey } from "@/lib/integrations/pluggy"
 
 export const dynamic = "force-dynamic"
 
@@ -13,15 +13,7 @@ export async function POST(request: Request) {
     options = undefined
   }
 
-  const apiKeyResponse = await createApiKey()
-  const apiKey = apiKeyResponse?.apiKey ?? apiKeyResponse?.token ?? apiKeyResponse
-
-  if (!apiKey || typeof apiKey !== "string") {
-    return NextResponse.json(
-      { error: "Api key invalida retornada pelo Pluggy" },
-      { status: 500 }
-    )
-  }
+  const apiKey = await getApiKey()
 
   const connectToken = await createConnectToken(
     apiKey,
