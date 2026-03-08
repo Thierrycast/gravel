@@ -135,3 +135,14 @@ model BalanceProjection {
   projectedBalance Decimal
   createdAt        DateTime @default(now())
 }
+
+model PluggyItem {
+  id            String   @id @default(cuid())
+  pluggyItemId  String   @unique
+  connectorId   Int?
+  connectorName String?
+  status        String?
+  isSelected    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

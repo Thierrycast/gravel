@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { PrismaClient, Prisma } = require("@prisma/client")
 
 const prisma = new PrismaClient()
@@ -30,7 +31,7 @@ async function main() {
     },
   })
 
-  const invest = await prisma.account.create({
+  await prisma.account.create({
     data: {
       name: "Investimentos",
       type: "INVESTMENT",

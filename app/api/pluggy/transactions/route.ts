@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
-import { fetchItem, fetchTransactions, getItemIdFromEnv } from "@/lib/integrations/pluggy"
+import { fetchItem, fetchTransactions } from "@/lib/integrations/pluggy"
+import { resolveStoredPluggyItemId } from "@/lib/pluggy-items"
 
 export const dynamic = "force-dynamic"
 
@@ -15,17 +16,25 @@ function parseNumber(value: string | null) {
 }
 
 export async function GET(request: Request) {
-  const itemId = getItemIdFromEnv()
+  const { searchParams } = new URL(request.url)
+  const itemId = await resolveStoredPluggyItemId(searchParams.get("itemId"))
+
+  if (!itemId) {
+    return NextResponse.json(
+      { error: "Nenhum item Pluggy salvo" },
+      { status: 400 }
+    )
+  }
+
   const item = await fetchItem(itemId)
 
   if (!isReady(item?.status)) {
     return NextResponse.json(
-      { status: item?.status ?? "UNKNOWN" },
+      { itemId, status: item?.status ?? "UNKNOWN" },
       { status: 409 }
     )
   }
 
-  const { searchParams } = new URL(request.url)
   const page = parseNumber(searchParams.get("page"))
   const pageSize = parseNumber(searchParams.get("pageSize"))
 
