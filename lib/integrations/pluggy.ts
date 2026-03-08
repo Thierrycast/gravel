@@ -208,8 +208,20 @@ export async function fetchItem(itemId: string) {
   return pluggyRequest(`/items/${itemId}`)
 }
 
-export async function fetchAccounts(itemId: string) {
-  return pluggyRequest("/accounts", { query: { itemId } })
+export async function fetchAccounts(params: {
+  itemId: string
+  page?: number
+  pageSize?: number
+}) {
+  return pluggyRequest("/accounts", { query: params })
+}
+
+export async function fetchAccount(accountId: string) {
+  return pluggyRequest(`/accounts/${accountId}`)
+}
+
+export async function fetchAccountBalance(accountId: string) {
+  return pluggyRequest(`/accounts/${accountId}/balance`)
 }
 
 export async function fetchTransactions(
@@ -222,6 +234,80 @@ export async function fetchTransactions(
   }
 ) {
   return pluggyRequest("/transactions", {
+    query: params,
+  })
+}
+
+export async function fetchTransaction(transactionId: string) {
+  return pluggyRequest(`/transactions/${transactionId}`)
+}
+
+export async function fetchInvestments(params: {
+  itemId: string
+  page?: number
+  pageSize?: number
+}) {
+  return pluggyRequest("/investments", {
+    query: params,
+  })
+}
+
+export async function fetchInvestment(investmentId: string) {
+  return pluggyRequest(`/investments/${investmentId}`)
+}
+
+export async function fetchInvestmentTransactions(params: {
+  investmentId: string
+  page?: number
+  pageSize?: number
+}) {
+  const { investmentId, ...query } = params
+  return pluggyRequest(`/investments/${investmentId}/transactions`, {
+    query,
+  })
+}
+
+export async function fetchLoans(params: {
+  itemId: string
+  page?: number
+  pageSize?: number
+}) {
+  return pluggyRequest("/loans", {
+    query: params,
+  })
+}
+
+export async function fetchLoan(loanId: string) {
+  return pluggyRequest(`/loans/${loanId}`)
+}
+
+export async function fetchBills(params: {
+  accountId: string
+  page?: number
+  pageSize?: number
+}) {
+  return pluggyRequest("/bills", {
+    query: params,
+  })
+}
+
+export async function fetchBill(billId: string) {
+  return pluggyRequest(`/bills/${billId}`)
+}
+
+export async function fetchCategories(params?: {
+  page?: number
+  pageSize?: number
+}) {
+  return pluggyRequest("/categories", {
+    query: params,
+  })
+}
+
+export async function fetchMerchants(params: {
+  cnpj: string
+}) {
+  return pluggyRequest("/merchants", {
     query: params,
   })
 }

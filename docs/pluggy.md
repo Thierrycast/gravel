@@ -32,6 +32,32 @@
   - Busca transacoes do item.
   - Se `itemId` nao for enviado, agrega transacoes de todos os itens salvos.
   - Retorna `items`, `totalItems`, `readyItems`, `totalAccounts`, `totalTransactions`, `results` e `pagesByAccount`.
+- `GET /api/pluggy/accounts/:accountId`
+  - Busca o detalhe de uma conta.
+- `GET /api/pluggy/accounts/:accountId/balance`
+  - Busca saldo em tempo real quando o conector suportar Open Finance.
+- `GET /api/pluggy/transactions/:transactionId`
+  - Busca o detalhe de uma transacao.
+- `GET /api/pluggy/investments`
+  - Agrega investimentos de todos os itens salvos.
+- `GET /api/pluggy/investments/:investmentId`
+  - Busca o detalhe de um investimento.
+- `GET /api/pluggy/loans`
+  - Agrega emprestimos de todos os itens salvos.
+- `GET /api/pluggy/loans/:loanId`
+  - Busca o detalhe de um emprestimo.
+- `GET /api/pluggy/bills`
+  - Agrega faturas de todos os itens salvos.
+- `GET /api/pluggy/bills/:billId`
+  - Busca o detalhe de uma fatura.
+- `GET /api/pluggy/categories`
+  - Lista categorias do Pluggy.
+- `GET /api/pluggy/merchants?cnpj=...`
+  - Faz enriquecimento de estabelecimento por CNPJ.
+- `GET /api/pluggy/sync`
+  - Retorna o resumo persistido no banco local.
+- `POST /api/pluggy/sync`
+  - Sincroniza dados do Pluggy para o banco local em modo `insert-only`.
 
 ## Fluxo
 1. Abrir `/connect`.
@@ -46,3 +72,4 @@
 - A listagem de itens usada pelo app e local, porque o widget devolve o `itemId` no sucesso e esse identificador precisa ser mantido pela aplicacao.
 - O `connectToken` e limitado ao widget. Dados de produtos continuam sendo buscados no backend com API key.
 - No Pluggy atual deste projeto, `transactions` exige `accountId`, entao a API local primeiro resolve as contas e depois agrega as transacoes por conta.
+- O plano de persistencia esta em `docs/pluggy-persistencia.md`.
