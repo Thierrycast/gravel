@@ -41,6 +41,17 @@ export async function savePluggyItem(input: SavePluggyItemInput) {
   })
 }
 
+export async function updateStoredPluggyItem(input: SavePluggyItemInput) {
+  return prisma.pluggyItem.update({
+    where: { pluggyItemId: input.itemId },
+    data: {
+      connectorId: input.connectorId ?? undefined,
+      connectorName: input.connectorName ?? undefined,
+      status: input.status ?? undefined,
+    },
+  })
+}
+
 export async function resolveStoredPluggyItemId(itemId?: string | null) {
   if (itemId) {
     return itemId

@@ -1,12 +1,41 @@
 import { NextResponse } from "next/server"
 
-import { listStoredPluggyItems, savePluggyItem } from "@/lib/pluggy-items"
+import { fetchItem } from "@/lib/integrations/pluggy"
+import {
+  listStoredPluggyItems,
+  savePluggyItem,
+  updateStoredPluggyItem,
+} from "@/lib/pluggy-items"
 
 export const dynamic = "force-dynamic"
 
 export async function GET() {
   const items = await listStoredPluggyItems()
-  return NextResponse.json(items)
+
+  const enrichedItems = await Promise.all(
+    items.map(async (item) => {
+      try {
+        const liveItem = await fetchItem(item.pluggyItemId)
+        await updateStoredPluggyItem({
+          itemId: item.pluggyItemId,
+          connectorId: liveItem?.connector?.id,
+          connectorName: liveItem?.connector?.name,
+          status: liveItem?.status,
+        })
+
+        return {
+          ...item,
+          connectorId: liveItem?.connector?.id ?? item.connectorId,
+          connectorName: liveItem?.connector?.name ?? item.connectorName,
+          status: liveItem?.status ?? item.status,
+        }
+      } catch {
+        return item
+      }
+    })
+  )
+
+  return NextResponse.json(enrichedItems)
 }
 
 export async function POST(request: Request) {
