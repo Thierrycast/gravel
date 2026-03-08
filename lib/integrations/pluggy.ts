@@ -25,30 +25,6 @@ function getConnectTokenPath() {
   return process.env.PLUGGY_CONNECT_TOKEN_PATH ?? "/connect_token"
 }
 
-function getItemIdFromEnv() {
-  const itemId = process.env.PLUGGY_ITEM_ID
-  if (!itemId) {
-    throw new Error("Missing env var: PLUGGY_ITEM_ID")
-  }
-  return itemId
-}
-
-function getConnectorIdFromEnv() {
-  const connectorId = process.env.PLUGGY_CONNECTOR_ID
-  if (!connectorId) {
-    throw new Error("Missing env var: PLUGGY_CONNECTOR_ID")
-  }
-  const parsed = Number(connectorId)
-  if (!Number.isFinite(parsed)) {
-    throw new Error("Invalid PLUGGY_CONNECTOR_ID")
-  }
-  return parsed
-}
-
-function getOauthRedirectUriFromEnv() {
-  return process.env.PLUGGY_OAUTH_REDIRECT_URI
-}
-
 function getApiKeyTtlSeconds() {
   const raw = process.env.PLUGGY_API_KEY_TTL_SECONDS
   if (!raw) return defaultApiKeyTtlSeconds
@@ -71,7 +47,6 @@ type ApiKeyCache = {
 }
 
 declare global {
-  // eslint-disable-next-line no-var
   var pluggyApiKeyCache: ApiKeyCache | undefined
 }
 
@@ -139,7 +114,7 @@ export async function createApiKey() {
 
 export async function getApiKey() {
   const cached = readApiKeyCache()
-  if (isCacheValid(cached)) {
+  if (cached && isCacheValid(cached)) {
     return cached.apiKey
   }
 
@@ -229,33 +204,21 @@ async function handlePluggyResponse(response: Response) {
   }
 }
 
-export async function fetchItem(itemId?: string) {
-  const resolvedItemId = itemId ?? getItemIdFromEnv()
-  return pluggyRequest(`/items/${resolvedItemId}`)
+export async function fetchItem(itemId: string) {
+  return pluggyRequest(`/items/${itemId}`)
 }
 
-export async function fetchAccounts(itemId?: string) {
-  const resolvedItemId = itemId ?? getItemIdFromEnv()
-  return pluggyRequest("/accounts", { query: { itemId: resolvedItemId } })
+export async function fetchAccounts(itemId: string) {
+  return pluggyRequest("/accounts", { query: { itemId } })
 }
 
 export async function fetchTransactions(
-  itemId?: string,
+  itemId: string,
   params?: { page?: number; pageSize?: number }
 ) {
-  const resolvedItemId = itemId ?? getItemIdFromEnv()
   return pluggyRequest("/transactions", {
-    query: { itemId: resolvedItemId, ...params },
+    query: { itemId, ...params },
   })
-}
-
-export async function fetchItems() {
-  return pluggyRequest("/items")
-}
-
-export async function updateItem(itemId?: string) {
-  const resolvedItemId = itemId ?? getItemIdFromEnv()
-  return pluggyRequest(`/items/${resolvedItemId}`, { method: "PATCH" })
 }
 
 export async function createConnectToken(apiKey?: string) {
@@ -276,19 +239,3 @@ export async function createConnectToken(apiKey?: string) {
 
   return response.json()
 }
-
-export async function createItem(input?: {
-  connectorId?: number
-  parameters?: Record<string, string>
-  oauthRedirectUri?: string
-}) {
-  const body = {
-    connectorId: input?.connectorId ?? getConnectorIdFromEnv(),
-    parameters: input?.parameters ?? {},
-    oauthRedirectUri: input?.oauthRedirectUri ?? getOauthRedirectUriFromEnv(),
-  }
-
-  return pluggyRequest("/items", { method: "POST", body })
-}
-
-export { getItemIdFromEnv, getConnectorIdFromEnv }

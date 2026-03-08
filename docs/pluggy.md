@@ -1,74 +1,45 @@
 # Pluggy - Integracao
 
-## Glossario
-- Product: dados padronizados de uma instituicao (Accounts, Credit Cards, Investments, Identity, Transactions).
-- Connector: integracao com instituicao para recuperar produtos.
-- Item: conexao criada pelo usuario via um connector; ponto de acesso aos produtos.
-
-## Chaves e tokens
-- API key: criada via autenticacao com `CLIENT_ID` e `CLIENT_SECRET`. Expira em 2 horas.
-- Para chamadas completas de produtos (transactions, investments, etc), use API key no servidor.
+## Objetivo atual
+- Usar `Pluggy Connect` em `/connect` para autenticar no MeuPluggy com Google.
+- Salvar cada `itemId` retornado pelo widget na base local.
+- Usar esse `itemId` salvo nas rotas de consulta de item, contas e transacoes.
 
 ## Variaveis de ambiente
 - `PLUGGY_CLIENT_ID`
 - `PLUGGY_CLIENT_SECRET`
-- `PLUGGY_ITEM_ID` (item unico da conta pessoal)
-- `PLUGGY_CONNECTOR_ID` (conector do meuPluggy)
-- `PLUGGY_OAUTH_REDIRECT_URI` (opcional, para fluxo OAuth)
-- `PLUGGY_API_BASE` (padrao: https://api.pluggy.ai)
-- `PLUGGY_API_KEY_HEADER` (padrao: X-API-KEY)
-- `PLUGGY_AUTH_PATH` (padrao: /auth)
-- `PLUGGY_API_KEY_TTL_SECONDS` (padrao: 7200)
+- `PLUGGY_API_BASE` (padrao: `https://api.pluggy.ai`)
+- `PLUGGY_API_KEY_HEADER` (padrao: `X-API-KEY`)
+- `PLUGGY_AUTH_PATH` (padrao: `/auth`)
+- `PLUGGY_CONNECT_TOKEN_PATH` (padrao: `/connect_token`)
+- `PLUGGY_API_KEY_TTL_SECONDS` (padrao: `7200`)
 
-Arquivo de exemplo: `.env.example`.
-
-## Endpoints internos
-- `POST /api/pluggy/api-key`
-  - Retorna apenas `{ apiKey }` usando cache local.
+## Rotas Pluggy em uso
 - `POST /api/pluggy/connect-token`
-  - Gera Connect Token para uso no widget.
-- `POST /api/pluggy/item/create`
-  - Cria item com `PLUGGY_CONNECTOR_ID` (ou override via body).
-- `GET /api/pluggy/item`
-  - Retorna o item configurado em `PLUGGY_ITEM_ID` (ou `?itemId=`).
-- `GET /api/pluggy/item/oauth?itemId=...`
-  - Retorna `oauthUrl` quando o item exigir login OAuth.
-- `POST /api/pluggy/item/update?itemId=...`
-  - Forca um novo sync do item (PATCH /items/:id).
-- `GET /api/pluggy/oauth/callback`
-  - Callback simples para receber `status` e `itemId` do OAuth.
-- `GET /api/pluggy/accounts`
-  - Retorna contas do item configurado (status precisa ser `UPDATED`).
-- `GET /api/pluggy/transactions?page=1&pageSize=100`
-  - Retorna transacoes do item configurado (status precisa ser `UPDATED`).
+  - Gera o `connectToken` usado pelo widget.
+- `GET /api/pluggy/items`
+  - Lista os itens Pluggy salvos localmente.
+- `POST /api/pluggy/items`
+  - Salva ou seleciona um `itemId` retornado pelo widget.
+- `GET /api/pluggy/item?itemId=...`
+  - Busca detalhes do item no Pluggy.
+  - Se `itemId` nao for enviado, usa o item salvo como selecionado.
+- `GET /api/pluggy/accounts?itemId=...`
+  - Busca contas do item.
+  - Se `itemId` nao for enviado, usa o item salvo como selecionado.
+- `GET /api/pluggy/transactions?itemId=...&page=1&pageSize=100`
+  - Busca transacoes do item.
+  - Se `itemId` nao for enviado, usa o item salvo como selecionado.
 
-## Fluxo recomendado (uso pessoal)
-1. Backend gera API key com `PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET`.
-2. Abrir `/connect` e conectar via widget Pluggy.
-3. Copiar o `itemId` do sucesso e salvar em `PLUGGY_ITEM_ID`.
-
-## Uso pessoal com item unico
-- Defina `PLUGGY_ITEM_ID` com o item criado no Pluggy (na resposta de criacao).
-- Para dados diarios, use os endpoints internos de contas e transacoes.
-- Se o item nao estiver `UPDATED`, os endpoints retornam `409` com o status atual.
-- O `itemId` nao e o mesmo que `connectorId`.
-
-## Open Finance (conector unico)
-- Vamos usar apenas conectores Open Finance via Pluggy Connect.
-- IDs de conectores Open Finance geralmente sao `>= 600` (ex: Itau OF = 601).
-- O fluxo de consentimento abre o login do banco em popup e depois retorna ao app.
-- O link de consentimento e de uso unico e expira rapido; evitar compartilhar em apps que previsualizam links.
-- Sandbox de Open Finance: ver docs do Pluggy (sandbox open finance flow).
-
-## MeuPluggy (proxy pessoal)
-- O conector `MeuPluggy` (id 200) funciona como proxy e nao marca `isOpenFinance`.
-- Os bancos conectados dentro do MeuPluggy podem ser Open Finance, mas o item retornado vem do proxy.
-
-## Referencias
-- Doc de OAuth v2 do Pluggy para fluxos sem widget (login em pop-up e callback). citeturn2open0
+## Fluxo
+1. Abrir `/connect`.
+2. O frontend chama `POST /api/pluggy/connect-token`.
+3. O widget abre o fluxo do MeuPluggy.
+4. No `onSuccess`, o frontend salva o `itemId` em `POST /api/pluggy/items`.
+5. As rotas de leitura passam a usar o item salvo.
 
 ## Observacoes
-- Nunca expor `PLUGGY_CLIENT_SECRET` no client.
-- Para chamadas completas de produtos, usar API key no servidor.
-- Quando forem criados webhooks, registrar a URL e salvar `itemId` na base.
-- A API key fica em cache em memoria no servidor com TTL (padrao 2h). Em restart, ela e gerada novamente.
+- O projeto agora assume multiplos itens no MeuPluggy.
+- O `itemId` nao fica mais no `.env`.
+- A listagem de itens usada pelo app e local, porque o widget devolve o `itemId` no sucesso e esse identificador precisa ser mantido pela aplicacao.
+- O `connectToken` e limitado ao widget. Dados de produtos continuam sendo buscados no backend com API key.
