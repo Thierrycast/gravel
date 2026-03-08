@@ -31,6 +31,8 @@ Arquivo de exemplo: `.env.example`.
   - Retorna o item configurado em `PLUGGY_ITEM_ID` (ou `?itemId=`).
 - `GET /api/pluggy/item/oauth?itemId=...`
   - Retorna `oauthUrl` quando o item exigir login OAuth.
+- `POST /api/pluggy/item/update?itemId=...`
+  - Forca um novo sync do item (PATCH /items/:id).
 - `GET /api/pluggy/oauth/callback`
   - Callback simples para receber `status` e `itemId` do OAuth.
 - `GET /api/pluggy/accounts`
