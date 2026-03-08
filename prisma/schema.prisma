@@ -310,3 +310,81 @@ model PluggyMerchantRecord {
   cnae         String?
   createdAt    DateTime @default(now())
 }
+
+model BinanceSyncRun {
+  id           String   @id @default(cuid())
+  scope        String   @default("full")
+  resources    String
+  status       String
+  summaryJson  String?
+  errorMessage String?
+  startedAt    DateTime @default(now())
+  finishedAt   DateTime?
+}
+
+model BinanceAccountSnapshot {
+  id           String   @id @default(cuid())
+  payloadHash  String   @unique
+  payloadJson  String
+  updateTime   DateTime?
+  fetchedAt    DateTime @default(now())
+}
+
+model BinanceAssetRecord {
+  id        String   @id @default(cuid())
+  asset     String   @unique
+  createdAt DateTime @default(now())
+}
+
+model BinanceAssetBalanceSnapshot {
+  id          String   @id @default(cuid())
+  asset       String
+  free        Decimal
+  locked      Decimal
+  total       Decimal
+  payloadHash String
+  payloadJson String
+  fetchedAt   DateTime @default(now())
+
+  @@unique([asset, payloadHash])
+  @@index([asset, fetchedAt])
+}
+
+model BinanceAssetPriceSnapshot {
+  id          String   @id @default(cuid())
+  asset       String
+  symbol      String
+  quoteAsset  String
+  price       Decimal
+  payloadHash String
+  payloadJson String
+  fetchedAt   DateTime @default(now())
+
+  @@unique([asset, symbol, payloadHash])
+  @@index([asset, fetchedAt])
+}
+
+model BinanceTradeRecord {
+  id              String   @id @default(cuid())
+  symbol          String
+  tradeId         String
+  orderId         String?
+  baseAsset       String?
+  quoteAsset      String?
+  price           Decimal
+  quantity        Decimal
+  quoteQuantity   Decimal?
+  commission      Decimal?
+  commissionAsset String?
+  isBuyer         Boolean?
+  isMaker         Boolean?
+  isBestMatch     Boolean?
+  tradedAt        DateTime?
+  payloadJson     String
+  createdAt       DateTime @default(now())
+
+  @@unique([symbol, tradeId])
+  @@index([baseAsset, tradedAt])
+  @@index([quoteAsset, tradedAt])
+  @@index([symbol, tradedAt])
+}
