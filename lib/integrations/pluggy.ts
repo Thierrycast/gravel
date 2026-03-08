@@ -53,6 +53,7 @@ type ConnectTokenOptions = {
   clientUserId?: string
   oauthRedirectUrl?: string
   avoidDuplicates?: boolean
+  itemId?: string
 }
 
 export async function createConnectToken(

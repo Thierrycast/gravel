@@ -13,6 +13,7 @@ Regras importantes:
 - Connect Token tem acesso limitado: `GET /items/:id` e acesso reduzido a `GET /accounts?itemId`.
 - Connect Token nao serve para endpoints completos de produtos (retorna 403).
 - Um Connect Token novo nao acessa dados criados com outro token.
+- Para chamadas completas de produtos (transactions, investments, etc), use API key no servidor.
 
 ## Variaveis de ambiente
 - `PLUGGY_CLIENT_ID`
@@ -37,7 +38,8 @@ Body opcional (exemplo):
   "webhookUrl": "https://example.com/webhook",
   "clientUserId": "meu-user-id",
   "oauthRedirectUrl": "https://example.com/redirect",
-  "avoidDuplicates": true
+  "avoidDuplicates": true,
+  "itemId": "item_123"
 }
 ```
 
@@ -46,6 +48,14 @@ Body opcional (exemplo):
 2. Backend gera Connect Token com a API key.
 3. Frontend usa Connect Token no widget Pluggy Connect.
 4. Armazenar `itemId` ao finalizar a conexao (evento `onSuccess`) para referencia futura.
+
+## Update mode
+- Para atualizar um item, o Connect Token precisa ser gerado com o `itemId` alvo ou reutilizar o mesmo token que criou o item.
+- A recomendacao no quickstart e gerar um token novo para cada atualizacao do ultimo item.
+
+## Referencias do quickstart (Next.js)
+- O quickstart oficial de Next.js usa `react-pluggy-connect` no client e `pluggy-sdk` no server para gerar Connect Token.
+- Ver `frontend/nextjs/README.md` no repo oficial para o passo a passo e variaveis de ambiente.
 
 ## Observacoes
 - Nunca expor `PLUGGY_CLIENT_SECRET` no client.
