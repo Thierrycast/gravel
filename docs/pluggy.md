@@ -18,6 +18,7 @@ Regras importantes:
 ## Variaveis de ambiente
 - `PLUGGY_CLIENT_ID`
 - `PLUGGY_CLIENT_SECRET`
+- `PLUGGY_ITEM_ID` (item unico da conta pessoal)
 - `PLUGGY_API_BASE` (padrao: https://api.pluggy.ai)
 - `PLUGGY_API_KEY_HEADER` (padrao: X-API-KEY)
 - `PLUGGY_AUTH_PATH` (padrao: /auth)
@@ -41,6 +42,12 @@ Dependencias do widget (quando formos para UI):
 - `POST /api/pluggy/connect-token`
   - Cria uma API key e em seguida um Connect Token.
   - Aceita um body opcional para configurar o token.
+- `GET /api/pluggy/item`
+  - Retorna o item configurado em `PLUGGY_ITEM_ID`.
+- `GET /api/pluggy/accounts`
+  - Retorna contas do item configurado (status precisa ser `UPDATED`).
+- `GET /api/pluggy/transactions?page=1&pageSize=100`
+  - Retorna transacoes do item configurado (status precisa ser `UPDATED`).
 
 Body opcional (exemplo):
 ```
@@ -58,6 +65,11 @@ Body opcional (exemplo):
 2. Backend gera Connect Token com a API key.
 3. Frontend usa Connect Token no widget Pluggy Connect.
 4. Armazenar `itemId` ao finalizar a conexao (evento `onSuccess`) para referencia futura.
+
+## Uso pessoal com item unico
+- Defina `PLUGGY_ITEM_ID` com o item criado no Pluggy.
+- Para dados diarios, use os endpoints internos de contas e transacoes.
+- Se o item nao estiver `UPDATED`, os endpoints retornam `409` com o status atual.
 
 ## Update mode
 - Para atualizar um item, o Connect Token precisa ser gerado com o `itemId` alvo ou reutilizar o mesmo token que criou o item.
