@@ -38,7 +38,6 @@ type StoredItem = {
   pluggyItemId: string
   connectorName: string | null
   status: string | null
-  isSelected: boolean
 }
 
 const PluggyConnect = dynamic(
@@ -70,6 +69,9 @@ export function PluggyConnectClient() {
   const [isOpening, setIsOpening] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
 
+  const connectedCount = items.length
+  const updatedCount = items.filter((item) => item.status === "UPDATED").length
+
   async function loadItems(options?: { silent?: boolean }) {
     if (!options?.silent) {
       setIsRefreshing(true)
@@ -84,25 +86,6 @@ export function PluggyConnectClient() {
         setIsRefreshing(false)
       }
     }
-  }
-
-  async function selectItem(item: StoredItem) {
-    setStatus(`Selecionando item ${item.pluggyItemId}...`)
-
-    await fetch("/api/pluggy/items", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        itemId: item.pluggyItemId,
-        connectorName: item.connectorName,
-        status: item.status,
-      }),
-    })
-
-    await loadItems()
-    setStatus(`Item selecionado: ${item.pluggyItemId}`)
   }
 
   useEffect(() => {
@@ -182,25 +165,42 @@ export function PluggyConnectClient() {
   }
 
   return (
-    <main className="min-h-screen bg-muted/30 p-6 md:p-10">
+    <main className="min-h-screen bg-[linear-gradient(180deg,theme(colors.background),color-mix(in_oklab,theme(colors.muted)_35%,white))] p-6 md:p-10">
       <div className="mx-auto flex max-w-5xl flex-col gap-6">
-        <Card className="border-border/80 shadow-sm">
+        <Card className="border-border/80 bg-background/90 shadow-sm backdrop-blur">
           <CardHeader className="gap-3">
             <CardTitle className="text-2xl">Conectar contas</CardTitle>
             <CardDescription>
               Use o widget do Pluggy para entrar no MeuPluggy com Google e
-              salvar os itens retornados.
+              sincronizar todas as conexoes que voce mantiver ativas.
             </CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-5">
-            <div className="flex flex-col gap-3 rounded-lg border border-border bg-background p-4 md:flex-row md:items-center md:justify-between">
-              <div className="space-y-1">
+            <div className="grid gap-3 md:grid-cols-[1.4fr_0.8fr]">
+              <div className="space-y-3 rounded-xl border border-border bg-background p-4">
                 <p className="text-sm font-medium">Status da conexao</p>
                 <p className="text-sm text-muted-foreground">{status}</p>
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <span className="rounded-full border border-border px-2 py-1">
+                    {connectedCount} itens salvos
+                  </span>
+                  <span className="rounded-full border border-border px-2 py-1">
+                    {updatedCount} atualizados
+                  </span>
+                </div>
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-col justify-between rounded-xl border border-border bg-background p-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Acoes</p>
+                  <p className="text-sm text-muted-foreground">
+                    Abra o widget para adicionar mais contas e atualize a lista
+                    para acompanhar os status.
+                  </p>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
                 <Button
                   onClick={handleOpenWidget}
                   disabled={!token || isOpening}
@@ -219,6 +219,7 @@ export function PluggyConnectClient() {
                 >
                   {isRefreshing ? "Atualizando..." : "Atualizar itens"}
                 </Button>
+                </div>
               </div>
             </div>
 
@@ -250,12 +251,11 @@ export function PluggyConnectClient() {
           </CardContent>
         </Card>
 
-        <Card className="border-border/80 shadow-sm">
+        <Card className="border-border/80 bg-background/90 shadow-sm backdrop-blur">
           <CardHeader>
             <CardTitle>Itens salvos</CardTitle>
             <CardDescription>
-              O item selecionado sera usado pelas rotas de contas e transacoes
-              quando `itemId` nao for informado.
+              As rotas Pluggy agora agregam todos os itens salvos por padrao.
             </CardDescription>
           </CardHeader>
 
@@ -283,11 +283,6 @@ export function PluggyConnectClient() {
                         >
                           {item.status ?? "sem status"}
                         </span>
-                        {item.isSelected ? (
-                          <span className="rounded-full border border-border bg-background px-2 py-0.5 text-xs font-medium text-foreground">
-                            selecionado
-                          </span>
-                        ) : null}
                       </div>
 
                       <p className="truncate font-mono text-xs text-muted-foreground">
@@ -298,18 +293,9 @@ export function PluggyConnectClient() {
                     <div className="flex shrink-0 gap-2">
                       <Button
                         onClick={() => {
-                          void selectItem(item)
-                        }}
-                        variant={item.isSelected ? "secondary" : "outline"}
-                      >
-                        {item.isSelected ? "Em uso" : "Usar item"}
-                      </Button>
-
-                      <Button
-                        onClick={() => {
                           void loadItems()
                         }}
-                        variant="ghost"
+                        variant="outline"
                       >
                         Atualizar
                       </Button>

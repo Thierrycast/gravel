@@ -9,32 +9,25 @@ type SavePluggyItemInput = {
 
 export async function listStoredPluggyItems() {
   return prisma.pluggyItem.findMany({
-    orderBy: [{ isSelected: "desc" }, { updatedAt: "desc" }],
+    orderBy: [{ updatedAt: "desc" }],
   })
 }
 
 export async function savePluggyItem(input: SavePluggyItemInput) {
-  await prisma.$transaction([
-    prisma.pluggyItem.updateMany({
-      data: { isSelected: false },
-    }),
-    prisma.pluggyItem.upsert({
-      where: { pluggyItemId: input.itemId },
-      update: {
-        connectorId: input.connectorId ?? undefined,
-        connectorName: input.connectorName ?? undefined,
-        status: input.status ?? undefined,
-        isSelected: true,
-      },
-      create: {
-        pluggyItemId: input.itemId,
-        connectorId: input.connectorId ?? undefined,
-        connectorName: input.connectorName ?? undefined,
-        status: input.status ?? undefined,
-        isSelected: true,
-      },
-    }),
-  ])
+  await prisma.pluggyItem.upsert({
+    where: { pluggyItemId: input.itemId },
+    update: {
+      connectorId: input.connectorId ?? undefined,
+      connectorName: input.connectorName ?? undefined,
+      status: input.status ?? undefined,
+    },
+    create: {
+      pluggyItemId: input.itemId,
+      connectorId: input.connectorId ?? undefined,
+      connectorName: input.connectorName ?? undefined,
+      status: input.status ?? undefined,
+    },
+  })
 
   return prisma.pluggyItem.findUnique({
     where: { pluggyItemId: input.itemId },
@@ -52,23 +45,14 @@ export async function updateStoredPluggyItem(input: SavePluggyItemInput) {
   })
 }
 
-export async function resolveStoredPluggyItemId(itemId?: string | null) {
+export async function resolveStoredPluggyItemIds(itemId?: string | null) {
   if (itemId) {
-    return itemId
+    return [itemId]
   }
 
-  const selected = await prisma.pluggyItem.findFirst({
-    where: { isSelected: true },
+  const items = await prisma.pluggyItem.findMany({
     orderBy: { updatedAt: "desc" },
   })
 
-  if (selected) {
-    return selected.pluggyItemId
-  }
-
-  const latest = await prisma.pluggyItem.findFirst({
-    orderBy: { updatedAt: "desc" },
-  })
-
-  return latest?.pluggyItemId ?? null
+  return items.map((currentItem) => currentItem.pluggyItemId)
 }

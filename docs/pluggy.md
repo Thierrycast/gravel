@@ -3,7 +3,7 @@
 ## Objetivo atual
 - Usar `Pluggy Connect` em `/connect` para autenticar no MeuPluggy com Google.
 - Salvar cada `itemId` retornado pelo widget na base local.
-- Usar esse `itemId` salvo nas rotas de consulta de item, contas e transacoes.
+- Agregar todos os itens salvos nas rotas de consulta de item, contas e transacoes.
 
 ## Variaveis de ambiente
 - `PLUGGY_CLIENT_ID`
@@ -20,23 +20,23 @@
 - `GET /api/pluggy/items`
   - Lista os itens Pluggy salvos localmente.
 - `POST /api/pluggy/items`
-  - Salva ou seleciona um `itemId` retornado pelo widget.
+  - Salva ou atualiza um `itemId` retornado pelo widget.
 - `GET /api/pluggy/item?itemId=...`
   - Busca detalhes do item no Pluggy.
-  - Se `itemId` nao for enviado, usa o item salvo como selecionado.
+  - Se `itemId` nao for enviado, retorna todos os itens salvos.
 - `GET /api/pluggy/accounts?itemId=...`
   - Busca contas do item.
-  - Se `itemId` nao for enviado, usa o item salvo como selecionado.
+  - Se `itemId` nao for enviado, agrega contas de todos os itens salvos.
 - `GET /api/pluggy/transactions?itemId=...&page=1&pageSize=100`
   - Busca transacoes do item.
-  - Se `itemId` nao for enviado, usa o item salvo como selecionado.
+  - Se `itemId` nao for enviado, agrega transacoes de todos os itens salvos.
 
 ## Fluxo
 1. Abrir `/connect`.
 2. O frontend chama `POST /api/pluggy/connect-token`.
 3. O widget abre o fluxo do MeuPluggy.
 4. No `onSuccess`, o frontend salva o `itemId` em `POST /api/pluggy/items`.
-5. As rotas de leitura passam a usar o item salvo.
+5. As rotas de leitura passam a agregar os itens salvos.
 
 ## Observacoes
 - O projeto agora assume multiplos itens no MeuPluggy.
