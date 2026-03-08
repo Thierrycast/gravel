@@ -21,6 +21,10 @@ function getAuthPath() {
   return process.env.PLUGGY_AUTH_PATH ?? "/auth"
 }
 
+function getConnectTokenPath() {
+  return process.env.PLUGGY_CONNECT_TOKEN_PATH ?? "/connect_token"
+}
+
 function getItemIdFromEnv() {
   const itemId = process.env.PLUGGY_ITEM_ID
   if (!itemId) {
@@ -252,6 +256,25 @@ export async function fetchItems() {
 export async function updateItem(itemId?: string) {
   const resolvedItemId = itemId ?? getItemIdFromEnv()
   return pluggyRequest(`/items/${resolvedItemId}`, { method: "PATCH" })
+}
+
+export async function createConnectToken(apiKey?: string) {
+  const key = apiKey ?? (await getApiKey())
+  const response = await fetch(`${getBaseUrl()}${getConnectTokenPath()}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      [getHeaderName()]: key,
+    },
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`Pluggy connect token error: ${response.status} ${text}`)
+  }
+
+  return response.json()
 }
 
 export async function createItem(input?: {
