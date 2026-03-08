@@ -42,6 +42,8 @@ Dependencias do widget (quando formos para UI):
 - `POST /api/pluggy/connect-token`
   - Cria uma API key e em seguida um Connect Token.
   - Aceita um body opcional para configurar o token.
+- `GET /api/pluggy/items`
+  - Lista itens da conta Pluggy (use para descobrir `PLUGGY_ITEM_ID`).
 - `GET /api/pluggy/item`
   - Retorna o item configurado em `PLUGGY_ITEM_ID`.
 - `GET /api/pluggy/accounts`
@@ -70,6 +72,7 @@ Body opcional (exemplo):
 - Defina `PLUGGY_ITEM_ID` com o item criado no Pluggy.
 - Para dados diarios, use os endpoints internos de contas e transacoes.
 - Se o item nao estiver `UPDATED`, os endpoints retornam `409` com o status atual.
+- Se voce nao quiser usar o widget, pegue o `itemId` com `GET /api/pluggy/items` e configure no `.env`.
 
 ## Open Finance (conector unico)
 - Vamos usar apenas conectores Open Finance via Pluggy Connect.

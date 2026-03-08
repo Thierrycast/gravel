@@ -233,6 +233,10 @@ export async function fetchTransactions(
   })
 }
 
+export async function fetchItems() {
+  return pluggyRequest("/items")
+}
+
 export { getItemIdFromEnv }
 
 type ConnectTokenOptions = {
