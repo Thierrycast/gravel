@@ -46,7 +46,7 @@ export async function GET(request: Request) {
   const accountsByItem = await Promise.all(
     readyItems.map(async (item) => ({
       itemId: item.itemId,
-      accounts: await fetchAccounts(item.itemId),
+      accounts: await fetchAccounts({ itemId: item.itemId }),
     }))
   )
 

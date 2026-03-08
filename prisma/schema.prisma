@@ -145,3 +145,168 @@ model PluggyItem {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
+
+model PluggySyncRun {
+  id           String   @id @default(cuid())
+  scope        String   @default("full")
+  resources    String
+  status       String
+  summaryJson  String?
+  errorMessage String?
+  startedAt    DateTime @default(now())
+  finishedAt   DateTime?
+}
+
+model PluggyPayloadSnapshot {
+  id               String   @id @default(cuid())
+  resourceType     String
+  externalId       String
+  itemExternalId   String?
+  parentExternalId String?
+  payloadHash      String
+  payloadJson      String
+  sourceUpdatedAt  DateTime?
+  fetchedAt        DateTime @default(now())
+
+  @@unique([resourceType, externalId, payloadHash])
+  @@index([resourceType, externalId, fetchedAt])
+  @@index([itemExternalId])
+}
+
+model PluggyAccountRecord {
+  id                String    @id @default(cuid())
+  externalId        String    @unique
+  itemExternalId    String
+  type              String?
+  subtype           String?
+  name              String?
+  number            String?
+  owner             String?
+  taxNumber         String?
+  currencyCode      String?
+  balance           Decimal?
+  providerCreatedAt DateTime?
+  providerUpdatedAt DateTime?
+  createdAt         DateTime  @default(now())
+
+  @@index([itemExternalId])
+}
+
+model PluggyAccountBalanceSnapshot {
+  id                           String    @id @default(cuid())
+  accountExternalId            String
+  balance                      Decimal?
+  blockedBalance               Decimal?
+  automaticallyInvestedBalance Decimal?
+  currencyCode                 String?
+  providerUpdatedAt            DateTime?
+  payloadHash                  String
+  payloadJson                  String
+  fetchedAt                    DateTime  @default(now())
+
+  @@unique([accountExternalId, payloadHash])
+  @@index([accountExternalId, fetchedAt])
+}
+
+model PluggyTransactionRecord {
+  id                String    @id @default(cuid())
+  externalId        String    @unique
+  itemExternalId    String
+  accountExternalId String
+  description       String?
+  descriptionRaw    String?
+  currencyCode      String?
+  amount            Decimal?
+  date              DateTime?
+  type              String?
+  status            String?
+  categoryId        String?
+  category          String?
+  providerCode      String?
+  providerId        String?
+  merchantCnpj      String?
+  merchantName      String?
+  providerCreatedAt DateTime?
+  providerUpdatedAt DateTime?
+  createdAt         DateTime  @default(now())
+
+  @@index([itemExternalId])
+  @@index([accountExternalId, date])
+  @@index([merchantCnpj])
+}
+
+model PluggyInvestmentRecord {
+  id                String    @id @default(cuid())
+  externalId        String    @unique
+  itemExternalId    String
+  name              String?
+  type              String?
+  subtype           String?
+  status            String?
+  currencyCode      String?
+  balance           Decimal?
+  amountOriginal    Decimal?
+  amountProfit      Decimal?
+  providerCreatedAt DateTime?
+  providerUpdatedAt DateTime?
+  createdAt         DateTime  @default(now())
+
+  @@index([itemExternalId])
+}
+
+model PluggyLoanRecord {
+  id                    String    @id @default(cuid())
+  externalId            String    @unique
+  itemExternalId        String
+  contractNumber        String?
+  productName           String?
+  contractAmount        Decimal?
+  currencyCode          String?
+  dueDate               DateTime?
+  installmentPeriodicity String?
+  status                String?
+  providerCreatedAt     DateTime?
+  providerUpdatedAt     DateTime?
+  createdAt             DateTime  @default(now())
+
+  @@index([itemExternalId])
+}
+
+model PluggyBillRecord {
+  id                      String    @id @default(cuid())
+  externalId              String    @unique
+  itemExternalId          String?
+  accountExternalId       String?
+  dueDate                 DateTime?
+  totalAmount             Decimal?
+  totalAmountCurrencyCode String?
+  minimumPaymentAmount    Decimal?
+  allowsInstallments      Boolean?
+  providerCreatedAt       DateTime?
+  providerUpdatedAt       DateTime?
+  createdAt               DateTime  @default(now())
+
+  @@index([itemExternalId])
+  @@index([accountExternalId])
+}
+
+model PluggyCategoryRecord {
+  id                    String   @id @default(cuid())
+  externalId            String   @unique
+  description           String?
+  descriptionTranslated String?
+  parentId              String?
+  parentDescription     String?
+  createdAt             DateTime @default(now())
+}
+
+model PluggyMerchantRecord {
+  id           String   @id @default(cuid())
+  cnpj         String   @unique
+  externalId   String?
+  name         String?
+  businessName String?
+  category     String?
+  cnae         String?
+  createdAt    DateTime @default(now())
+}
