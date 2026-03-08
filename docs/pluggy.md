@@ -25,6 +25,15 @@ Regras importantes:
 
 Arquivo de exemplo: `.env.example`.
 
+## Setup rapido (exemplo Next.js)
+1. Criar `.env` a partir de `.env.example` e preencher `PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET`.
+2. Instalar dependencias.
+3. Rodar `pnpm dev` e acessar `http://localhost:3000`.
+
+Dependencias do widget (quando formos para UI):
+- `react-pluggy-connect` no client.
+- `pluggy-sdk` no server para gerar Connect Token.
+
 ## Endpoints internos
 - `POST /api/pluggy/api-key`
   - Retorna o payload da API key do Pluggy.
