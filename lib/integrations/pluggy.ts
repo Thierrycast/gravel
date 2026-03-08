@@ -213,11 +213,16 @@ export async function fetchAccounts(itemId: string) {
 }
 
 export async function fetchTransactions(
-  itemId: string,
-  params?: { page?: number; pageSize?: number }
+  params: {
+    accountId: string
+    page?: number
+    pageSize?: number
+    from?: string
+    to?: string
+  }
 ) {
   return pluggyRequest("/transactions", {
-    query: { itemId, ...params },
+    query: params,
   })
 }
 

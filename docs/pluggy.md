@@ -27,9 +27,11 @@
 - `GET /api/pluggy/accounts?itemId=...`
   - Busca contas do item.
   - Se `itemId` nao for enviado, agrega contas de todos os itens salvos.
+  - Retorna `items`, `totalItems`, `readyItems`, `totalAccounts`, `results` e `pagesByItem`.
 - `GET /api/pluggy/transactions?itemId=...&page=1&pageSize=100`
   - Busca transacoes do item.
   - Se `itemId` nao for enviado, agrega transacoes de todos os itens salvos.
+  - Retorna `items`, `totalItems`, `readyItems`, `totalAccounts`, `totalTransactions`, `results` e `pagesByAccount`.
 
 ## Fluxo
 1. Abrir `/connect`.
@@ -43,3 +45,4 @@
 - O `itemId` nao fica mais no `.env`.
 - A listagem de itens usada pelo app e local, porque o widget devolve o `itemId` no sucesso e esse identificador precisa ser mantido pela aplicacao.
 - O `connectToken` e limitado ao widget. Dados de produtos continuam sendo buscados no backend com API key.
+- No Pluggy atual deste projeto, `transactions` exige `accountId`, entao a API local primeiro resolve as contas e depois agrega as transacoes por conta.

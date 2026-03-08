@@ -39,8 +39,16 @@ export async function GET(request: Request) {
     }))
   )
 
+  const results = accountsByItem.flatMap((entry) =>
+    Array.isArray(entry.accounts?.results) ? entry.accounts.results : []
+  )
+
   return NextResponse.json({
     items,
-    accounts: accountsByItem.flatMap((entry) => entry.accounts),
+    totalItems: items.length,
+    readyItems: readyItems.length,
+    totalAccounts: results.length,
+    results,
+    pagesByItem: accountsByItem,
   })
 }
