@@ -125,7 +125,7 @@ async function createSignedQuery(
     params.set(key, String(value))
   }
 
-  params.set("timestamp", String(Date.now() + offsetMs))
+  params.set("timestamp", String(Math.round(Date.now() + offsetMs)))
   params.set("recvWindow", String(getRecvWindow()))
 
   const queryString = params.toString()
