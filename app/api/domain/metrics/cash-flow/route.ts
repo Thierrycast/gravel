@@ -1,5 +1,5 @@
 import { jsonError, jsonOk } from "@/lib/core/http"
-import { getCashFlowMetrics } from "@/lib/domain/queries"
+import { getCashFlowMetrics } from "@/lib/domain/analytics"
 
 export const dynamic = "force-dynamic"
 

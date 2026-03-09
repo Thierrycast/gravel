@@ -76,6 +76,13 @@ curl -X POST http://localhost:3000/api/binance/sync \
 curl http://localhost:3000/api/binance/prices/update
 ```
 
+
+## Calculos de dominio ja preparados
+- `GET /api/domain/metrics/crypto/assets`
+  - custo medio movel por ativo, PnL realizado e nao realizado, filtros por periodo e ativo
+- `GET /api/domain/metrics/crypto/overview`
+  - resumo consolidado da carteira cripto, alocacao, melhor e pior ativo
+
 ## Fontes
 - Spot account e `myTrades`:
   - https://developers.binance.com/docs/binance-spot-api-docs/rest-api/account-endpoints

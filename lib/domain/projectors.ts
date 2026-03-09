@@ -9,6 +9,7 @@ import {
 } from "@prisma/client"
 
 import { markDomainSyncState } from "@/lib/admin/ops"
+import { computeCryptoPositionStates } from "@/lib/domain/crypto-math"
 import { prisma } from "@/lib/prisma"
 
 function normalizeText(value?: string | null) {
@@ -677,55 +678,23 @@ async function projectPluggyInvestments() {
   return projected
 }
 
-function computeAverageCostByAsset(
-  trades: Array<{
-    baseAsset: string | null
-    price: Prisma.Decimal
-    quantity: Prisma.Decimal
-    isBuyer: boolean | null
-  }>
-) {
-  const aggregates = new Map<string, { qty: Prisma.Decimal; cost: Prisma.Decimal }>()
-
-  for (const trade of trades) {
-    if (!trade.baseAsset) continue
-    const current = aggregates.get(trade.baseAsset) ?? {
-      qty: new Prisma.Decimal(0),
-      cost: new Prisma.Decimal(0),
-    }
-
-    if (trade.isBuyer === false) {
-      current.qty = Prisma.Decimal.max(
-        new Prisma.Decimal(0),
-        current.qty.minus(trade.quantity)
-      )
-      current.cost = Prisma.Decimal.max(
-        new Prisma.Decimal(0),
-        current.cost.minus(trade.price.mul(trade.quantity))
-      )
-    } else {
-      current.qty = current.qty.plus(trade.quantity)
-      current.cost = current.cost.plus(trade.price.mul(trade.quantity))
-    }
-
-    aggregates.set(trade.baseAsset, current)
-  }
-
-  return aggregates
-}
-
 export async function projectBinanceReadModels() {
   const latestBalances = await prisma.binanceAssetRecord.findMany({
     orderBy: { asset: "asc" },
   })
-  const tradeAggregates = computeAverageCostByAsset(
+  const tradeAggregates = computeCryptoPositionStates(
     await prisma.binanceTradeRecord.findMany({
       select: {
         baseAsset: true,
+        quoteAsset: true,
         price: true,
         quantity: true,
+        commission: true,
+        commissionAsset: true,
         isBuyer: true,
+        tradedAt: true,
       },
+      orderBy: [{ tradedAt: "asc" }, { tradeId: "asc" }],
     })
   )
 
@@ -744,10 +713,7 @@ export async function projectBinanceReadModels() {
     })
 
     const aggregate = tradeAggregates.get(asset.asset)
-    const avgCost =
-      aggregate && aggregate.qty.greaterThan(0)
-        ? aggregate.cost.div(aggregate.qty)
-        : null
+    const avgCost = aggregate?.averageCost ?? null
     const currentValue = price?.price
       ? price.price.mul(balance.total)
       : null
@@ -767,6 +733,11 @@ export async function projectBinanceReadModels() {
         metadataJson: JSON.stringify({
           balanceSnapshotId: balance.id,
           priceSnapshotId: price?.id,
+          totalCostBasis: currentCost,
+          realizedPnl: aggregate?.realizedPnl ?? null,
+          lastTradeAt: aggregate?.lastTradeAt ?? null,
+          firstTradeAt: aggregate?.firstTradeAt ?? null,
+          tradeCount: aggregate?.tradeCount ?? 0,
         }),
       },
       create: {
@@ -782,6 +753,11 @@ export async function projectBinanceReadModels() {
         metadataJson: JSON.stringify({
           balanceSnapshotId: balance.id,
           priceSnapshotId: price?.id,
+          totalCostBasis: currentCost,
+          realizedPnl: aggregate?.realizedPnl ?? null,
+          lastTradeAt: aggregate?.lastTradeAt ?? null,
+          firstTradeAt: aggregate?.firstTradeAt ?? null,
+          tradeCount: aggregate?.tradeCount ?? 0,
         }),
       },
     })
