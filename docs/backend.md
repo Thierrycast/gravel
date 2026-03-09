@@ -2,23 +2,25 @@
 
 ## Camadas
 - `lib/integrations/*`
-  - Clientes brutos de Pluggy e Binance
+  - clientes brutos de Pluggy e Binance
 - `lib/ingestion/*`
-  - Sync manual, locks, checkpoints e execucao operacional
+  - sync manual, locks, checkpoints e execucao operacional
 - `lib/domain/*`
-  - Projetores e queries da aplicacao
+  - projetores, queries e metricas da aplicacao
 - `lib/admin/*`
-  - Protecao interna e operacao de sync
+  - protecao interna e operacao de sync
 - `lib/core/*`
-  - Resposta padronizada, serializacao e filtros
+  - resposta padronizada, serializacao e filtros
 
 ## Rotas principais
 - `app/api/providers/*`
-  - Health, status e sync dos provedores
+  - health, status e sync dos provedores
 - `app/api/domain/*`
-  - Read models da aplicacao
+  - read models da aplicacao
+- `app/api/domain/metrics/*`
+  - calculos de dashboard e relatorios
 - `app/api/admin/*`
-  - Operacao, rebuild e regras internas
+  - operacao, rebuild e regras internas
 
 ## Protecao interna
 - Endpoints administrativos e novos endpoints de sync exigem header:
@@ -45,5 +47,19 @@ curl -X POST http://localhost:3000/api/admin/rebuild/domain-read-models \
 
 ## Fluxo recomendado
 1. Sincronizar Pluggy e Binance via `providers/*/sync/*`
-2. Ler a aplicacao via `domain/*`
-3. Operar regras e manutencao via `admin/*`
+2. Projetar automaticamente para o dominio
+3. Ler a aplicacao via `domain/*` e `domain/metrics/*`
+4. Operar regras e manutencao via `admin/*`
+
+## Metricas implementadas
+- `GET /api/domain/metrics/overview`
+- `GET /api/domain/metrics/cash-flow`
+- `GET /api/domain/metrics/net-worth`
+- `GET /api/domain/metrics/accounts/allocation`
+- `GET /api/domain/metrics/bills/summary`
+- `GET /api/domain/metrics/spending/categories`
+- `GET /api/domain/metrics/spending/merchants`
+- `GET /api/domain/metrics/crypto/assets`
+- `GET /api/domain/metrics/crypto/overview`
+
+Detalhes e formulas em `docs/domain-metrics.md`.
