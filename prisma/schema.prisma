@@ -45,6 +45,47 @@ enum AccountType {
   CRYPTO
 }
 
+enum SourceProvider {
+  PLUGGY
+  BINANCE
+  MANUAL
+}
+
+enum DomainAccountKind {
+  BANK
+  CASH
+  CARD
+  INVESTMENT
+  CRYPTO
+  OTHER
+}
+
+enum DomainTransactionDirection {
+  INFLOW
+  OUTFLOW
+  TRANSFER
+}
+
+enum DomainCategoryKind {
+  INCOME
+  EXPENSE
+  TRANSFER
+  OTHER
+}
+
+enum RuleMatchType {
+  EXACT
+  CONTAINS
+  PREFIX
+  REGEX
+}
+
+enum OpsRunStatus {
+  RUNNING
+  SUCCESS
+  ERROR
+}
+
 model Account {
   id        String        @id @default(cuid())
   name      String
@@ -387,4 +428,287 @@ model BinanceTradeRecord {
   @@index([baseAsset, tradedAt])
   @@index([quoteAsset, tradedAt])
   @@index([symbol, tradedAt])
+}
+
+model OpsSyncRun {
+  id           String       @id @default(cuid())
+  provider     SourceProvider
+  scope        String
+  resource     String
+  status       OpsRunStatus
+  trigger      String       @default("manual")
+  requestJson  String?
+  summaryJson  String?
+  errorMessage String?
+  startedAt    DateTime     @default(now())
+  finishedAt   DateTime?
+
+  failures OpsSyncFailure[]
+
+  @@index([provider, resource, startedAt])
+  @@index([status, startedAt])
+}
+
+model OpsSyncFailure {
+  id         String         @id @default(cuid())
+  runId      String?
+  provider   SourceProvider
+  resource   String
+  scopeId    String?
+  message    String
+  metaJson   String?
+  createdAt  DateTime       @default(now())
+
+  run OpsSyncRun? @relation(fields: [runId], references: [id])
+
+  @@index([provider, resource, createdAt])
+  @@index([scopeId])
+}
+
+model OpsSyncCheckpoint {
+  id         String         @id @default(cuid())
+  provider   SourceProvider
+  resource   String
+  cursorKey  String
+  value      String?
+  metaJson   String?
+  updatedAt  DateTime       @updatedAt
+  createdAt  DateTime       @default(now())
+
+  @@unique([provider, resource, cursorKey])
+  @@index([provider, resource, updatedAt])
+}
+
+model OpsSyncLock {
+  id        String   @id @default(cuid())
+  lockKey   String   @unique
+  owner     String
+  lockedAt  DateTime @default(now())
+  expiresAt DateTime
+}
+
+model DomainSyncState {
+  id                  String       @id @default(cuid())
+  stateKey            String       @unique
+  status              OpsRunStatus @default(SUCCESS)
+  lastProjectedAt     DateTime?
+  lastSourceUpdatedAt DateTime?
+  metaJson            String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+}
+
+model DomainCategory {
+  id               String             @id @default(cuid())
+  slug             String             @unique
+  name             String
+  kind             DomainCategoryKind @default(OTHER)
+  color            String?
+  sourceProvider   SourceProvider?
+  sourceExternalId String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@unique([sourceProvider, sourceExternalId])
+}
+
+model DomainMerchant {
+  id             String   @id @default(cuid())
+  displayName    String
+  normalizedName String   @unique
+  cnpj           String?  @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model DomainMerchantSource {
+  id               String         @id @default(cuid())
+  domainMerchantId String
+  sourceProvider   SourceProvider
+  sourceExternalId String
+  sourceName       String?
+  sourceCnpj       String?
+  createdAt        DateTime       @default(now())
+
+  @@unique([sourceProvider, sourceExternalId])
+  @@index([domainMerchantId])
+}
+
+model MerchantAliasRule {
+  id          String         @id @default(cuid())
+  provider    SourceProvider?
+  matchType   RuleMatchType
+  matchValue  String
+  merchantId  String?
+  aliasName   String?
+  active      Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([provider, active])
+}
+
+model DomainAccount {
+  id               String            @id @default(cuid())
+  name             String
+  normalizedName   String?
+  kind             DomainAccountKind
+  currencyCode     String            @default("BRL")
+  balance          Decimal?
+  sourceProvider   SourceProvider
+  sourceExternalId String
+  sourceParentId   String?
+  ownerName        String?
+  institutionName  String?
+  metadataJson     String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@unique([sourceProvider, sourceExternalId])
+  @@index([kind, updatedAt])
+}
+
+model DomainAccountSource {
+  id               String         @id @default(cuid())
+  domainAccountId  String
+  sourceProvider   SourceProvider
+  sourceExternalId String
+  sourceParentId   String?
+  createdAt        DateTime       @default(now())
+
+  @@unique([sourceProvider, sourceExternalId])
+  @@index([domainAccountId])
+}
+
+model DomainTransaction {
+  id                    String                     @id @default(cuid())
+  occurredAt            DateTime
+  description           String?
+  normalizedDescription String?
+  amount                Decimal
+  currencyCode          String?
+  direction             DomainTransactionDirection
+  sourceProvider        SourceProvider
+  sourceExternalId      String
+  sourceParentId        String?
+  domainAccountId       String?
+  domainMerchantId      String?
+  domainCategoryId      String?
+  providerCategoryId    String?
+  merchantName          String?
+  merchantCnpj          String?
+  ignored               Boolean                    @default(false)
+  metadataJson          String?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+
+  @@unique([sourceProvider, sourceExternalId])
+  @@index([occurredAt])
+  @@index([domainAccountId, occurredAt])
+  @@index([domainCategoryId, occurredAt])
+  @@index([domainMerchantId, occurredAt])
+}
+
+model DomainTransactionSource {
+  id                  String         @id @default(cuid())
+  domainTransactionId String
+  sourceProvider      SourceProvider
+  sourceExternalId    String
+  sourceParentId      String?
+  createdAt           DateTime       @default(now())
+
+  @@unique([sourceProvider, sourceExternalId])
+  @@index([domainTransactionId])
+}
+
+model IgnoredTransaction {
+  id                  String   @id @default(cuid())
+  domainTransactionId String   @unique
+  reason              String?
+  createdAt           DateTime @default(now())
+}
+
+model DomainBill {
+  id                    String         @id @default(cuid())
+  sourceProvider        SourceProvider
+  sourceExternalId      String
+  sourceParentId        String?
+  domainAccountId       String?
+  dueDate               DateTime?
+  totalAmount           Decimal?
+  minimumPaymentAmount  Decimal?
+  currencyCode          String?
+  allowsInstallments    Boolean?
+  status                String?
+  metadataJson          String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  @@unique([sourceProvider, sourceExternalId])
+  @@index([dueDate])
+}
+
+model DomainInvestment {
+  id               String         @id @default(cuid())
+  name             String
+  type             String?
+  subtype          String?
+  balance          Decimal?
+  currencyCode     String?
+  status           String?
+  sourceProvider   SourceProvider
+  sourceExternalId String
+  sourceParentId   String?
+  ownerName        String?
+  metadataJson     String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([sourceProvider, sourceExternalId])
+  @@index([status, updatedAt])
+}
+
+model DomainCryptoAsset {
+  id               String         @id @default(cuid())
+  asset            String         @unique
+  quantity         Decimal
+  price            Decimal?
+  value            Decimal?
+  quoteAsset       String?
+  sourceProvider   SourceProvider @default(BINANCE)
+  sourceExternalId String?
+  costBasis        Decimal?
+  pnlUnrealized    Decimal?
+  metadataJson     String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+}
+
+model DomainRecurringRule {
+  id                 String   @id @default(cuid())
+  name               String
+  merchantId         String?
+  categoryId         String?
+  descriptionPattern String?
+  amount             Decimal?
+  interval           String?
+  active             Boolean  @default(true)
+  metadataJson       String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model CategoryRule {
+  id               String         @id @default(cuid())
+  provider         SourceProvider?
+  matchType        RuleMatchType
+  matchField       String
+  matchValue       String
+  domainCategoryId String?
+  active           Boolean        @default(true)
+  priority         Int            @default(100)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([provider, active, priority])
 }
