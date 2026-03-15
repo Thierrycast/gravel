@@ -698,6 +698,44 @@ model DomainRecurringRule {
   updatedAt          DateTime @updatedAt
 }
 
+// ── Goals ────────────────────────────────────────────────────────────────────
+
+model Goal {
+  id                  String   @id @default(cuid())
+  name                String
+  emoji               String   @default("🎯")
+  targetAmount        Decimal
+  currentAmount       Decimal  @default(0)
+  monthlyContribution Decimal  @default(0)
+  targetDate          DateTime?
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+// ── Tags ─────────────────────────────────────────────────────────────────────
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  color     String   @default("#6366f1")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TransactionTag {
+  id                  String   @id @default(cuid())
+  domainTransactionId String
+  tagId               String
+  createdAt           DateTime @default(now())
+
+  @@unique([domainTransactionId, tagId])
+  @@index([tagId])
+  @@index([domainTransactionId])
+}
+
+// ── Rules ────────────────────────────────────────────────────────────────────
+
 model CategoryRule {
   id               String         @id @default(cuid())
   provider         SourceProvider?

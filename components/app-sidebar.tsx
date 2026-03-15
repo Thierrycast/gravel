@@ -13,6 +13,10 @@ import {
   Calendar,
   FileText,
   Link as LinkIcon,
+  Store,
+  Target,
+  Landmark,
+  RefreshCw,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -61,6 +65,11 @@ const mainNavItems = [
 
 const investmentNavItems = [
   {
+    title: "Investimentos",
+    href: "/investments",
+    icon: Landmark,
+  },
+  {
     title: "Portfólio",
     href: "/portfolio",
     icon: PieChart,
@@ -88,9 +97,24 @@ const planningNavItems = [
     href: "/projection",
     icon: TrendingUp,
   },
+  {
+    title: "Metas",
+    href: "/goals",
+    icon: Target,
+  },
 ]
 
 const otherNavItems = [
+  {
+    title: "Sincronização",
+    href: "/sync",
+    icon: RefreshCw,
+  },
+  {
+    title: "Comerciantes",
+    href: "/merchants",
+    icon: Store,
+  },
   {
     title: "Categorias",
     href: "/categories",

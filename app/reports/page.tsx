@@ -8,16 +8,7 @@ import {
   ArrowDownRight,
   ChevronDown,
 } from "lucide-react"
-import {
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-} from "recharts"
+import { PieChart, Pie, Cell } from "recharts"
 import {
   Card,
   CardContent,
@@ -43,6 +34,7 @@ import {
 } from "@/components/ui/chart"
 import { useApi } from "@/hooks/use-api"
 import { formatCurrency, formatPercent } from "@/lib/format"
+import { SankeyChart } from "@/components/charts/sankey-chart"
 
 interface OverviewResponse {
   totalBalance: number
@@ -69,17 +61,6 @@ interface SpendingResponse {
   results: SpendingCategory[]
 }
 
-interface CashFlowItem {
-  date: string
-  income: number
-  expense: number
-  net: number
-}
-
-interface CashFlowResponse {
-  results: CashFlowItem[]
-}
-
 const PERIOD_OPTIONS = [
   { label: "Últimos 3 meses", months: "3" },
   { label: "Últimos 6 meses", months: "6" },
@@ -95,25 +76,6 @@ const HSL_COLORS = [
   "hsl(var(--chart-5))",
 ]
 
-const flowChartConfig: ChartConfig = {
-  income: {
-    label: "Receitas",
-    color: "hsl(var(--chart-2))",
-  },
-  expense: {
-    label: "Despesas",
-    color: "hsl(var(--chart-4))",
-  },
-  net: {
-    label: "Líquido",
-    color: "hsl(var(--chart-1))",
-  },
-}
-
-function formatMonth(dateStr: string) {
-  const date = new Date(dateStr + "T00:00:00")
-  return date.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" })
-}
 
 function LoadingSkeleton() {
   return (
@@ -151,13 +113,7 @@ export default function ReportsPage() {
   const { data: spending, loading: spendingLoading } =
     useApi<SpendingResponse>("/api/domain/metrics/spending/categories")
 
-  const { data: cashFlow, loading: cashFlowLoading } =
-    useApi<CashFlowResponse>("/api/domain/metrics/cash-flow", {
-      group: "month",
-      months: selectedPeriod.months,
-    })
-
-  const loading = overviewLoading || spendingLoading || cashFlowLoading
+  const loading = overviewLoading || spendingLoading
 
   const sortedCategories = useMemo(() => {
     if (!spending?.results) return []
@@ -183,14 +139,6 @@ export default function ReportsPage() {
     }))
   }, [sortedCategories])
 
-  const flowData = useMemo(() => {
-    if (!cashFlow?.results) return []
-    return cashFlow.results.map((item) => ({
-      ...item,
-      label: formatMonth(item.date),
-    }))
-  }, [cashFlow])
-
   const netResult = overview
     ? overview.monthlyIncome - overview.monthlyExpenses
     : 0
@@ -198,51 +146,6 @@ export default function ReportsPage() {
     overview && overview.monthlyIncome > 0
       ? (overview.monthlyExpenses / overview.monthlyIncome) * 100
       : 0
-
-  // Build horizontal stacked data for the Sankey-like visualization
-  const flowBreakdownData = useMemo(() => {
-    if (!overview || !sortedCategories.length) return []
-    const topCategories = sortedCategories.slice(0, 5)
-    const othersTotal =
-      (spending?.summary?.total ?? 0) -
-      topCategories.reduce((s, c) => s + c.total, 0)
-
-    const row: Record<string, number | string> = { name: "Fluxo" }
-    row["Receitas"] = overview.monthlyIncome
-    topCategories.forEach((cat) => {
-      row[cat.category] = cat.total
-    })
-    if (othersTotal > 0) {
-      row["Outros"] = othersTotal
-    }
-    const totalExpenses = topCategories.reduce((s, c) => s + c.total, 0) + othersTotal
-    const remaining = overview.monthlyIncome - totalExpenses
-    if (remaining > 0) {
-      row["Saldo"] = remaining
-    }
-    return [row]
-  }, [overview, sortedCategories, spending])
-
-  const flowBreakdownConfig = useMemo(() => {
-    const config: ChartConfig = {
-      Receitas: { label: "Receitas", color: "hsl(var(--chart-2))" },
-    }
-    sortedCategories.slice(0, 5).forEach((cat, i) => {
-      config[cat.category] = {
-        label: cat.category,
-        color: HSL_COLORS[i % HSL_COLORS.length],
-      }
-    })
-    config["Outros"] = { label: "Outros", color: "hsl(var(--muted-foreground))" }
-    config["Saldo"] = { label: "Saldo", color: "hsl(var(--chart-1))" }
-    return config
-  }, [sortedCategories])
-
-  const flowBreakdownKeys = useMemo(() => {
-    if (!flowBreakdownData.length) return []
-    const row = flowBreakdownData[0]
-    return Object.keys(row).filter((k) => k !== "name" && k !== "Receitas")
-  }, [flowBreakdownData])
 
   if (loading) return <LoadingSkeleton />
 
@@ -499,135 +402,26 @@ export default function ReportsPage() {
           </CardContent>
         </Card>
 
-        {/* Fluxo de Caixa */}
-        <Card>
+        {/* Fluxo de Caixa (Sankey) */}
+        <Card className="md:col-span-2">
           <CardHeader>
             <CardDescription>Fluxo de Caixa</CardDescription>
             <CardTitle className="text-base">
-              Receitas e Despesas por Mês
+              Receitas &rarr; Despesas &rarr; Categorias
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer
-              config={flowChartConfig}
-              className="h-[220px] w-full"
-            >
-              <BarChart data={flowData}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  className="stroke-muted"
-                />
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  className="text-xs"
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  className="text-xs"
-                  tickFormatter={(value) =>
-                    new Intl.NumberFormat("pt-BR", {
-                      notation: "compact",
-                      compactDisplay: "short",
-                    }).format(value)
-                  }
-                />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value) => formatCurrency(value as number)}
-                    />
-                  }
-                />
-                <Bar
-                  dataKey="income"
-                  fill="hsl(var(--chart-2))"
-                  radius={[4, 4, 0, 0]}
-                  stackId="flow"
-                />
-                <Bar
-                  dataKey="expense"
-                  fill="hsl(var(--chart-4))"
-                  radius={[4, 4, 0, 0]}
-                  stackId="flow2"
-                />
-              </BarChart>
-            </ChartContainer>
-
-            {/* Sankey-like flow breakdown */}
-            {flowBreakdownData.length > 0 && (
-              <div className="mt-4 space-y-3">
-                <Separator />
-                <p className="text-xs font-medium text-muted-foreground">
-                  Distribuição: Receitas &rarr; Categorias
-                </p>
-                <div className="flex h-6 w-full overflow-hidden rounded-full">
-                  {flowBreakdownKeys.map((key, i) => {
-                    const value = flowBreakdownData[0][key] as number
-                    const total = overview?.monthlyIncome ?? 1
-                    const widthPercent = (value / total) * 100
-                    if (widthPercent <= 0) return null
-
-                    const color =
-                      key === "Saldo"
-                        ? "hsl(var(--chart-1))"
-                        : key === "Outros"
-                          ? "hsl(var(--muted-foreground))"
-                          : HSL_COLORS[
-                              sortedCategories.findIndex(
-                                (c) => c.category === key
-                              ) % HSL_COLORS.length
-                            ] || HSL_COLORS[i % HSL_COLORS.length]
-
-                    return (
-                      <div
-                        key={key}
-                        className="relative h-full transition-all"
-                        style={{
-                          width: `${widthPercent}%`,
-                          backgroundColor: color,
-                        }}
-                        title={`${key}: ${formatCurrency(value)}`}
-                      />
-                    )
-                  })}
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  {flowBreakdownKeys.map((key, i) => {
-                    const value = flowBreakdownData[0][key] as number
-                    if (!value || value <= 0) return null
-
-                    const color =
-                      key === "Saldo"
-                        ? "hsl(var(--chart-1))"
-                        : key === "Outros"
-                          ? "hsl(var(--muted-foreground))"
-                          : HSL_COLORS[
-                              sortedCategories.findIndex(
-                                (c) => c.category === key
-                              ) % HSL_COLORS.length
-                            ] || HSL_COLORS[i % HSL_COLORS.length]
-
-                    return (
-                      <div key={key} className="flex items-center gap-1.5">
-                        <div
-                          className="size-2 rounded-full"
-                          style={{ backgroundColor: color }}
-                        />
-                        <span className="text-xs text-muted-foreground">
-                          {key}
-                        </span>
-                        <span className="text-xs font-medium">
-                          {formatCurrency(value)}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
+            <SankeyChart
+              data={{
+                income: overview?.monthlyIncome ?? 0,
+                categories: sortedCategories.map((cat, i) => ({
+                  name: cat.category,
+                  total: cat.total,
+                  color: HSL_COLORS[i % HSL_COLORS.length],
+                })),
+              }}
+              height={Math.max(380, sortedCategories.length * 40)}
+            />
           </CardContent>
         </Card>
       </div>
