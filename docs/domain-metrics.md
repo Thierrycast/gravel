@@ -205,3 +205,35 @@ Retorna:
 - PnL realizado por periodo e por ativo
 - score de concentracao patrimonial
 - metas vs realizado por categoria
+
+## Derivados top-level
+
+### `GET /api/portfolio`
+Retorna uma visao consolidada de patrimonio com:
+- `summary`
+- `accounts`
+- `investments`
+- `crypto`
+- `loans`
+- `recurring`
+- `history`
+
+### `GET /api/projection`
+Retorna projeção deterministica por mes com:
+- `summary.startBalance`
+- `summary.projectedFinalBalance`
+- `points[]`
+
+A projeção considera:
+- saldo liquido atual
+- recorrencias detectadas/manuais
+- faturas futuras
+
+### `GET /api/recurring`
+Retorna recorrencias derivadas do historico local.
+
+Observacoes:
+- a deteccao atual foca em padroes mensais
+- transferencias sao ignoradas
+- tolerancia de valor: 15% ou R$ 20, o que for maior
+- minimo padrao: 3 ocorrencias

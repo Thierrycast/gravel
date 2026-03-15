@@ -1,4 +1,4 @@
-import { SourceProvider } from "@prisma/client"
+import { OpsRunStatus, SourceProvider } from "@prisma/client"
 
 import {
   acquireSyncLock,
@@ -13,6 +13,7 @@ import {
   projectPluggyReadModels,
   rebuildAllDomainReadModels,
 } from "@/lib/domain/projectors"
+import { refreshDerivedCaches } from "@/lib/domain/derived"
 import {
   type BinanceSyncResource,
   syncBinanceData,
@@ -138,7 +139,12 @@ export async function rebuildDomainFromStoredProviders() {
   })
 
   try {
-    const summary = await rebuildAllDomainReadModels()
+    const rebuilt = await rebuildAllDomainReadModels()
+    const derived = await refreshDerivedCaches()
+    const summary = {
+      rebuilt,
+      derived,
+    }
     await updateCheckpoint({
       provider: SourceProvider.MANUAL,
       resource: "domain-rebuild",
@@ -154,6 +160,96 @@ export async function rebuildDomainFromStoredProviders() {
       provider: SourceProvider.MANUAL,
       resource: "domain-rebuild",
       message,
+    })
+    throw error
+  } finally {
+    await releaseSyncLock(lockKey, owner)
+  }
+}
+
+export async function runFullOperationalSync(input?: {
+  pluggy?: {
+    itemId?: string | null
+    pageSize?: number
+  }
+  binance?: {
+    symbols?: string[]
+    includeZeroBalances?: boolean
+  }
+}) {
+  const lockKey = "admin:sync:full"
+  const owner = await acquireSyncLock(lockKey)
+  const run = await startOpsRun({
+    provider: SourceProvider.MANUAL,
+    scope: "admin/full",
+    resource: "sync-full",
+    requestJson: JSON.stringify(input ?? {}),
+  })
+
+  try {
+    const errors: Array<{ provider: "pluggy" | "binance"; message: string }> = []
+    let pluggy: Awaited<ReturnType<typeof runPluggySync>> | null = null
+    let binance: Awaited<ReturnType<typeof runBinanceSync>> | null = null
+
+    try {
+      pluggy = await runPluggySync({
+        scope: "admin/full/pluggy",
+        resource: "full",
+        itemId: input?.pluggy?.itemId,
+        pageSize: input?.pluggy?.pageSize,
+      })
+    } catch (error) {
+      errors.push({
+        provider: "pluggy",
+        message: error instanceof Error ? error.message : "Erro desconhecido",
+      })
+    }
+
+    try {
+      binance = await runBinanceSync({
+        scope: "admin/full/binance",
+        resource: "full",
+        symbols: input?.binance?.symbols,
+        includeZeroBalances: input?.binance?.includeZeroBalances,
+      })
+    } catch (error) {
+      errors.push({
+        provider: "binance",
+        message: error instanceof Error ? error.message : "Erro desconhecido",
+      })
+    }
+
+    const rebuilt = await rebuildAllDomainReadModels()
+    const derived = await refreshDerivedCaches()
+
+    const summary = {
+      pluggy,
+      binance,
+      rebuilt,
+      derived,
+      errors,
+    }
+
+    await updateCheckpoint({
+      provider: SourceProvider.MANUAL,
+      resource: "sync-full",
+      cursorKey: "all",
+      value: new Date().toISOString(),
+      meta: summary,
+    })
+    await completeOpsRun(
+      run.id,
+      summary,
+      errors.length > 0 ? OpsRunStatus.ERROR : OpsRunStatus.SUCCESS
+    )
+    return summary
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro desconhecido"
+    await failOpsRun(run.id, {
+      provider: SourceProvider.MANUAL,
+      resource: "sync-full",
+      message,
+      meta: input,
     })
     throw error
   } finally {
