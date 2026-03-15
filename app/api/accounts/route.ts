@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server"
 
-import { prisma } from "@/lib/prisma"
+import { getDomainAccounts } from "@/lib/domain/queries"
 
 export const dynamic = "force-dynamic"
 
-export async function GET() {
-  const accounts = await prisma.account.findMany({
-    orderBy: { name: "asc" },
-  })
-
-  return NextResponse.json(accounts)
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  if (!searchParams.has("pageSize")) {
+    searchParams.set("pageSize", "500")
+  }
+  const payload = await getDomainAccounts(searchParams)
+  return NextResponse.json(payload.results)
 }

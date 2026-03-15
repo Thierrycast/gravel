@@ -51,6 +51,34 @@ curl -X POST http://localhost:3000/api/admin/rebuild/domain-read-models \
 3. Ler a aplicacao via `domain/*` e `domain/metrics/*`
 4. Operar regras e manutencao via `admin/*`
 
+## Rotas top-level convergidas
+- `GET /api/accounts`
+- `GET /api/transactions`
+- `GET /api/categories`
+- `GET /api/bills`
+- `GET /api/crypto`
+- `GET /api/portfolio`
+- `GET /api/projection`
+- `GET /api/recurring`
+- `GET /api/recurring/expenses`
+- `GET /api/recurring/income`
+
+Essas rotas agora leem do dominio ou de derivados calculados no banco local, e nao mais das tabelas seedadas.
+
+## Sync operacional unico
+```bash
+curl -X POST http://localhost:3000/api/admin/sync/full \
+  -H 'X-INTERNAL-API-KEY: ...' \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+```
+
+Esse fluxo:
+1. sincroniza Pluggy
+2. sincroniza Binance
+3. recompõe o dominio
+4. recalcula derivados (`portfolio`, `projection`, `recurring`)
+
 ## Metricas implementadas
 - `GET /api/domain/metrics/overview`
 - `GET /api/domain/metrics/cash-flow`

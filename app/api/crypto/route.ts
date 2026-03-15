@@ -1,30 +1,26 @@
 import { NextResponse } from "next/server"
 
-import { getPersistedBinanceAssets } from "@/lib/binance-sync"
-import { prisma } from "@/lib/prisma"
+import { getCryptoAssetMetrics } from "@/lib/domain/analytics"
 
 export const dynamic = "force-dynamic"
 
-export async function GET() {
-  const binanceAssets = await getPersistedBinanceAssets(false)
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const payload = await getCryptoAssetMetrics(searchParams)
 
-  if (binanceAssets.length > 0) {
-    return NextResponse.json(
-      binanceAssets.map((asset) => ({
-        symbol: asset.asset,
-        amount: asset.total,
-        lastPrice: asset.price,
-        priceSymbol: asset.priceSymbol,
-        quoteAsset: asset.quoteAsset,
-        balanceFetchedAt: asset.balanceFetchedAt,
-        priceFetchedAt: asset.priceFetchedAt,
-      }))
-    )
-  }
-
-  const assets = await prisma.cryptoAsset.findMany({
-    orderBy: { symbol: "asc" },
-  })
-
-  return NextResponse.json(assets)
+  return NextResponse.json(
+    payload.results.map((asset) => ({
+      symbol: asset.asset,
+      amount: asset.quantity,
+      lastPrice: asset.currentPrice,
+      quoteAsset: asset.quoteAsset,
+      currentValue: asset.currentValue,
+      avgPrice: asset.averageCost,
+      pnlUnrealized: asset.unrealizedPnl,
+      pnlRealized: asset.realizedPnl,
+      tradeCount: asset.tradeCount,
+      firstTradeAt: asset.firstTradeAt,
+      lastTradeAt: asset.lastTradeAt,
+    }))
+  )
 }

@@ -81,6 +81,17 @@ async function createIfNew(operation: () => Promise<unknown>) {
   }
 }
 
+async function createIfMissing(
+  exists: () => Promise<boolean>,
+  create: () => Promise<unknown>
+) {
+  if (await exists()) {
+    return 0
+  }
+
+  return createIfNew(create)
+}
+
 function toDate(value: unknown) {
   if (!value || typeof value !== "string") {
     return null
@@ -129,18 +140,33 @@ async function savePayloadSnapshot(input: {
   parentExternalId?: string | null
   sourceUpdatedAt?: Date | null
 }) {
-  return createIfNew(() =>
-    prisma.pluggyPayloadSnapshot.create({
-      data: {
-        resourceType: input.resourceType,
-        externalId: input.externalId,
-        itemExternalId: input.itemExternalId ?? undefined,
-        parentExternalId: input.parentExternalId ?? undefined,
-        payloadHash: hashPayload(input.payload),
-        payloadJson: serializePayload(input.payload),
-        sourceUpdatedAt: input.sourceUpdatedAt ?? undefined,
-      },
-    })
+  const payloadHash = hashPayload(input.payload)
+  return createIfMissing(
+    async () =>
+      Boolean(
+        await prisma.pluggyPayloadSnapshot.findUnique({
+          where: {
+            resourceType_externalId_payloadHash: {
+              resourceType: input.resourceType,
+              externalId: input.externalId,
+              payloadHash,
+            },
+          },
+          select: { id: true },
+        })
+      ),
+    () =>
+      prisma.pluggyPayloadSnapshot.create({
+        data: {
+          resourceType: input.resourceType,
+          externalId: input.externalId,
+          itemExternalId: input.itemExternalId ?? undefined,
+          parentExternalId: input.parentExternalId ?? undefined,
+          payloadHash,
+          payloadJson: serializePayload(input.payload),
+          sourceUpdatedAt: input.sourceUpdatedAt ?? undefined,
+        },
+      })
   )
 }
 
@@ -184,18 +210,26 @@ async function syncCategories(pageSize: number) {
       payload: currentCategory,
     })
 
-    inserted += await createIfNew(() =>
-      prisma.pluggyCategoryRecord.create({
-        data: {
-          externalId,
-          description: toStringOrNull(currentCategory.description),
-          descriptionTranslated: toStringOrNull(
-            currentCategory.descriptionTranslated
-          ),
-          parentId: toStringOrNull(currentCategory.parentId),
-          parentDescription: toStringOrNull(currentCategory.parentDescription),
-        },
-      })
+    inserted += await createIfMissing(
+      async () =>
+        Boolean(
+          await prisma.pluggyCategoryRecord.findUnique({
+            where: { externalId },
+            select: { id: true },
+          })
+        ),
+      () =>
+        prisma.pluggyCategoryRecord.create({
+          data: {
+            externalId,
+            description: toStringOrNull(currentCategory.description),
+            descriptionTranslated: toStringOrNull(
+              currentCategory.descriptionTranslated
+            ),
+            parentId: toStringOrNull(currentCategory.parentId),
+            parentDescription: toStringOrNull(currentCategory.parentDescription),
+          },
+        })
     )
   }
 
@@ -247,23 +281,31 @@ async function syncAccountEntity(itemId: string, account: Record<string, unknown
     sourceUpdatedAt: toDate(account.updatedAt),
   })
 
-  inserted += await createIfNew(() =>
-    prisma.pluggyAccountRecord.create({
-      data: {
-        externalId,
-        itemExternalId: itemId,
-        type: toStringOrNull(account.type),
-        subtype: toStringOrNull(account.subtype),
-        name: toStringOrNull(account.name),
-        number: toStringOrNull(account.number),
-        owner: toStringOrNull(account.owner),
-        taxNumber: toStringOrNull(account.taxNumber),
-        currencyCode: toStringOrNull(account.currencyCode),
-        balance: toDecimal(account.balance) ?? undefined,
-        providerCreatedAt: toDate(account.createdAt) ?? undefined,
-        providerUpdatedAt: toDate(account.updatedAt) ?? undefined,
-      },
-    })
+  inserted += await createIfMissing(
+    async () =>
+      Boolean(
+        await prisma.pluggyAccountRecord.findUnique({
+          where: { externalId },
+          select: { id: true },
+        })
+      ),
+    () =>
+      prisma.pluggyAccountRecord.create({
+        data: {
+          externalId,
+          itemExternalId: itemId,
+          type: toStringOrNull(account.type),
+          subtype: toStringOrNull(account.subtype),
+          name: toStringOrNull(account.name),
+          number: toStringOrNull(account.number),
+          owner: toStringOrNull(account.owner),
+          taxNumber: toStringOrNull(account.taxNumber),
+          currencyCode: toStringOrNull(account.currencyCode),
+          balance: toDecimal(account.balance) ?? undefined,
+          providerCreatedAt: toDate(account.createdAt) ?? undefined,
+          providerUpdatedAt: toDate(account.updatedAt) ?? undefined,
+        },
+      })
   )
 
   return {
@@ -275,21 +317,35 @@ async function syncAccountEntity(itemId: string, account: Record<string, unknown
 async function syncBalanceSnapshot(accountId: string) {
   try {
     const balance = await fetchAccountBalance(accountId)
+    const payloadHash = hashPayload(balance)
 
-    const inserted = await createIfNew(() =>
-      prisma.pluggyAccountBalanceSnapshot.create({
-        data: {
-          accountExternalId: accountId,
-          balance: toDecimal(balance?.balance) ?? undefined,
-          blockedBalance: toDecimal(balance?.blockedBalance) ?? undefined,
-          automaticallyInvestedBalance:
-            toDecimal(balance?.automaticallyInvestedBalance) ?? undefined,
-          currencyCode: toStringOrNull(balance?.currencyCode),
-          providerUpdatedAt: toDate(balance?.updateDateTime) ?? undefined,
-          payloadHash: hashPayload(balance),
-          payloadJson: serializePayload(balance),
-        },
-      })
+    const inserted = await createIfMissing(
+      async () =>
+        Boolean(
+          await prisma.pluggyAccountBalanceSnapshot.findUnique({
+            where: {
+              accountExternalId_payloadHash: {
+                accountExternalId: accountId,
+                payloadHash,
+              },
+            },
+            select: { id: true },
+          })
+        ),
+      () =>
+        prisma.pluggyAccountBalanceSnapshot.create({
+          data: {
+            accountExternalId: accountId,
+            balance: toDecimal(balance?.balance) ?? undefined,
+            blockedBalance: toDecimal(balance?.blockedBalance) ?? undefined,
+            automaticallyInvestedBalance:
+              toDecimal(balance?.automaticallyInvestedBalance) ?? undefined,
+            currencyCode: toStringOrNull(balance?.currencyCode),
+            providerUpdatedAt: toDate(balance?.updateDateTime) ?? undefined,
+            payloadHash,
+            payloadJson: serializePayload(balance),
+          },
+        })
     )
 
     return inserted
@@ -324,25 +380,33 @@ async function syncBillEntity(
     sourceUpdatedAt: toDate(bill.updatedAt),
   })
 
-  inserted += await createIfNew(() =>
-    prisma.pluggyBillRecord.create({
-      data: {
-        externalId,
-        itemExternalId: itemId,
-        accountExternalId: accountId,
-        dueDate: toDate(bill.dueDate) ?? undefined,
-        totalAmount: toDecimal(bill.totalAmount) ?? undefined,
-        totalAmountCurrencyCode: toStringOrNull(bill.totalAmountCurrencyCode),
-        minimumPaymentAmount:
-          toDecimal(bill.minimumPaymentAmount) ?? undefined,
-        allowsInstallments:
-          typeof bill.allowsInstallments === "boolean"
-            ? bill.allowsInstallments
-            : undefined,
-        providerCreatedAt: toDate(bill.createdAt) ?? undefined,
-        providerUpdatedAt: toDate(bill.updatedAt) ?? undefined,
-      },
-    })
+  inserted += await createIfMissing(
+    async () =>
+      Boolean(
+        await prisma.pluggyBillRecord.findUnique({
+          where: { externalId },
+          select: { id: true },
+        })
+      ),
+    () =>
+      prisma.pluggyBillRecord.create({
+        data: {
+          externalId,
+          itemExternalId: itemId,
+          accountExternalId: accountId,
+          dueDate: toDate(bill.dueDate) ?? undefined,
+          totalAmount: toDecimal(bill.totalAmount) ?? undefined,
+          totalAmountCurrencyCode: toStringOrNull(bill.totalAmountCurrencyCode),
+          minimumPaymentAmount:
+            toDecimal(bill.minimumPaymentAmount) ?? undefined,
+          allowsInstallments:
+            typeof bill.allowsInstallments === "boolean"
+              ? bill.allowsInstallments
+              : undefined,
+          providerCreatedAt: toDate(bill.createdAt) ?? undefined,
+          providerUpdatedAt: toDate(bill.updatedAt) ?? undefined,
+        },
+      })
   )
 
   return inserted
@@ -377,29 +441,37 @@ async function syncTransactionEntity(
   const merchantName =
     toStringOrNull(merchant?.businessName) ?? toStringOrNull(merchant?.name)
 
-  inserted += await createIfNew(() =>
-    prisma.pluggyTransactionRecord.create({
-      data: {
-        externalId,
-        itemExternalId: itemId,
-        accountExternalId: accountId,
-        description: toStringOrNull(transaction.description),
-        descriptionRaw: toStringOrNull(transaction.descriptionRaw),
-        currencyCode: toStringOrNull(transaction.currencyCode),
-        amount: toDecimal(transaction.amount) ?? undefined,
-        date: toDate(transaction.date) ?? undefined,
-        type: toStringOrNull(transaction.type),
-        status: toStringOrNull(transaction.status),
-        categoryId: toStringOrNull(transaction.categoryId),
-        category: toStringOrNull(transaction.category),
-        providerCode: toStringOrNull(transaction.providerCode),
-        providerId: toStringOrNull(transaction.providerId),
-        merchantCnpj,
-        merchantName,
-        providerCreatedAt: toDate(transaction.createdAt) ?? undefined,
-        providerUpdatedAt: toDate(transaction.updatedAt) ?? undefined,
-      },
-    })
+  inserted += await createIfMissing(
+    async () =>
+      Boolean(
+        await prisma.pluggyTransactionRecord.findUnique({
+          where: { externalId },
+          select: { id: true },
+        })
+      ),
+    () =>
+      prisma.pluggyTransactionRecord.create({
+        data: {
+          externalId,
+          itemExternalId: itemId,
+          accountExternalId: accountId,
+          description: toStringOrNull(transaction.description),
+          descriptionRaw: toStringOrNull(transaction.descriptionRaw),
+          currencyCode: toStringOrNull(transaction.currencyCode),
+          amount: toDecimal(transaction.amount) ?? undefined,
+          date: toDate(transaction.date) ?? undefined,
+          type: toStringOrNull(transaction.type),
+          status: toStringOrNull(transaction.status),
+          categoryId: toStringOrNull(transaction.categoryId),
+          category: toStringOrNull(transaction.category),
+          providerCode: toStringOrNull(transaction.providerCode),
+          providerId: toStringOrNull(transaction.providerId),
+          merchantCnpj,
+          merchantName,
+          providerCreatedAt: toDate(transaction.createdAt) ?? undefined,
+          providerUpdatedAt: toDate(transaction.updatedAt) ?? undefined,
+        },
+      })
   )
 
   return {
@@ -422,23 +494,31 @@ async function syncInvestmentEntity(itemId: string, investment: Record<string, u
     sourceUpdatedAt: toDate(investment.updatedAt),
   })
 
-  inserted += await createIfNew(() =>
-    prisma.pluggyInvestmentRecord.create({
-      data: {
-        externalId,
-        itemExternalId: itemId,
-        name: toStringOrNull(investment.name),
-        type: toStringOrNull(investment.type),
-        subtype: toStringOrNull(investment.subtype),
-        status: toStringOrNull(investment.status),
-        currencyCode: toStringOrNull(investment.currencyCode),
-        balance: toDecimal(investment.balance) ?? undefined,
-        amountOriginal: toDecimal(investment.amountOriginal) ?? undefined,
-        amountProfit: toDecimal(investment.amountProfit) ?? undefined,
-        providerCreatedAt: toDate(investment.createdAt) ?? undefined,
-        providerUpdatedAt: toDate(investment.updatedAt) ?? undefined,
-      },
-    })
+  inserted += await createIfMissing(
+    async () =>
+      Boolean(
+        await prisma.pluggyInvestmentRecord.findUnique({
+          where: { externalId },
+          select: { id: true },
+        })
+      ),
+    () =>
+      prisma.pluggyInvestmentRecord.create({
+        data: {
+          externalId,
+          itemExternalId: itemId,
+          name: toStringOrNull(investment.name),
+          type: toStringOrNull(investment.type),
+          subtype: toStringOrNull(investment.subtype),
+          status: toStringOrNull(investment.status),
+          currencyCode: toStringOrNull(investment.currencyCode),
+          balance: toDecimal(investment.balance) ?? undefined,
+          amountOriginal: toDecimal(investment.amountOriginal) ?? undefined,
+          amountProfit: toDecimal(investment.amountProfit) ?? undefined,
+          providerCreatedAt: toDate(investment.createdAt) ?? undefined,
+          providerUpdatedAt: toDate(investment.updatedAt) ?? undefined,
+        },
+      })
   )
 
   return inserted
@@ -458,22 +538,30 @@ async function syncLoanEntity(itemId: string, loan: Record<string, unknown>) {
     sourceUpdatedAt: toDate(loan.updatedAt),
   })
 
-  inserted += await createIfNew(() =>
-    prisma.pluggyLoanRecord.create({
-      data: {
-        externalId,
-        itemExternalId: itemId,
-        contractNumber: toStringOrNull(loan.contractNumber),
-        productName: toStringOrNull(loan.productName),
-        contractAmount: toDecimal(loan.contractAmount) ?? undefined,
-        currencyCode: toStringOrNull(loan.currencyCode),
-        dueDate: toDate(loan.dueDate) ?? undefined,
-        installmentPeriodicity: toStringOrNull(loan.installmentPeriodicity),
-        status: toStringOrNull(loan.status),
-        providerCreatedAt: toDate(loan.createdAt) ?? undefined,
-        providerUpdatedAt: toDate(loan.updatedAt) ?? undefined,
-      },
-    })
+  inserted += await createIfMissing(
+    async () =>
+      Boolean(
+        await prisma.pluggyLoanRecord.findUnique({
+          where: { externalId },
+          select: { id: true },
+        })
+      ),
+    () =>
+      prisma.pluggyLoanRecord.create({
+        data: {
+          externalId,
+          itemExternalId: itemId,
+          contractNumber: toStringOrNull(loan.contractNumber),
+          productName: toStringOrNull(loan.productName),
+          contractAmount: toDecimal(loan.contractAmount) ?? undefined,
+          currencyCode: toStringOrNull(loan.currencyCode),
+          dueDate: toDate(loan.dueDate) ?? undefined,
+          installmentPeriodicity: toStringOrNull(loan.installmentPeriodicity),
+          status: toStringOrNull(loan.status),
+          providerCreatedAt: toDate(loan.createdAt) ?? undefined,
+          providerUpdatedAt: toDate(loan.updatedAt) ?? undefined,
+        },
+      })
   )
 
   return inserted
@@ -506,17 +594,25 @@ async function syncMerchantEntity(cnpj: string) {
       parentExternalId: merchantCnpj,
     })
 
-    inserted += await createIfNew(() =>
-      prisma.pluggyMerchantRecord.create({
-        data: {
-          cnpj: merchantCnpj,
-          externalId: toStringOrNull(merchant?.id),
-          name: toStringOrNull(merchant?.name),
-          businessName: toStringOrNull(merchant?.businessName),
-          category: toStringOrNull(merchant?.category),
-          cnae: toStringOrNull(merchant?.cnae),
-        },
-      })
+    inserted += await createIfMissing(
+      async () =>
+        Boolean(
+          await prisma.pluggyMerchantRecord.findUnique({
+            where: { cnpj: merchantCnpj },
+            select: { id: true },
+          })
+        ),
+      () =>
+        prisma.pluggyMerchantRecord.create({
+          data: {
+            cnpj: merchantCnpj,
+            externalId: toStringOrNull(merchant?.id),
+            name: toStringOrNull(merchant?.name),
+            businessName: toStringOrNull(merchant?.businessName),
+            category: toStringOrNull(merchant?.category),
+            cnae: toStringOrNull(merchant?.cnae),
+          },
+        })
     )
   }
 

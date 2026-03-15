@@ -164,7 +164,7 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
     period: "mtd",
   })
 
-  const [accounts, bills, investments, cryptoAssets, transactions] =
+  const [accounts, bills, investments, cryptoAssets, transactions, loans] =
     await Promise.all([
       prisma.domainAccount.findMany({
         where: {
@@ -190,6 +190,16 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
       prisma.domainTransaction.findMany({
         where: buildTransactionWhere(filters),
       }),
+      prisma.pluggyLoanRecord.findMany({
+        where: {
+          ...(filters.provider && filters.provider !== SourceProvider.PLUGGY
+            ? { id: "__none__" }
+            : {}),
+          status: {
+            notIn: ["PAID", "SETTLED", "CLOSED", "CANCELLED"],
+          },
+        },
+      }),
     ])
 
   const liquidAccountKinds = new Set<DomainAccountKind>([
@@ -205,6 +215,8 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
   const investmentsTotal = sumDecimals(investments.map((item) => item.balance))
   const cryptoTotal = sumDecimals(cryptoAssets.map((item) => item.value))
   const openBills = sumDecimals(bills.map((bill) => bill.totalAmount))
+  const loanBalance = sumDecimals(loans.map((loan) => loan.contractAmount))
+  const liabilitiesTotal = openBills.plus(loanBalance)
   const inflow = sumDecimals(
     transactions
       .filter((transaction) => transaction.direction === DomainTransactionDirection.INFLOW)
@@ -221,7 +233,13 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
     investmentsTotal,
     cryptoTotal,
     openBills,
-    netWorth: accountBalance.plus(investmentsTotal).plus(cryptoTotal),
+    loanBalance,
+    liabilitiesTotal,
+    grossAssets: accountBalance.plus(investmentsTotal).plus(cryptoTotal),
+    netWorth: accountBalance
+      .plus(investmentsTotal)
+      .plus(cryptoTotal)
+      .minus(liabilitiesTotal),
     monthlyInflow: inflow,
     monthlyOutflow: outflow,
     monthlyNet: inflow.minus(outflow),

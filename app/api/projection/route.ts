@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server"
 
-import { prisma } from "@/lib/prisma"
+import { getProjectionPayload } from "@/lib/domain/derived"
 
 export const dynamic = "force-dynamic"
 
-export async function GET() {
-  const projections = await prisma.balanceProjection.findMany({
-    orderBy: { date: "asc" },
-  })
-
-  return NextResponse.json(projections)
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const payload = await getProjectionPayload(searchParams)
+  return NextResponse.json(payload)
 }

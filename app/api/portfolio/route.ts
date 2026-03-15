@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server"
 
-import { prisma } from "@/lib/prisma"
+import { getPortfolioPayload } from "@/lib/domain/derived"
 
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  const snapshots = await prisma.portfolioSnapshot.findMany({
-    orderBy: { date: "asc" },
-  })
-
-  return NextResponse.json(snapshots)
+  const payload = await getPortfolioPayload()
+  return NextResponse.json(payload)
 }
