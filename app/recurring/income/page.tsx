@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import {
   BarChart,
   Bar,
@@ -7,16 +8,9 @@ import {
   YAxis,
   CartesianGrid,
 } from "recharts"
-import { TrendingUp } from "lucide-react"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 import { useApi } from "@/hooks/use-api"
 import { formatCurrency, formatDate, daysUntilLabel } from "@/lib/format"
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -60,22 +54,31 @@ const frequencyLabel: Record<string, string> = {
 
 const chartConfig: ChartConfig = {
   income: {
-    label: "Receita",
-    color: "var(--chart-3)",
+    label: "Receitas Recorrentes",
+    color: "#10b981",
   },
 }
 
+const MONTHS = [
+  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+  "Jul", "Ago", "Set", "Out", "Nov", "Dez",
+]
+
+const MONTH_FULL = [
+  "Janeiro", "Fevereiro", "Mar\u00e7o", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+]
+
 export default function RecurringIncomePage() {
+  const currentMonth = new Date().getMonth()
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth)
   const { data, loading } = useApi<RecurringIncomeData>("/api/recurring/income")
+  const rules = data?.rules ?? []
+  const monthlyTotal = rules.reduce((sum, r) => sum + Number(r.amount), 0)
 
   const chartData = (() => {
-    if (!data) return []
-    const months = [
-      "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
-      "Jul", "Ago", "Set", "Out", "Nov", "Dez",
-    ]
-    const monthlyTotal = data.rules.reduce((sum, r) => sum + r.amount, 0)
-    return months.map((month) => ({
+    if (rules.length === 0) return []
+    return MONTHS.map((month) => ({
       month,
       income: monthlyTotal,
     }))
@@ -98,114 +101,145 @@ export default function RecurringIncomePage() {
   return (
     <div className="flex flex-col gap-6 p-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">
-          Receitas Recorrentes
-        </h1>
-        <p className="text-muted-foreground">
-          Entradas fixas e receitas previstas mensalmente
-        </p>
-      </div>
-
-      {/* Summary */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardDescription>Receita Mensal Recorrente</CardDescription>
-            <CardTitle className="text-2xl text-emerald-600">
-              {formatCurrency(data?.summary.totalMonthlyIncome ?? 0)}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>Fontes de Receita</CardDescription>
-            <CardTitle className="text-2xl">
-              {data?.summary.count ?? 0}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
+      <h1 className="text-3xl font-bold tracking-tight">
+        Receitas Recorrentes
+      </h1>
 
       {/* Chart */}
-      <Card>
-        <CardHeader>
+      <div className="rounded-xl border bg-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+            Este ano / {new Date().getFullYear()}
+          </p>
           <div className="flex items-center gap-2">
-            <TrendingUp className="size-4 text-emerald-600" />
-            <CardTitle>Receitas Mensais</CardTitle>
+            <div className="size-2.5 rounded-full bg-emerald-500" />
+            <span className="text-xs text-muted-foreground">Receitas Recorrentes</span>
           </div>
-          <CardDescription>
-            Total de receitas recorrentes por mês
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ChartContainer config={chartConfig} className="h-72 w-full">
-            <BarChart data={chartData} accessibilityLayer>
-              <CartesianGrid vertical={false} />
-              <XAxis dataKey="month" tickLine={false} axisLine={false} />
-              <YAxis
-                tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`}
-                tickLine={false}
-                axisLine={false}
-              />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    formatter={(value) => (
-                      <span>Receita: {formatCurrency(Number(value))}</span>
-                    )}
-                  />
-                }
-              />
-              <Bar
-                dataKey="income"
-                fill="var(--color-income)"
-                radius={[4, 4, 0, 0]}
-              />
-            </BarChart>
-          </ChartContainer>
-        </CardContent>
-      </Card>
+        </div>
+
+        <div className="flex gap-6">
+          <div className="flex-1">
+            <ChartContainer config={chartConfig} className="h-56 w-full">
+              <BarChart data={chartData} accessibilityLayer>
+                <CartesianGrid vertical={false} strokeOpacity={0.1} />
+                <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} />
+                <YAxis
+                  tickFormatter={(v) => v >= 1000 ? `R$${(v / 1000).toFixed(0)}k` : `R$${v}`}
+                  tickLine={false}
+                  axisLine={false}
+                  tick={{ fontSize: 10 }}
+                  width={50}
+                />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(value) => (
+                        <span>Receita: {formatCurrency(Number(value))}</span>
+                      )}
+                    />
+                  }
+                />
+                <Bar dataKey="income" fill="#10b981" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+          </div>
+
+          {/* Month summary */}
+          <div className="w-44 rounded-lg border bg-popover p-4 shrink-0 hidden lg:block">
+            <div className="flex items-center justify-between mb-3">
+              <button
+                onClick={() => setSelectedMonth(selectedMonth === 0 ? 11 : selectedMonth - 1)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+              <span className="text-sm font-semibold">{MONTH_FULL[selectedMonth]}</span>
+              <button
+                onClick={() => setSelectedMonth(selectedMonth === 11 ? 0 : selectedMonth + 1)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
+            <div className="border-t pt-2 flex justify-between">
+              <span className="text-sm font-semibold">Total</span>
+              <span className="text-sm font-bold tabular-nums text-emerald-400">
+                {formatCurrency(monthlyTotal)}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Income list */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Itens de Receita</CardTitle>
-          <CardDescription>
-            Todas as receitas recorrentes identificadas
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {(!data?.rules || data.rules.length === 0) && (
-            <p className="text-sm text-muted-foreground">
-              Nenhuma receita recorrente encontrada.
-            </p>
-          )}
-          {data?.rules.map((rule) => (
-            <div
-              key={rule.id}
-              className="flex items-center justify-between rounded-lg border p-3"
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+            Receitas Recorrentes
+          </h3>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedMonth(selectedMonth === 0 ? 11 : selectedMonth - 1)}
+              className="text-muted-foreground hover:text-foreground"
             >
-              <div className="flex flex-col gap-1">
-                <span className="text-sm font-medium">{rule.description}</span>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-xs">
-                    {frequencyLabel[rule.frequency] ?? rule.frequency}
-                  </Badge>
+              <ChevronLeft className="size-4" />
+            </button>
+            <span className="text-sm font-medium">
+              {MONTH_FULL[selectedMonth]} de {new Date().getFullYear()}
+            </span>
+            <button
+              onClick={() => setSelectedMonth(selectedMonth === 11 ? 0 : selectedMonth + 1)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <ChevronRight className="size-4" />
+            </button>
+          </div>
+        </div>
+
+        {rules.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-8 text-center">
+            Nenhuma receita recorrente encontrada.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {rules.map((rule) => (
+              <div
+                key={rule.id}
+                className="flex items-center justify-between rounded-lg border bg-card p-4 hover:bg-muted/30 transition-colors"
+              >
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="size-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-lg shrink-0">
+                    {rule.description.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{rule.description}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <Badge variant="outline" className="text-[10px]">
+                        {frequencyLabel[rule.frequency] ?? rule.frequency}
+                      </Badge>
+                      {rule.nextDate && (
+                        <span className="text-[10px] text-muted-foreground">
+                          Pr&oacute;xima: {formatDate(rule.nextDate)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right ml-3">
+                  <p className="text-sm font-bold tabular-nums text-emerald-400">
+                    {formatCurrency(rule.amount)}
+                  </p>
                   {rule.nextDate && (
-                    <span className="text-xs text-muted-foreground">
-                      Próxima: {formatDate(rule.nextDate)} ({daysUntilLabel(rule.nextDate)})
-                    </span>
+                    <p className="text-[10px] text-muted-foreground">
+                      {daysUntilLabel(rule.nextDate)}
+                    </p>
                   )}
                 </div>
               </div>
-              <span className="text-sm font-semibold text-emerald-600">
-                {formatCurrency(rule.amount)}
-              </span>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

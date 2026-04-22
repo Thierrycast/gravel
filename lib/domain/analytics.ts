@@ -12,9 +12,11 @@ import {
   parseNumberParam,
 } from "@/lib/core/filters"
 import { computeCryptoPositionStates } from "@/lib/domain/crypto-math"
+import { getUsdBrlRate } from "@/lib/exchange-rate"
 import { prisma } from "@/lib/prisma"
 
 const ZERO = new Prisma.Decimal(0)
+const DAY_MS = 24 * 60 * 60 * 1000
 
 type DecimalLike = Prisma.Decimal | null | undefined
 
@@ -159,6 +161,25 @@ export function parseMetricQuery(searchParams: URLSearchParams, defaults?: {
   return buildMetricFilters(searchParams, defaults)
 }
 
+// Category kinds that represent internal transfers (not real spending)
+const TRANSFER_CATEGORY_KINDS = new Set(["TRANSFER"])
+const EXCLUDED_SPENDING_CATEGORIES = new Set([
+  "pagamento de cartão de crédito",
+  "transferência mesma titularidade",
+  "transferência entre contas",
+  "pagamento de fatura",
+])
+
+function isRealSpending(
+  categoryName: string | undefined,
+  categoryKind: string | undefined
+): boolean {
+  if (categoryKind && TRANSFER_CATEGORY_KINDS.has(categoryKind)) return false
+  if (categoryName && EXCLUDED_SPENDING_CATEGORIES.has(categoryName.toLowerCase()))
+    return false
+  return true
+}
+
 export async function getOverviewMetrics(searchParams?: URLSearchParams) {
   const filters = buildMetricFilters(searchParams ?? new URLSearchParams(), {
     period: "mtd",
@@ -202,13 +223,19 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
       }),
     ])
 
-  const liquidAccountKinds = new Set<DomainAccountKind>([
+  // Include all non-investment accounts in the liquid balance calculation.
+  // CARD accounts with positive balance are digital wallets / payment accounts
+  // (e.g. Mercado Pago, Nubank), not credit card debt. Only negative CARD
+  // balances represent actual credit card liabilities.
+  const nonInvestmentKinds = new Set<DomainAccountKind>([
     DomainAccountKind.BANK,
     DomainAccountKind.CASH,
+    DomainAccountKind.CARD,
+    DomainAccountKind.OTHER,
   ])
 
-  const liquidAccounts = accounts.filter((account) =>
-    liquidAccountKinds.has(account.kind)
+  const liquidAccounts = accounts.filter(
+    (account) => nonInvestmentKinds.has(account.kind)
   )
 
   const accountBalance = sumDecimals(liquidAccounts.map((account) => account.balance))
@@ -217,16 +244,33 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
   const openBills = sumDecimals(bills.map((bill) => bill.totalAmount))
   const loanBalance = sumDecimals(loans.map((loan) => loan.contractAmount))
   const liabilitiesTotal = openBills.plus(loanBalance)
+  // Build category lookup to exclude transfers from income/expense totals
+  const allCategories = await prisma.domainCategory.findMany()
+  const overviewCatMap = new Map(allCategories.map((c) => [c.id, c]))
+
+  const realTransactions = transactions.filter((tx) => {
+    const cat = tx.domainCategoryId ? overviewCatMap.get(tx.domainCategoryId) : null
+    return isRealSpending(cat?.name, cat?.kind)
+  })
+
   const inflow = sumDecimals(
-    transactions
+    realTransactions
       .filter((transaction) => transaction.direction === DomainTransactionDirection.INFLOW)
       .map((transaction) => transaction.amount)
   )
   const outflow = sumDecimals(
-    transactions
+    realTransactions
       .filter((transaction) => transaction.direction === DomainTransactionDirection.OUTFLOW)
       .map((transaction) => transaction.amount.abs())
   )
+
+  // ── Fiat / crypto breakdown ─────────────────────────────────────────────
+  // Fiat-only side: liquid bank/cash + traditional investments minus debts.
+  // Crypto side is intentionally kept separate so the UI can present them
+  // independently and avoid mixing volatility into the bank balance picture.
+  const fiatAssets = accountBalance.plus(investmentsTotal)
+  const fiatNetWorth = fiatAssets.minus(liabilitiesTotal)
+  const cryptoNetWorth = cryptoTotal
 
   return {
     accountBalance,
@@ -235,11 +279,11 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
     openBills,
     loanBalance,
     liabilitiesTotal,
-    grossAssets: accountBalance.plus(investmentsTotal).plus(cryptoTotal),
-    netWorth: accountBalance
-      .plus(investmentsTotal)
-      .plus(cryptoTotal)
-      .minus(liabilitiesTotal),
+    fiatAssets,
+    fiatNetWorth,
+    cryptoNetWorth,
+    grossAssets: fiatAssets.plus(cryptoTotal),
+    netWorth: fiatNetWorth.plus(cryptoNetWorth),
     monthlyInflow: inflow,
     monthlyOutflow: outflow,
     monthlyNet: inflow.minus(outflow),
@@ -268,9 +312,19 @@ export async function getCashFlowMetrics(searchParams: URLSearchParams) {
     groupBy: "month",
   })
 
-  const transactions = await prisma.domainTransaction.findMany({
-    where: buildTransactionWhere(filters),
-    orderBy: { occurredAt: "asc" },
+  const [transactions, categories] = await Promise.all([
+    prisma.domainTransaction.findMany({
+      where: buildTransactionWhere(filters),
+      orderBy: { occurredAt: "asc" },
+    }),
+    prisma.domainCategory.findMany(),
+  ])
+
+  // Exclude internal transfers and credit card payments from cash flow
+  const categoryMap = new Map(categories.map((c) => [c.id, c]))
+  const realTransactions = transactions.filter((tx) => {
+    const cat = tx.domainCategoryId ? categoryMap.get(tx.domainCategoryId) : null
+    return isRealSpending(cat?.name, cat?.kind)
   })
 
   const buckets = new Map<
@@ -283,7 +337,7 @@ export async function getCashFlowMetrics(searchParams: URLSearchParams) {
     }
   >()
 
-  for (const transaction of transactions) {
+  for (const transaction of realTransactions) {
     const key = formatBucket(transaction.occurredAt, filters.groupBy)
     const current = buckets.get(key) ?? {
       inflow: ZERO,
@@ -313,7 +367,7 @@ export async function getNetWorthMetrics(searchParams?: URLSearchParams) {
   const filters = buildMetricFilters(searchParams ?? new URLSearchParams(), {
     period: "12m",
   })
-  const [overview, snapshots] = await Promise.all([
+  const [overview, snapshots, usdBrl] = await Promise.all([
     getOverviewMetrics(searchParams),
     prisma.portfolioSnapshot.findMany({
       where: {
@@ -325,9 +379,23 @@ export async function getNetWorthMetrics(searchParams?: URLSearchParams) {
       orderBy: { date: "asc" },
       take: 120,
     }),
+    getUsdBrlRate(),
   ])
 
-  const points = snapshots.map((snapshot) => ({
+  const rate = new Prisma.Decimal(usdBrl)
+  const cryptoAssets = overview.cryptoTotal.mul(rate)
+  const grossAssets = overview.fiatAssets.plus(cryptoAssets)
+  const currentNetWorth = overview.fiatNetWorth.plus(cryptoAssets)
+
+  const points: Array<{
+    date: Date
+    netWorth: Prisma.Decimal
+    source: "snapshot" | "current"
+    assets?: Prisma.Decimal
+    fiatAssets?: Prisma.Decimal
+    cryptoAssets?: Prisma.Decimal
+    liabilities?: Prisma.Decimal
+  }> = snapshots.map((snapshot) => ({
     date: snapshot.date,
     netWorth: snapshot.netWorth,
     source: "snapshot",
@@ -335,13 +403,29 @@ export async function getNetWorthMetrics(searchParams?: URLSearchParams) {
 
   points.push({
     date: new Date(),
-    netWorth: overview.netWorth,
+    netWorth: currentNetWorth,
+    assets: grossAssets,
+    fiatAssets: overview.fiatAssets,
+    cryptoAssets,
+    liabilities: overview.liabilitiesTotal,
     source: "current",
   })
 
   return {
-    current: overview.netWorth,
+    current: currentNetWorth,
     points,
+    valuation: {
+      fiatAssets: overview.fiatAssets,
+      accountBalance: overview.accountBalance,
+      investmentsTotal: overview.investmentsTotal,
+      cryptoAssets,
+      grossAssets,
+      liabilities: overview.liabilitiesTotal,
+      fiatNetWorth: overview.fiatNetWorth,
+      cryptoNetWorth: cryptoAssets,
+      netWorth: currentNetWorth,
+      usdBrlRate: rate,
+    },
     appliedFilters: {
       from: filters.from,
       to: filters.to,
@@ -456,7 +540,7 @@ export async function getBillsSummaryMetrics(searchParams: URLSearchParams) {
 export async function getSpendingByCategoryMetrics(searchParams: URLSearchParams) {
   const filters = buildMetricFilters(searchParams, {
     period: "mtd",
-    limit: 12,
+    limit: 20,
   })
   const transactions = await prisma.domainTransaction.findMany({
     where: {
@@ -483,6 +567,10 @@ export async function getSpendingByCategoryMetrics(searchParams: URLSearchParams
     const category = transaction.domainCategoryId
       ? categoryMap.get(transaction.domainCategoryId)
       : null
+
+    // Skip internal transfers and credit card payments
+    if (!isRealSpending(category?.name, category?.kind)) continue
+
     const key = transaction.domainCategoryId ?? "uncategorized"
     const current = groups.get(key) ?? {
       categoryId: transaction.domainCategoryId,
@@ -592,29 +680,33 @@ export async function getCryptoAssetMetrics(searchParams: URLSearchParams) {
     period: "all",
     limit: 50,
   })
+  const priceHistoryCutoff = new Date((filters.to ?? new Date()).getTime() - DAY_MS)
 
-  const assetWhere = filters.asset
-    ? {
-        asset: filters.asset,
-      }
-    : undefined
-
-  const [total, assetRecords] = await Promise.all([
-    prisma.binanceAssetRecord.count({
-      where: assetWhere,
-    }),
+  // 1. Resolve all unique assets from both current balances and historical trades
+  const [assetRecords, tradeAssets] = await Promise.all([
     prisma.binanceAssetRecord.findMany({
-      where: assetWhere,
-      orderBy: { asset: "asc" },
+      where: filters.asset ? { asset: filters.asset } : {},
+      select: { asset: true },
+    }),
+    prisma.binanceTradeRecord.groupBy({
+      by: ["baseAsset"],
+      where: filters.asset ? { baseAsset: filters.asset } : {},
     }),
   ])
 
-  const assetNames = assetRecords.map((record) => record.asset)
+  const allAssetNames = Array.from(
+    new Set([
+      ...assetRecords.map((r) => r.asset),
+      ...tradeAssets.map((t) => t.baseAsset).filter((a): a is string => !!a),
+    ])
+  ).sort()
+
+  const total = allAssetNames.length
 
   const [trades, balanceSnapshots, priceSnapshots] = await Promise.all([
     prisma.binanceTradeRecord.findMany({
       where: {
-        baseAsset: assetNames.length > 0 ? { in: assetNames } : filters.asset,
+        baseAsset: allAssetNames.length > 0 ? { in: allAssetNames } : undefined,
         tradedAt: {
           lte: filters.to,
         },
@@ -623,7 +715,7 @@ export async function getCryptoAssetMetrics(searchParams: URLSearchParams) {
     }),
     prisma.binanceAssetBalanceSnapshot.findMany({
       where: {
-        asset: assetNames.length > 0 ? { in: assetNames } : filters.asset,
+        asset: allAssetNames.length > 0 ? { in: allAssetNames } : undefined,
         fetchedAt: {
           lte: filters.to,
         },
@@ -632,7 +724,7 @@ export async function getCryptoAssetMetrics(searchParams: URLSearchParams) {
     }),
     prisma.binanceAssetPriceSnapshot.findMany({
       where: {
-        asset: assetNames.length > 0 ? { in: assetNames } : filters.asset,
+        asset: allAssetNames.length > 0 ? { in: allAssetNames } : undefined,
         fetchedAt: {
           lte: filters.to,
         },
@@ -642,9 +734,13 @@ export async function getCryptoAssetMetrics(searchParams: URLSearchParams) {
   ])
 
   const priceMap = new Map<string, (typeof priceSnapshots)[number]>()
+  const previousDayPriceMap = new Map<string, (typeof priceSnapshots)[number]>()
   for (const price of priceSnapshots) {
     if (!priceMap.has(price.asset)) {
       priceMap.set(price.asset, price)
+    }
+    if (price.fetchedAt <= priceHistoryCutoff && !previousDayPriceMap.has(price.asset)) {
+      previousDayPriceMap.set(price.asset, price)
     }
   }
   const balanceMap = new Map<string, (typeof balanceSnapshots)[number]>()
@@ -660,31 +756,61 @@ export async function getCryptoAssetMetrics(searchParams: URLSearchParams) {
     to: filters.to,
   })
 
-  const allResults = assetRecords.map((assetRecord) => {
-    const state = states.get(assetRecord.asset)
-    const price = priceMap.get(assetRecord.asset)
-    const balance = balanceMap.get(assetRecord.asset)
+  const allResults = allAssetNames.map((asset) => {
+    const state = states.get(asset)
+    const price = priceMap.get(asset)
+    const previousDayPrice = previousDayPriceMap.get(asset)
+    const balance = balanceMap.get(asset)
     const quantity = balance?.total ?? state?.quantity ?? ZERO
     const currentPrice = price?.price ?? null
     const currentValue = currentPrice ? currentPrice.mul(quantity) : null
-    const totalCostBasis = state?.averageCost ? state.averageCost.mul(quantity) : null
-    const unrealizedPnl = currentValue && totalCostBasis
-      ? currentValue.minus(totalCostBasis)
-      : null
-    const unrealizedPnlPercent = unrealizedPnl && totalCostBasis && !totalCostBasis.equals(0)
-      ? unrealizedPnl.div(totalCostBasis).mul(100)
-      : null
+    const coveredQuantity = state
+      ? Prisma.Decimal.min(state.quantity, quantity)
+      : ZERO
+    const missingCostBasisQuantity = Prisma.Decimal.max(
+      ZERO,
+      quantity.minus(coveredQuantity)
+    )
+    const costBasisMissing =
+      quantity.greaterThan(0) && missingCostBasisQuantity.greaterThan(0)
+    const coveredCurrentValue =
+      currentPrice && coveredQuantity.greaterThan(0)
+        ? currentPrice.mul(coveredQuantity)
+        : null
+    const totalCostBasis =
+      state?.averageCost && coveredQuantity.greaterThan(0)
+        ? state.averageCost.mul(coveredQuantity)
+        : null
+    const unrealizedPnl =
+      coveredCurrentValue && totalCostBasis
+        ? coveredCurrentValue.minus(totalCostBasis)
+        : null
+    const unrealizedPnlPercent =
+      unrealizedPnl && totalCostBasis && !totalCostBasis.equals(0)
+        ? unrealizedPnl.div(totalCostBasis).mul(100)
+        : null
+    const change24hPercent =
+      currentPrice &&
+      previousDayPrice?.price &&
+      !previousDayPrice.price.equals(0)
+        ? currentPrice.minus(previousDayPrice.price).div(previousDayPrice.price).mul(100)
+        : null
 
     return {
-      asset: assetRecord.asset,
+      asset,
       quoteAsset: price?.quoteAsset ?? state?.quoteAsset ?? null,
       quantity,
+      coveredQuantity,
+      missingCostBasisQuantity,
+      costBasisMissing,
       currentPrice,
       currentValue,
+      coveredCurrentValue,
       averageCost: state?.averageCost ?? null,
       totalCostBasis,
       unrealizedPnl,
       unrealizedPnlPercent,
+      change24hPercent,
       realizedPnl: state?.realizedPnl ?? ZERO,
       periodRealizedPnl: state?.periodRealizedPnl ?? ZERO,
       periodTradeCount: state?.periodTradeCount ?? 0,
@@ -692,22 +818,29 @@ export async function getCryptoAssetMetrics(searchParams: URLSearchParams) {
       periodSellCount: state?.periodSellCount ?? 0,
       periodBuyQuantity: state?.periodBuyQuantity ?? ZERO,
       periodSellQuantity: state?.periodSellQuantity ?? ZERO,
-      averageBuyPrice: state && state.periodBuyQuantity.greaterThan(0)
-        ? state.periodBuyNotional.div(state.periodBuyQuantity)
-        : null,
-      averageSellPrice: state && state.periodSellQuantity.greaterThan(0)
-        ? state.periodSellNotional.div(state.periodSellQuantity)
-        : null,
+      averageBuyPrice:
+        state && state.periodBuyQuantity.greaterThan(0)
+          ? state.periodBuyNotional.div(state.periodBuyQuantity)
+          : null,
+      averageSellPrice:
+        state && state.periodSellQuantity.greaterThan(0)
+          ? state.periodSellNotional.div(state.periodSellQuantity)
+          : null,
       firstTradeAt: state?.firstTradeAt ?? null,
       lastTradeAt: state?.lastTradeAt ?? null,
       tradeCount: state?.tradeCount ?? 0,
     }
+  }).sort((left, right) => {
+    const valueComparison = decimal(right.currentValue).comparedTo(decimal(left.currentValue))
+    if (valueComparison !== 0) return valueComparison
+    return left.asset.localeCompare(right.asset)
   })
 
   const results = allResults.slice(filters.skip, filters.skip + filters.take)
   const totalValue = sumDecimals(allResults.map((item) => item.currentValue))
   const totalCostBasis = sumDecimals(allResults.map((item) => item.totalCostBasis))
   const totalUnrealizedPnl = sumDecimals(allResults.map((item) => item.unrealizedPnl))
+  const costBasisMissingAssets = allResults.filter((item) => item.costBasisMissing).length
 
   return {
     total,
@@ -720,6 +853,8 @@ export async function getCryptoAssetMetrics(searchParams: URLSearchParams) {
       totalCostBasis,
       totalUnrealizedPnl,
       totalUnrealizedPnlPercent: safeDivide(totalUnrealizedPnl.mul(100), totalCostBasis),
+      costBasisMissing: costBasisMissingAssets > 0,
+      costBasisMissingAssets,
       appliedFilters: {
         from: filters.from,
         to: filters.to,
@@ -736,6 +871,7 @@ export async function getCryptoPortfolioMetrics(searchParams: URLSearchParams) {
   const totalCostBasis = sumDecimals(assets.map((asset) => asset.totalCostBasis))
   const totalUnrealizedPnl = sumDecimals(assets.map((asset) => asset.unrealizedPnl))
   const totalRealizedPnl = sumDecimals(assets.map((asset) => asset.realizedPnl))
+  const costBasisMissingAssets = assets.filter((asset) => asset.costBasisMissing).length
   const allocations = assets
     .map((asset) => ({
       asset: asset.asset,
@@ -755,6 +891,8 @@ export async function getCryptoPortfolioMetrics(searchParams: URLSearchParams) {
     totalRealizedPnl,
     totalUnrealizedPnlPercent: safeDivide(totalUnrealizedPnl.mul(100), totalCostBasis),
     assets: assets.length,
+    costBasisMissing: costBasisMissingAssets > 0,
+    costBasisMissingAssets,
     allocations,
     bestPerformer: orderedByPnl[0] ?? null,
     worstPerformer: orderedByPnl.at(-1) ?? null,

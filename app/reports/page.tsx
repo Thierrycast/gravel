@@ -1,25 +1,24 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import Link from "next/link"
 import {
   TrendingUp,
   TrendingDown,
   ArrowUpRight,
   ArrowDownRight,
   ChevronDown,
+  ExternalLink,
 } from "lucide-react"
 import { PieChart, Pie, Cell } from "recharts"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
-import { Separator } from "@/components/ui/separator"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,24 +33,26 @@ import {
 } from "@/components/ui/chart"
 import { useApi } from "@/hooks/use-api"
 import { formatCurrency, formatPercent } from "@/lib/format"
+import { getCategoryEmoji } from "@/lib/category-emoji"
 import { SankeyChart } from "@/components/charts/sankey-chart"
 
 interface OverviewResponse {
-  totalBalance: number
-  monthlyIncome: number
-  monthlyExpenses: number
-  netIncome: number
-  incomeChange: number
-  expenseChange: number
-  netChange: number
+  summary: {
+    monthlyInflow: number
+    monthlyOutflow: number
+    monthlyNet: number
+    incomeChange: number | null
+    expenseChange: number | null
+    netChange: number | null
+  }
 }
 
 interface SpendingCategory {
-  category: string
+  name: string
   categoryId: string
-  total: number
-  percentage: number
-  transactionCount: number
+  amount: number
+  sharePercent: number
+  count: number
 }
 
 interface SpendingResponse {
@@ -62,50 +63,44 @@ interface SpendingResponse {
 }
 
 const PERIOD_OPTIONS = [
-  { label: "Últimos 3 meses", months: "3" },
-  { label: "Últimos 6 meses", months: "6" },
-  { label: "Este ano", months: "12" },
-  { label: "Últimos 12 meses", months: "12" },
-] satisfies Array<{ label: string; months: string }>
+  { label: "Este mês", value: "this_month" },
+  { label: "Últimos 3 meses", value: "3m" },
+  { label: "Últimos 6 meses", value: "6m" },
+  { label: "Este ano", value: "ytd" },
+] satisfies Array<{ label: string; value: string }>
 
-const HSL_COLORS = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
+const CATEGORY_COLORS = [
+  "#f43f5e", // rose-500
+  "#ec4899", // pink-500
+  "#a855f7", // purple-500
+  "#6366f1", // indigo-500
+  "#3b82f6", // blue-500
+  "#06b6d4", // cyan-500
+  "#10b981", // emerald-500
+  "#f59e0b", // amber-500
+  "#ef4444", // red-500
+  "#8b5cf6", // violet-500
 ]
-
 
 function LoadingSkeleton() {
   return (
     <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <Skeleton className="h-8 w-40" />
-          <Skeleton className="h-4 w-64" />
-        </div>
         <Skeleton className="h-8 w-40" />
+        <Skeleton className="h-8 w-32" />
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
-        {[1, 2, 3, 4].map((i) => (
-          <Card key={i}>
-            <CardHeader>
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-7 w-40" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-[200px] w-full" />
-            </CardContent>
-          </Card>
-        ))}
+      <Skeleton className="h-28 w-full" />
+      <div className="grid gap-4 lg:grid-cols-5">
+        <Skeleton className="h-[400px] lg:col-span-3" />
+        <Skeleton className="h-[400px] lg:col-span-2" />
       </div>
+      <Skeleton className="h-[400px] w-full" />
     </div>
   )
 }
 
 export default function ReportsPage() {
-  const [selectedPeriod, setSelectedPeriod] = useState(PERIOD_OPTIONS[1])
+  const [selectedPeriod, setSelectedPeriod] = useState(PERIOD_OPTIONS[0])
 
   const { data: overview, loading: overviewLoading } =
     useApi<OverviewResponse>("/api/domain/metrics/overview")
@@ -117,15 +112,15 @@ export default function ReportsPage() {
 
   const sortedCategories = useMemo(() => {
     if (!spending?.results) return []
-    return [...spending.results].sort((a, b) => b.total - a.total)
+    return [...spending.results].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
   }, [spending])
 
   const categoryChartConfig = useMemo(() => {
     const config: ChartConfig = {}
     sortedCategories.forEach((cat, i) => {
-      config[cat.category] = {
-        label: cat.category,
-        color: HSL_COLORS[i % HSL_COLORS.length],
+      config[cat.name] = {
+        label: cat.name,
+        color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
       }
     })
     return config
@@ -133,43 +128,41 @@ export default function ReportsPage() {
 
   const pieData = useMemo(() => {
     return sortedCategories.map((cat, i) => ({
-      name: cat.category,
-      value: cat.total,
-      fill: HSL_COLORS[i % HSL_COLORS.length],
+      name: cat.name,
+      value: Math.abs(cat.amount),
+      fill: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
     }))
   }, [sortedCategories])
 
-  const netResult = overview
-    ? overview.monthlyIncome - overview.monthlyExpenses
-    : 0
-  const incomeRatio =
-    overview && overview.monthlyIncome > 0
-      ? (overview.monthlyExpenses / overview.monthlyIncome) * 100
-      : 0
+  const monthlyIncome = overview?.summary?.monthlyInflow ?? 0
+  const monthlyExpenses = Math.abs(overview?.summary?.monthlyOutflow ?? 0)
+  const netResult = overview?.summary?.monthlyNet ?? 0
+  const expenseChange = overview?.summary?.expenseChange ?? null
+  const netChange = overview?.summary?.netChange ?? null
+  const totalSpending = spending?.summary?.total ?? 0
 
   if (loading) return <LoadingSkeleton />
+
+  // Income/expense ratio bar
+  const total = monthlyIncome + monthlyExpenses
+  const incomePercent = total > 0 ? (monthlyIncome / total) * 100 : 50
 
   return (
     <div className="flex flex-col gap-6 p-6">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Relatórios</h1>
-          <p className="text-muted-foreground">
-            Análises detalhadas e comparativos financeiros.
-          </p>
-        </div>
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold tracking-tight">Relatórios</h1>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm">
               {selectedPeriod.label}
-              <ChevronDown className="ml-1" />
+              <ChevronDown className="ml-1 size-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             {PERIOD_OPTIONS.map((option) => (
               <DropdownMenuItem
-                key={option.months + option.label}
+                key={option.value}
                 onClick={() => setSelectedPeriod(option)}
               >
                 {option.label}
@@ -179,98 +172,47 @@ export default function ReportsPage() {
         </DropdownMenu>
       </div>
 
-      {/* Grid Layout */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Total Gasto Card */}
-        <Card>
-          <CardHeader>
-            <CardDescription>Total Gasto</CardDescription>
-            <CardTitle className="flex items-center gap-2 text-2xl">
-              <span className="text-red-500">
-                {formatCurrency(overview?.monthlyExpenses ?? 0)}
-              </span>
-              {overview?.expenseChange !== undefined && (
-                <span
-                  className={`flex items-center text-xs font-medium ${
-                    overview.expenseChange <= 0
-                      ? "text-emerald-600"
-                      : "text-red-500"
-                  }`}
-                >
-                  {overview.expenseChange <= 0 ? (
-                    <TrendingDown className="size-3" />
-                  ) : (
-                    <TrendingUp className="size-3" />
-                  )}
-                  {formatPercent(Math.abs(overview.expenseChange))}
-                </span>
+      {/* Hero: Total Gasto */}
+      <div className="rounded-xl border bg-card p-6">
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">
+          Total Gasto
+        </p>
+        <div className="flex items-baseline gap-3">
+          <span className="text-4xl font-bold tabular-nums tracking-tight">
+            {formatCurrency(monthlyExpenses)}
+          </span>
+          {expenseChange != null && (
+            <span
+              className={`inline-flex items-center gap-0.5 text-sm font-medium ${
+                expenseChange <= 0 ? "text-emerald-500" : "text-red-500"
+              }`}
+            >
+              {expenseChange <= 0 ? (
+                <ArrowDownRight className="size-4" />
+              ) : (
+                <ArrowUpRight className="size-4" />
               )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">Receitas</p>
-                <p className="text-lg font-semibold text-emerald-600">
-                  {formatCurrency(overview?.monthlyIncome ?? 0)}
-                </p>
-                {overview?.incomeChange !== undefined && (
-                  <span
-                    className={`flex items-center text-xs ${
-                      overview.incomeChange >= 0
-                        ? "text-emerald-600"
-                        : "text-red-500"
-                    }`}
-                  >
-                    {overview.incomeChange >= 0 ? (
-                      <ArrowUpRight className="mr-0.5 size-3" />
-                    ) : (
-                      <ArrowDownRight className="mr-0.5 size-3" />
-                    )}
-                    {formatPercent(Math.abs(overview.incomeChange))} vs anterior
-                  </span>
-                )}
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">Despesas</p>
-                <p className="text-lg font-semibold text-red-500">
-                  {formatCurrency(overview?.monthlyExpenses ?? 0)}
-                </p>
-                {overview?.expenseChange !== undefined && (
-                  <span
-                    className={`flex items-center text-xs ${
-                      overview.expenseChange <= 0
-                        ? "text-emerald-600"
-                        : "text-red-500"
-                    }`}
-                  >
-                    {overview.expenseChange <= 0 ? (
-                      <ArrowDownRight className="mr-0.5 size-3" />
-                    ) : (
-                      <ArrowUpRight className="mr-0.5 size-3" />
-                    )}
-                    {formatPercent(Math.abs(overview.expenseChange))} vs
-                    anterior
-                  </span>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              {formatPercent(Math.abs(expenseChange))}
+              <span className="text-muted-foreground font-normal ml-1">vs período anterior</span>
+            </span>
+          )}
+        </div>
+      </div>
 
+      {/* Main Grid: Categories + Resultado */}
+      <div className="grid gap-4 lg:grid-cols-5">
         {/* Gastos por Categoria */}
-        <Card>
-          <CardHeader>
-            <CardDescription>Gastos por Categoria</CardDescription>
-            <CardTitle className="text-2xl">
-              {formatCurrency(spending?.summary?.total ?? 0)}
+        <Card className="lg:col-span-3">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+              Gastos por Categoria
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col items-center gap-4 sm:flex-row">
+            <div className="flex flex-col items-center gap-6 sm:flex-row">
               <ChartContainer
                 config={categoryChartConfig}
-                className="aspect-square h-[160px] shrink-0"
+                className="aspect-square h-[220px] shrink-0"
               >
                 <PieChart>
                   <ChartTooltip
@@ -284,42 +226,43 @@ export default function ReportsPage() {
                     data={pieData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={45}
-                    outerRadius={70}
+                    innerRadius={65}
+                    outerRadius={95}
                     paddingAngle={2}
                     dataKey="value"
                     nameKey="name"
+                    strokeWidth={0}
                   >
                     {pieData.map((entry, index) => (
                       <Cell
                         key={`cell-${entry.name}`}
-                        fill={HSL_COLORS[index % HSL_COLORS.length]}
+                        fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]}
                       />
                     ))}
                   </Pie>
                 </PieChart>
               </ChartContainer>
 
-              <div className="flex w-full flex-col gap-2">
-                {sortedCategories.slice(0, 5).map((cat, i) => (
-                  <div key={cat.categoryId} className="flex items-center gap-2">
+              <div className="flex w-full flex-col gap-3">
+                {sortedCategories.slice(0, 6).map((cat, i) => (
+                  <div key={cat.categoryId ?? cat.name} className="flex items-center gap-3">
                     <div
-                      className="size-2 shrink-0 rounded-full"
+                      className="size-3 shrink-0 rounded-full"
                       style={{
-                        backgroundColor: HSL_COLORS[i % HSL_COLORS.length],
+                        backgroundColor: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
                       }}
                     />
                     <span className="flex-1 truncate text-sm">
-                      {cat.category}
+                      {getCategoryEmoji(cat.name)} {cat.name}
                     </span>
-                    <span className="text-sm font-medium">
-                      {formatCurrency(cat.total)}
+                    <span className="text-sm font-semibold tabular-nums">
+                      {formatCurrency(Math.abs(cat.amount))}
                     </span>
                   </div>
                 ))}
-                {sortedCategories.length > 5 && (
-                  <p className="text-xs text-muted-foreground">
-                    +{sortedCategories.length - 5} outras categorias
+                {sortedCategories.length > 6 && (
+                  <p className="text-xs text-muted-foreground pl-6">
+                    +{sortedCategories.length - 6} outras categorias
                   </p>
                 )}
               </div>
@@ -328,103 +271,117 @@ export default function ReportsPage() {
         </Card>
 
         {/* Resultado Parcial */}
-        <Card>
-          <CardHeader>
-            <CardDescription>Resultado Parcial</CardDescription>
-            <CardTitle className="flex items-center gap-2 text-2xl">
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                Resultado Parcial
+              </CardTitle>
+              <Link
+                href="/cash-flow"
+                className="text-xs text-blue-500 hover:text-blue-400 inline-flex items-center gap-1"
+              >
+                fluxo de caixa
+                <ExternalLink className="size-3" />
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {/* Net result */}
+            <div>
               <span
-                className={
-                  netResult >= 0 ? "text-emerald-600" : "text-red-500"
-                }
+                className={`text-3xl font-bold tabular-nums ${
+                  netResult >= 0 ? "text-emerald-500" : "text-red-500"
+                }`}
               >
                 {formatCurrency(netResult)}
               </span>
-              {overview?.netChange !== undefined && (
-                <span
-                  className={`flex items-center text-xs font-medium ${
-                    overview.netChange >= 0
-                      ? "text-emerald-600"
-                      : "text-red-500"
-                  }`}
-                >
-                  {overview.netChange >= 0 ? (
-                    <ArrowUpRight className="size-3" />
-                  ) : (
-                    <ArrowDownRight className="size-3" />
-                  )}
-                  {formatPercent(Math.abs(overview.netChange))}
-                </span>
+              {netChange != null && (
+                <div className="flex items-center gap-2 mt-1">
+                  <span
+                    className={`inline-flex items-center gap-0.5 text-xs font-medium ${
+                      netChange >= 0 ? "text-emerald-500" : "text-red-500"
+                    }`}
+                  >
+                    {netChange >= 0 ? (
+                      <TrendingUp className="size-3" />
+                    ) : (
+                      <TrendingDown className="size-3" />
+                    )}
+                    {netChange >= 0 ? "+" : ""}
+                    {formatPercent(Math.abs(netChange))}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    vs mês anterior
+                  </span>
+                </div>
               )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">
-                  Receitas vs Despesas
-                </span>
-                <span className="font-medium">
-                  {formatPercent(Math.min(incomeRatio, 100))} utilizado
-                </span>
-              </div>
-              <Progress
-                value={Math.min(incomeRatio, 100)}
-                className="h-2"
+            </div>
+
+            {/* Income/Expense bar */}
+            <div className="flex h-3 w-full overflow-hidden rounded-full">
+              <div
+                className="bg-blue-500 transition-all"
+                style={{ width: `${incomePercent}%` }}
+              />
+              <div
+                className="bg-purple-500/60 transition-all"
+                style={{ width: `${100 - incomePercent}%` }}
               />
             </div>
 
-            <Separator />
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-1.5">
-                  <div className="size-2 rounded-full bg-emerald-500" />
-                  <span className="text-xs text-muted-foreground">
-                    Receitas
-                  </span>
-                </div>
-                <p className="text-sm font-semibold">
-                  {formatCurrency(overview?.monthlyIncome ?? 0)}
+            {/* Breakdown */}
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground mb-0.5">Receita</p>
+                <p className="text-sm font-bold tabular-nums">
+                  {formatCurrency(monthlyIncome)}
                 </p>
               </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-1.5">
-                  <div className="size-2 rounded-full bg-red-500" />
-                  <span className="text-xs text-muted-foreground">
-                    Despesas
-                  </span>
-                </div>
-                <p className="text-sm font-semibold">
-                  {formatCurrency(overview?.monthlyExpenses ?? 0)}
+              <div>
+                <p className="text-xs text-muted-foreground mb-0.5">Gasto</p>
+                <p className="text-sm font-bold tabular-nums">
+                  {formatCurrency(monthlyExpenses)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-0.5">Excluído</p>
+                <p className="text-sm font-bold tabular-nums text-muted-foreground">
+                  {formatCurrency(0)}
                 </p>
               </div>
             </div>
           </CardContent>
         </Card>
-
-        {/* Fluxo de Caixa (Sankey) */}
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardDescription>Fluxo de Caixa</CardDescription>
-            <CardTitle className="text-base">
-              Receitas &rarr; Despesas &rarr; Categorias
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SankeyChart
-              data={{
-                income: overview?.monthlyIncome ?? 0,
-                categories: sortedCategories.map((cat, i) => ({
-                  name: cat.category,
-                  total: cat.total,
-                  color: HSL_COLORS[i % HSL_COLORS.length],
-                })),
-              }}
-              height={Math.max(380, sortedCategories.length * 40)}
-            />
-          </CardContent>
-        </Card>
       </div>
+
+      {/* Sankey: Fluxo de Caixa */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+              Fluxo de Caixa
+            </CardTitle>
+            <span className="text-sm font-semibold tabular-nums">
+              {formatCurrency(totalSpending)}
+            </span>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <SankeyChart
+            data={{
+              income: monthlyIncome,
+              categories: sortedCategories.map((cat, i) => ({
+                name: cat.name,
+                total: Math.abs(cat.amount),
+                color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+              })),
+            }}
+            width={1100}
+            height={Math.max(350, sortedCategories.length * 38)}
+          />
+        </CardContent>
+      </Card>
     </div>
   )
 }

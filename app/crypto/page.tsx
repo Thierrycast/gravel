@@ -1,379 +1,303 @@
 "use client"
 
-import { useMemo } from "react"
-import { PieChart, Pie, Cell } from "recharts"
-import { Bitcoin, TrendingUp, TrendingDown, Wallet, BarChart3 } from "lucide-react"
-import { useApi } from "@/hooks/use-api"
-import { formatCurrency, formatPercent } from "@/lib/format"
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "@/components/ui/card"
+import type { ComponentType } from "react"
+import { AlertTriangle, Bitcoin, Coins, DollarSign, Wallet } from "lucide-react"
+
+import { PageError } from "@/components/page-error"
+import { PageHeader } from "@/components/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
-  TableHeader,
-  TableHead,
   TableBody,
-  TableRow,
   TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table"
+import { useApi } from "@/hooks/use-api"
 import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart"
+  amountToneClass,
+  formatCurrency,
+  formatNumber,
+  formatSignedCurrency,
+  formatSignedPercent,
+} from "@/lib/format"
+import { cn } from "@/lib/utils"
 
-interface CryptoAsset {
-  symbol: string
-  amount: number
-  lastPrice: number
-  quoteAsset: string
-  currentValue: number
-  avgPrice: number
-  pnlUnrealized: number
-  pnlRealized: number
-  tradeCount: number
-  firstTradeAt: string
-  lastTradeAt: string
-}
-
-interface CryptoAllocation {
-  asset: string
-  value: number
-  percentage: number
-}
-
-interface CryptoOverview {
+interface CryptoResponse {
   summary: {
-    totalValue: number
-    totalInvested: number
-    totalPnl: number
-    pnlPercentage: number
+    totalValueBrl: number
+    totalValueUsd: number
+    totalUnrealizedPnlBrl: number
+    totalUnrealizedPnlUsd: number
     assetCount: number
-    allocations: CryptoAllocation[]
-    bestPerformer: string
-    worstPerformer: string
+    usdBrlRate: number
+    costBasisMissing: boolean
+    costBasisMissingAssets: number
   }
+  results: Array<{
+    asset: string
+    quantity: number
+    averagePriceBrl: number | null
+    averagePriceUsd: number | null
+    currentPriceBrl: number | null
+    currentPriceUsd: number | null
+    valueBrl: number | null
+    valueUsd: number | null
+    unrealizedPnlBrl: number | null
+    unrealizedPnlUsd: number | null
+    portfolioSharePercent: number
+    change24hPercent: number | null
+    tradeCount: number
+    costBasisMissing: boolean
+    missingCostBasisQuantity: number
+    firstTradeAt: string | null
+    lastTradeAt: string | null
+  }>
 }
 
-const PIE_COLORS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-  "#8b5cf6",
-  "#f59e0b",
-  "#06b6d4",
-  "#ec4899",
-  "#84cc16",
-]
+const usdFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+})
 
-export default function CryptoPage() {
-  const { data: assets, loading: assetsLoading } = useApi<CryptoAsset[]>(
-    "/api/crypto"
-  )
-  const { data: overview, loading: overviewLoading } =
-    useApi<CryptoOverview>("/api/domain/metrics/crypto/overview")
+const quantityFormatter = new Intl.NumberFormat("pt-BR", {
+  maximumFractionDigits: 8,
+})
 
-  const loading = assetsLoading || overviewLoading
-  const summary = overview?.summary
+function formatUsd(value: number | null | undefined) {
+  return usdFormatter.format(value ?? 0)
+}
 
-  const chartConfig = useMemo<ChartConfig>(() => {
-    if (!summary?.allocations) return {}
-    const config: ChartConfig = {}
-    summary.allocations.forEach((a, idx) => {
-      config[a.asset] = {
-        label: a.asset,
-        color: PIE_COLORS[idx % PIE_COLORS.length],
-      }
-    })
-    return config
-  }, [summary])
+function formatQuantity(value: number | null | undefined) {
+  return quantityFormatter.format(value ?? 0)
+}
 
-  const pieData = useMemo(() => {
-    if (!summary?.allocations) return []
-    return summary.allocations.map((a) => ({
-      name: a.asset,
-      value: a.value,
-      percentage: a.percentage,
-    }))
-  }, [summary])
-
-  if (loading) {
-    return (
-      <div className="flex flex-col gap-6 p-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
+function LoadingState() {
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-8 w-52" />
+          <Skeleton className="h-4 w-72" />
         </div>
-        <Skeleton className="h-64" />
-        <Skeleton className="h-96" />
+        <Skeleton className="h-8 w-40" />
       </div>
-    )
-  }
 
-  const pnlColor =
-    (summary?.totalPnl ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"
-  const pnlPctColor =
-    (summary?.pnlPercentage ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <Skeleton key={index} className="h-28 rounded-xl" />
+        ))}
+      </div>
+
+      <Skeleton className="h-16 rounded-xl" />
+      <Skeleton className="h-[420px] rounded-xl" />
+    </div>
+  )
+}
+
+function MetricCard({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  tone = "neutral",
+  muted = false,
+}: {
+  label: string
+  value: string
+  hint?: string
+  icon: ComponentType<{ className?: string }>
+  tone?: "neutral" | "positive" | "negative" | "info"
+  muted?: boolean
+}) {
+  const toneClass = {
+    neutral: "text-foreground",
+    positive: "text-emerald-500 dark:text-emerald-400",
+    negative: "text-rose-500 dark:text-rose-400",
+    info: "text-sky-500 dark:text-sky-400",
+  }[tone]
 
   return (
-    <div className="flex flex-col gap-6 p-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Crypto</h1>
-        <p className="text-muted-foreground">
-          Resumo e performance dos seus criptoativos
-        </p>
+    <section className={cn("surface flex flex-col gap-2 p-4", muted && "opacity-80")}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="section-eyebrow">{label}</p>
+        <Icon className="size-3.5 text-muted-foreground" />
       </div>
+      <p className={cn("text-[22px] font-semibold tracking-tight tabular-nums", toneClass)}>
+        {value}
+      </p>
+      <p className="text-xs text-muted-foreground">{hint ?? "\u00A0"}</p>
+    </section>
+  )
+}
 
-      {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader>
-            <CardDescription className="flex items-center gap-1.5">
-              <Wallet className="size-3.5" />
-              Valor Total
-            </CardDescription>
-            <CardTitle className="text-2xl">
-              {formatCurrency(summary?.totalValue ?? 0)}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription className="flex items-center gap-1.5">
-              <BarChart3 className="size-3.5" />
-              Total Investido
-            </CardDescription>
-            <CardTitle className="text-2xl">
-              {formatCurrency(summary?.totalInvested ?? 0)}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription className="flex items-center gap-1.5">
-              {(summary?.totalPnl ?? 0) >= 0 ? (
-                <TrendingUp className="size-3.5" />
-              ) : (
-                <TrendingDown className="size-3.5" />
-              )}
-              P&L Total
-            </CardDescription>
-            <CardTitle className={`text-2xl ${pnlColor}`}>
-              {formatCurrency(summary?.totalPnl ?? 0)}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription className="flex items-center gap-1.5">
-              {(summary?.pnlPercentage ?? 0) >= 0 ? (
-                <TrendingUp className="size-3.5" />
-              ) : (
-                <TrendingDown className="size-3.5" />
-              )}
-              P&L %
-            </CardDescription>
-            <CardTitle className={`text-2xl ${pnlPctColor}`}>
-              {formatPercent(summary?.pnlPercentage ?? 0)}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
+export default function CryptoPage() {
+  const crypto = useApi<CryptoResponse>("/api/crypto")
 
-      {/* Allocation Pie + Performers */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Alocação</CardTitle>
-            <CardDescription>
-              Distribuição do portfólio por ativo
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer config={chartConfig} className="mx-auto h-64 w-full">
-              <PieChart accessibilityLayer>
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value, name) => (
-                        <span>
-                          {name}: {formatCurrency(Number(value))}
-                        </span>
-                      )}
-                    />
-                  }
-                />
-                <Pie
-                  data={pieData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={2}
-                >
-                  {pieData.map((entry, idx) => (
-                    <Cell
-                      key={entry.name}
-                      fill={PIE_COLORS[idx % PIE_COLORS.length]}
-                    />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ChartContainer>
-            {/* Legend */}
-            <div className="mt-4 flex flex-wrap justify-center gap-4">
-              {pieData.map((entry, idx) => (
-                <div key={entry.name} className="flex items-center gap-1.5">
-                  <div
-                    className="size-2.5 rounded-full"
-                    style={{
-                      backgroundColor: PIE_COLORS[idx % PIE_COLORS.length],
-                    }}
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    {entry.name} ({formatPercent(entry.percentage)})
-                  </span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+  if (crypto.loading) {
+    return <LoadingState />
+  }
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Destaques</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">
-                Melhor Performance
-              </span>
-              <div className="flex items-center gap-2">
-                <TrendingUp className="size-4 text-emerald-600" />
-                <span className="text-sm font-semibold">
-                  {summary?.bestPerformer ?? "-"}
-                </span>
-              </div>
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">
-                Pior Performance
-              </span>
-              <div className="flex items-center gap-2">
-                <TrendingDown className="size-4 text-red-500" />
-                <span className="text-sm font-semibold">
-                  {summary?.worstPerformer ?? "-"}
-                </span>
-              </div>
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">
-                Total de Ativos
-              </span>
-              <span className="text-sm font-semibold">
-                {summary?.assetCount ?? 0}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+  if (crypto.error || !crypto.data) {
+    return <PageError message={crypto.error ?? "Erro ao carregar carteira cripto"} refetch={crypto.refetch} />
+  }
 
-      {/* Assets Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Ativos</CardTitle>
-          <CardDescription>
-            Detalhamento de cada criptoativo no portfólio
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Ativo</TableHead>
-                <TableHead className="text-right">Quantidade</TableHead>
-                <TableHead className="text-right">Preço Atual</TableHead>
-                <TableHead className="text-right">Preço Médio</TableHead>
-                <TableHead className="text-right">Valor</TableHead>
-                <TableHead className="text-right">P&L Não Realizado</TableHead>
-                <TableHead className="text-right">P&L Realizado</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(!assets || assets.length === 0) && (
+  const { summary, results } = crypto.data
+  const pnlValue = summary.totalUnrealizedPnlBrl
+  const pnlTone =
+    pnlValue > 0 ? "positive" : pnlValue < 0 ? "negative" : "neutral"
+
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        eyebrow="Cripto"
+        title="Carteira cripto"
+        description="Posições isoladas do restante do patrimônio, com valorização marcada em BRL e USD."
+        actions={
+          <Badge variant="outline" className="h-8 rounded-full px-3 text-xs font-medium">
+            USD/BRL {summary.usdBrlRate.toFixed(2)} · cotação de hoje
+          </Badge>
+        }
+      />
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label="Valor total (BRL)"
+          value={formatCurrency(summary.totalValueBrl)}
+          hint="Carteira convertida para reais"
+          icon={Wallet}
+          tone="info"
+        />
+        <MetricCard
+          label="Valor total (USD)"
+          value={formatUsd(summary.totalValueUsd)}
+          hint="Base original de cotação"
+          icon={DollarSign}
+        />
+        <MetricCard
+          label="PnL não realizado"
+          value={formatSignedCurrency(summary.totalUnrealizedPnlBrl, "always")}
+          hint={
+            summary.costBasisMissing
+              ? "Parcial: parte da carteira está sem custo de aquisição."
+              : "Ganho ou perda apenas nas posições abertas."
+          }
+          icon={Bitcoin}
+          tone={pnlTone}
+          muted={summary.costBasisMissing}
+        />
+        <MetricCard
+          label="Ativos"
+          value={formatNumber(summary.assetCount)}
+          hint="Posições com valor de mercado"
+          icon={Coins}
+        />
+      </section>
+
+      {summary.costBasisMissing ? (
+        <section className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-300">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <div className="min-w-0">
+            <p className="font-medium">PnL pode estar incompleto</p>
+            <p className="text-xs leading-relaxed opacity-90">
+              PnL pode estar incompleto — importe seu histórico de trades para precisão.
+              {summary.costBasisMissingAssets > 1
+                ? ` ${summary.costBasisMissingAssets} posições estão com custo parcial ou ausente.`
+                : " 1 posição está com custo parcial ou ausente."}
+            </p>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="surface overflow-hidden">
+        <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-4">
+          <div>
+            <p className="section-eyebrow">Posições</p>
+            <h2 className="text-sm font-semibold tracking-tight">
+              Carteira atual por ativo
+            </h2>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {results.length} {results.length === 1 ? "ativo" : "ativos"} listados
+          </p>
+        </div>
+
+        {results.length === 0 ? (
+          <div className="px-4 py-10 text-sm text-muted-foreground">
+            Nenhuma posição cripto encontrada.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell
-                    colSpan={7}
-                    className="text-center text-muted-foreground"
-                  >
-                    Nenhum ativo encontrado.
-                  </TableCell>
+                  <TableHead>Ativo</TableHead>
+                  <TableHead className="text-right">Quantidade</TableHead>
+                  <TableHead className="text-right">Preço médio</TableHead>
+                  <TableHead className="text-right">Preço atual</TableHead>
+                  <TableHead className="text-right">Valor (BRL)</TableHead>
+                  <TableHead className="text-right">% do portfólio</TableHead>
+                  <TableHead className="text-right">Variação 24h</TableHead>
                 </TableRow>
-              )}
-              {assets?.map((asset) => {
-                const unrealizedColor =
-                  asset.pnlUnrealized >= 0
-                    ? "text-emerald-600"
-                    : "text-red-500"
-                const realizedColor =
-                  asset.pnlRealized >= 0
-                    ? "text-emerald-600"
-                    : "text-red-500"
-
-                return (
-                  <TableRow key={asset.symbol}>
+              </TableHeader>
+              <TableBody>
+                {results.map((asset) => (
+                  <TableRow key={asset.asset}>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs font-mono">
-                          {asset.symbol}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {asset.quoteAsset}
-                        </span>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-medium">{asset.asset}</span>
+                        {asset.costBasisMissing ? (
+                          <span className="text-xs text-amber-600 dark:text-amber-400">
+                            custo incompleto
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            {asset.tradeCount} {asset.tradeCount === 1 ? "trade" : "trades"}
+                          </span>
+                        )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {asset.amount.toLocaleString("pt-BR", {
-                        maximumFractionDigits: 6,
-                      })}
+                    <TableCell className="text-right font-medium tabular-nums">
+                      {formatQuantity(asset.quantity)}
                     </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(asset.lastPrice)}
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {asset.costBasisMissing || asset.averagePriceBrl == null
+                        ? "—"
+                        : formatCurrency(asset.averagePriceBrl)}
                     </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(asset.avgPrice)}
+                    <TableCell className="text-right tabular-nums">
+                      {asset.currentPriceBrl == null
+                        ? "—"
+                        : formatCurrency(asset.currentPriceBrl)}
                     </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatCurrency(asset.currentValue)}
+                    <TableCell className="text-right font-medium tabular-nums">
+                      {asset.valueBrl == null ? "—" : formatCurrency(asset.valueBrl)}
                     </TableCell>
-                    <TableCell className={`text-right font-medium ${unrealizedColor}`}>
-                      {formatCurrency(asset.pnlUnrealized)}
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {asset.valueBrl == null
+                        ? "—"
+                        : formatSignedPercent(asset.portfolioSharePercent).replace("+", "")}
                     </TableCell>
-                    <TableCell className={`text-right font-medium ${realizedColor}`}>
-                      {formatCurrency(asset.pnlRealized)}
+                    <TableCell
+                      className={cn(
+                        "text-right font-medium tabular-nums",
+                        amountToneClass(asset.change24hPercent)
+                      )}
+                    >
+                      {asset.change24hPercent == null
+                        ? "—"
+                        : formatSignedPercent(asset.change24hPercent)}
                     </TableCell>
                   </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </section>
     </div>
   )
 }

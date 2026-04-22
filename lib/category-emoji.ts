@@ -1,0 +1,146 @@
+const CATEGORY_EMOJI: Record<string, string> = {
+  "alimentação": "🍔",
+  "restaurantes": "🍽️",
+  "supermercado": "🛒",
+  "transporte": "🚗",
+  "moradia": "🏠",
+  "aluguel": "🏠",
+  "saúde": "💊",
+  "educação": "📚",
+  "lazer": "🎮",
+  "entretenimento": "🎬",
+  "compras": "🛍️",
+  "vestuário": "👕",
+  "serviços": "🔧",
+  "assinaturas": "📱",
+  "streaming": "📺",
+  "telefone": "📞",
+  "internet": "🌐",
+  "energia": "⚡",
+  "água": "💧",
+  "gás": "🔥",
+  "seguros": "🛡️",
+  "impostos": "📋",
+  "pets": "🐾",
+  "viagem": "✈️",
+  "beleza": "💅",
+  "farmácia": "💊",
+  "esporte": "🏋️",
+  "academia": "🏋️",
+  "doações": "❤️",
+  "investimentos": "📈",
+  "poupança": "🏦",
+  "salário": "💰",
+  "freelance": "💻",
+  "outros": "📌",
+  "sem categoria": "📌",
+  "pagamento de cartão de crédito": "💳",
+  "transferência": "🔄",
+  "pix": "⚡",
+  "mercado": "🛒",
+  "uber": "🚕",
+  "ifood": "🍕",
+  "combustível": "⛽",
+  "estacionamento": "🅿️",
+  "eletrônicos": "🖥️",
+  "jogos": "🎮",
+  "música": "🎵",
+  "livros": "📖",
+  "presentes": "🎁",
+  "taxas bancárias": "🏦",
+  "juros": "📊",
+  "multas": "⚠️",
+  "manutenção": "🔨",
+  "limpeza": "🧹",
+  "móveis": "🪑",
+  "decoração": "🖼️",
+  "telecomunicação": "📞",
+  "universidade": "🎓",
+  "serviços digitais": "💻",
+  "restaurantes, bares e lanchonetes": "🍽️",
+  "sem categoria de saida": "📌",
+  "compras online": "🛒",
+  "alimentos e bebidas": "🍔",
+  "empréstimos e financiamento": "🏦",
+  "impostos sobre operações financeiras": "📋",
+  "jogos e videogames": "🎮",
+  "transferência mesma titularidade": "🔄",
+  "transferências": "🔄",
+  "transferência - pix": "⚡",
+}
+
+// Stable color palette for categories — each category gets a consistent color
+const CATEGORY_COLORS: Record<string, string> = {
+  "serviços": "#f43f5e",
+  "serviços digitais": "#f43f5e",
+  "compras": "#ec4899",
+  "compras online": "#ec4899",
+  "jogos e videogames": "#a855f7",
+  "jogos": "#a855f7",
+  "investimentos": "#6366f1",
+  "empréstimos e financiamento": "#8b5cf6",
+  "telecomunicação": "#3b82f6",
+  "telefone": "#3b82f6",
+  "universidade": "#0ea5e9",
+  "educação": "#0ea5e9",
+  "supermercado": "#10b981",
+  "mercado": "#10b981",
+  "restaurantes, bares e lanchonetes": "#f59e0b",
+  "restaurantes": "#f59e0b",
+  "alimentos e bebidas": "#f97316",
+  "alimentação": "#f97316",
+  "sem categoria de saida": "#6b7280",
+  "sem categoria": "#6b7280",
+  "doações": "#ef4444",
+  "farmácia": "#14b8a6",
+  "saúde": "#14b8a6",
+  "impostos sobre operações financeiras": "#64748b",
+  "impostos": "#64748b",
+  "transporte": "#06b6d4",
+  "uber": "#06b6d4",
+  "moradia": "#d946ef",
+  "aluguel": "#d946ef",
+  "streaming": "#8b5cf6",
+  "assinaturas": "#7c3aed",
+  "internet": "#2563eb",
+  "energia": "#eab308",
+  "água": "#0284c7",
+  "seguros": "#475569",
+  "pets": "#a3e635",
+  "viagem": "#0891b2",
+  "beleza": "#f472b6",
+  "vestuário": "#c084fc",
+  "lazer": "#34d399",
+  "entretenimento": "#fb923c",
+  "pagamento de cartão de crédito": "#94a3b8",
+  "transferência": "#94a3b8",
+  "transferências": "#94a3b8",
+  "transferência mesma titularidade": "#94a3b8",
+  "transferência - pix": "#94a3b8",
+  "pix": "#94a3b8",
+}
+
+// Fallback palette for categories not in the map
+const FALLBACK_COLORS = [
+  "#f43f5e", "#ec4899", "#a855f7", "#6366f1", "#3b82f6",
+  "#06b6d4", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",
+  "#0ea5e9", "#14b8a6", "#f97316", "#d946ef", "#84cc16",
+]
+
+export function getCategoryEmoji(name: string): string {
+  const lower = name.toLowerCase().trim()
+  if (CATEGORY_EMOJI[lower]) return CATEGORY_EMOJI[lower]
+  for (const [key, emoji] of Object.entries(CATEGORY_EMOJI)) {
+    if (lower.includes(key) || key.includes(lower)) return emoji
+  }
+  return "📌"
+}
+
+export function getCategoryColor(name: string, index?: number): string {
+  const lower = name.toLowerCase().trim()
+  if (CATEGORY_COLORS[lower]) return CATEGORY_COLORS[lower]
+  for (const [key, color] of Object.entries(CATEGORY_COLORS)) {
+    if (lower.includes(key) || key.includes(lower)) return color
+  }
+  return FALLBACK_COLORS[(index ?? 0) % FALLBACK_COLORS.length]
+}

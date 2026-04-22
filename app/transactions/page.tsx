@@ -1,729 +1,739 @@
 "use client"
 
-import { useState, useMemo, useCallback, Suspense } from "react"
-import { useSearchParams, useRouter } from "next/navigation"
 import {
-  Search,
+  Suspense,
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
   ChevronLeft,
   ChevronRight,
-  ArrowUpDown,
-  Filter,
-  TrendingDown,
-  TrendingUp,
   Receipt,
+  Search,
+  X,
 } from "lucide-react"
-import { useApi } from "@/hooks/use-api"
-import { formatCurrency, formatDate, formatDateFull } from "@/lib/format"
+
+import { PageError } from "@/components/page-error"
+import { PageHeader } from "@/components/page-header"
+import { PeriodSwitcher } from "@/components/period-switcher"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card"
-import {
-  Table,
-  TableHeader,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
-} from "@/components/ui/table"
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetDescription,
 } from "@/components/ui/sheet"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { useApi } from "@/hooks/use-api"
+import { usePeriod } from "@/hooks/use-period"
+import { getCategoryEmoji } from "@/lib/category-emoji"
+import {
+  amountToneClass,
+  formatDate,
+  formatDateFull,
+  formatSignedCurrency,
+} from "@/lib/format"
+import { cn } from "@/lib/utils"
 
-interface Transaction {
-  id: string
-  description: string
-  amount: number
-  date: string
-  type: string
-  category: string
-  categoryId: string
-  accountName: string
-  merchantName: string
+import {
+  type AccountLookup,
+  type CategoryLookup,
+  type MerchantLookup,
+  type LookupResponse,
+  type Transaction,
+  type TransactionsResponse,
+} from "@/lib/types/api"
+
+interface FilterChip {
+  key: string
+  label: string
+  onRemove: () => void
 }
 
-interface TransactionsResponse {
-  summary: { total: number }
-  results: Transaction[]
-  meta: { page: number; pageSize: number }
+function parsePositiveInt(value: string | null, fallback: number) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
 
-interface Category {
-  id: string
-  name: string
+function normalizeDirection(value: string | null): "INFLOW" | "OUTFLOW" | undefined {
+  const normalized = value?.trim().toUpperCase()
+  if (normalized === "INFLOW" || normalized === "INCOME") return "INFLOW"
+  if (normalized === "OUTFLOW" || normalized === "EXPENSE") return "OUTFLOW"
+  return undefined
 }
 
-interface CategoriesResponse {
-  results: Category[]
-}
+function LoadingState() {
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-4 w-80" />
+        </div>
+        <Skeleton className="h-8 w-28" />
+      </div>
 
-type PeriodFilter = "this_month" | "last_month" | "last_30" | "last_90"
-type TypeFilter = "all" | "EXPENSE" | "INCOME"
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <Skeleton className="h-9 w-full max-w-xl" />
+        <div className="flex gap-2">
+          <Skeleton className="h-8 w-20" />
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-8 w-24" />
+        </div>
+      </div>
 
-const periodLabels: Record<PeriodFilter, string> = {
-  this_month: "Este mês",
-  last_month: "Mês passado",
-  last_30: "Últimos 30 dias",
-  last_90: "Últimos 3 meses",
-}
-
-const typeLabels: Record<TypeFilter, string> = {
-  all: "Todos",
-  EXPENSE: "Despesas",
-  INCOME: "Receitas",
-}
-
-function getPeriodDates(period: PeriodFilter): { from: string; to: string } {
-  const now = new Date()
-  let from: Date
-  let to: Date
-
-  switch (period) {
-    case "this_month":
-      from = new Date(now.getFullYear(), now.getMonth(), 1)
-      to = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-      break
-    case "last_month":
-      from = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-      to = new Date(now.getFullYear(), now.getMonth(), 0)
-      break
-    case "last_30":
-      from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-      to = now
-      break
-    case "last_90":
-      from = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
-      to = now
-      break
-  }
-
-  return {
-    from: from.toISOString().split("T")[0],
-    to: to.toISOString().split("T")[0],
-  }
-}
-
-function groupByDate(
-  transactions: Transaction[]
-): { date: string; transactions: Transaction[] }[] {
-  const grouped = new Map<string, Transaction[]>()
-  for (const t of transactions) {
-    const dateKey = t.date.split("T")[0]
-    if (!grouped.has(dateKey)) grouped.set(dateKey, [])
-    grouped.get(dateKey)!.push(t)
-  }
-  return Array.from(grouped.entries())
-    .sort((a, b) => b[0].localeCompare(a[0]))
-    .map(([date, transactions]) => ({ date, transactions }))
+      <Skeleton className="h-[520px] rounded-xl" />
+    </div>
+  )
 }
 
 function TableSkeleton() {
   return (
-    <div className="space-y-3">
-      {Array.from({ length: 8 }).map((_, i) => (
-        <div key={i} className="flex items-center gap-4 px-2">
-          <Skeleton className="h-4 w-48" />
-          <Skeleton className="h-5 w-20" />
-          <Skeleton className="h-4 w-28" />
+    <div className="space-y-2 px-4 py-4">
+      {Array.from({ length: 10 }).map((_, index) => (
+        <div key={index} className="grid grid-cols-[110px_1.8fr_1.1fr_1.2fr_140px] gap-3">
           <Skeleton className="h-4 w-20" />
-          <Skeleton className="h-4 w-24 ml-auto" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="hidden md:block h-4 w-28" />
+          <Skeleton className="hidden sm:block h-4 w-32" />
+          <Skeleton className="ml-auto h-4 w-24" />
         </div>
       ))}
     </div>
   )
 }
 
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center gap-3 px-4 py-16 text-center">
+      <div className="flex size-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+        <Receipt className="size-5" />
+      </div>
+      <div className="space-y-1">
+        <p className="text-sm font-medium">Nenhuma transação encontrada</p>
+        <p className="text-sm text-muted-foreground">
+          Ajuste os filtros ou remova algum chip para ampliar a busca.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function FilterPill({ chip }: { chip: FilterChip }) {
+  return (
+    <button
+      type="button"
+      onClick={chip.onRemove}
+      className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+    >
+      <span>{chip.label}</span>
+      <X className="size-3 text-muted-foreground" />
+    </button>
+  )
+}
+
 export default function TransactionsPage() {
   return (
-    <Suspense fallback={<div className="flex flex-col gap-6 p-6"><Skeleton className="h-8 w-48" /><Skeleton className="h-96 w-full" /></div>}>
+    <Suspense fallback={<LoadingState />}>
       <TransactionsContent />
     </Suspense>
   )
 }
 
 function TransactionsContent() {
-  const searchParams = useSearchParams()
+  const pathname = usePathname()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const period = usePeriod("mtd")
 
-  const [period, setPeriod] = useState<PeriodFilter>("this_month")
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all")
-  const [categoryFilter, setCategoryFilter] = useState<string>("all")
-  const [searchQuery, setSearchQuery] = useState(
-    searchParams.get("search") ?? ""
-  )
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(25)
-  const [selectedTransaction, setSelectedTransaction] =
-    useState<Transaction | null>(null)
+  const categoryId = searchParams.get("categoryId") ?? undefined
+  const merchantId = searchParams.get("merchantId") ?? undefined
+  const accountId = searchParams.get("accountId") ?? undefined
+  const legacyAccountName = searchParams.get("accountName") ?? undefined
+  const direction = normalizeDirection(searchParams.get("direction"))
+  const query = searchParams.get("q") ?? searchParams.get("search") ?? ""
+  const page = parsePositiveInt(searchParams.get("page"), 1)
+  const pageSize = parsePositiveInt(searchParams.get("pageSize"), 25)
+
+  const [searchInput, setSearchInput] = useState(query)
+  const deferredSearchInput = useDeferredValue(searchInput)
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
 
-  const accountNameFilter = searchParams.get("accountName") ?? ""
+  const categories = useApi<LookupResponse<CategoryLookup>>("/api/domain/categories", {
+    pageSize: "500",
+  })
+  const accounts = useApi<LookupResponse<AccountLookup>>("/api/domain/accounts", {
+    pageSize: "500",
+  })
+  const merchants = useApi<LookupResponse<MerchantLookup>>("/api/domain/merchants", {
+    pageSize: "500",
+  })
 
-  const periodDates = useMemo(() => getPeriodDates(period), [period])
+  const categoriesById = useMemo(() => {
+    return new Map((categories.data?.results ?? []).map((category) => [category.id, category.name]))
+  }, [categories.data?.results])
 
-  const { data: txData, loading: txLoading } =
-    useApi<TransactionsResponse>("/api/domain/transactions", {
-      from: periodDates.from,
-      to: periodDates.to,
-      pageSize: "1000",
+  const accountsById = useMemo(() => {
+    return new Map((accounts.data?.results ?? []).map((account) => [account.id, account.name]))
+  }, [accounts.data?.results])
+
+  const merchantsById = useMemo(() => {
+    return new Map(
+      (merchants.data?.results ?? []).map((merchant) => [merchant.id, merchant.displayName])
+    )
+  }, [merchants.data?.results])
+
+  const resolvedLegacyAccountId = useMemo(() => {
+    if (accountId || !legacyAccountName) return accountId ?? null
+    const match = (accounts.data?.results ?? []).find(
+      (currentAccount) => currentAccount.name === legacyAccountName
+    )
+    return match?.id ?? null
+  }, [accountId, legacyAccountName, accounts.data?.results])
+
+  const shouldWaitForLegacyAccount =
+    Boolean(legacyAccountName) && !accountId && accounts.loading
+
+  const effectiveAccountId =
+    accountId ??
+    (legacyAccountName
+      ? resolvedLegacyAccountId ?? (accounts.loading ? undefined : "__missing__")
+      : undefined)
+
+  const transactionParams = {
+    ...period.params,
+    page: String(page),
+    pageSize: String(pageSize),
+    ...(categoryId ? { categoryId } : {}),
+    ...(merchantId ? { merchantId } : {}),
+    ...(effectiveAccountId ? { accountId: effectiveAccountId } : {}),
+    ...(direction ? { direction } : {}),
+    ...(query.trim() ? { q: query.trim() } : {}),
+  }
+
+  const transactions = useApi<TransactionsResponse>(
+    shouldWaitForLegacyAccount ? null : "/api/domain/transactions",
+    transactionParams
+  )
+
+  useEffect(() => {
+    setSearchInput(query)
+  }, [query])
+
+  useEffect(() => {
+    const nextQuery = deferredSearchInput.trim()
+    if (nextQuery === query.trim()) return
+
+    const next = new URLSearchParams(searchParams.toString())
+    if (nextQuery) {
+      next.set("q", nextQuery)
+    } else {
+      next.delete("q")
+    }
+    next.delete("search")
+    next.delete("page")
+
+    const qs = next.toString()
+    startTransition(() => {
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
     })
+  }, [deferredSearchInput, pathname, query, router, searchParams])
 
-  const { data: catData } =
-    useApi<CategoriesResponse>("/api/domain/categories")
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams.toString())
+    let changed = false
 
-  const categories = catData?.results ?? []
-  const allTransactions = txData?.results ?? []
-
-  const filtered = useMemo(() => {
-    let result = allTransactions
-
-    if (typeFilter !== "all") {
-      result = result.filter((t) => t.type === typeFilter)
-    }
-
-    if (categoryFilter !== "all") {
-      result = result.filter((t) => t.categoryId === categoryFilter)
-    }
-
-    if (accountNameFilter) {
-      result = result.filter((t) => t.accountName === accountNameFilter)
-    }
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim()
-      result = result.filter(
-        (t) =>
-          t.description.toLowerCase().includes(q) ||
-          t.merchantName?.toLowerCase().includes(q) ||
-          t.accountName?.toLowerCase().includes(q) ||
-          t.category?.toLowerCase().includes(q)
-      )
-    }
-
-    return result
-  }, [allTransactions, typeFilter, categoryFilter, accountNameFilter, searchQuery])
-
-  const totalExpenses = useMemo(
-    () =>
-      filtered
-        .filter((t) => t.type === "EXPENSE")
-        .reduce((sum, t) => sum + Math.abs(t.amount), 0),
-    [filtered]
-  )
-
-  const totalIncome = useMemo(
-    () =>
-      filtered
-        .filter((t) => t.type === "INCOME")
-        .reduce((sum, t) => sum + t.amount, 0),
-    [filtered]
-  )
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
-  const paginatedStart = (page - 1) * pageSize
-  const paginated = filtered.slice(paginatedStart, paginatedStart + pageSize)
-  const groupedTransactions = useMemo(() => groupByDate(paginated), [paginated])
-
-  const updateParam = useCallback(
-    (key: string, value: string) => {
-      const params = new URLSearchParams(searchParams.toString())
-      if (value && value !== "all") {
-        params.set(key, value)
-      } else {
-        params.delete(key)
+    if (searchParams.has("search")) {
+      const legacySearch = searchParams.get("search")?.trim()
+      if (legacySearch && !searchParams.get("q")) {
+        next.set("q", legacySearch)
       }
-      router.replace(`?${params.toString()}`, { scroll: false })
-    },
-    [searchParams, router]
-  )
+      next.delete("search")
+      changed = true
+    }
 
-  function handleTransactionClick(transaction: Transaction) {
+    if (legacyAccountName && !accountId && resolvedLegacyAccountId) {
+      next.set("accountId", resolvedLegacyAccountId)
+      next.delete("accountName")
+      changed = true
+    }
+
+    if (!changed) return
+
+    const qs = next.toString()
+    startTransition(() => {
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    })
+  }, [
+    accountId,
+    legacyAccountName,
+    pathname,
+    resolvedLegacyAccountId,
+    router,
+    searchParams,
+  ])
+
+  function replaceParams(mutator: (params: URLSearchParams) => void) {
+    const next = new URLSearchParams(searchParams.toString())
+    mutator(next)
+    const qs = next.toString()
+    startTransition(() => {
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    })
+  }
+
+  function removeFilter(key: string) {
+    replaceParams((next) => {
+      next.delete(key)
+      next.delete("page")
+    })
+  }
+
+  function setDirection(nextDirection?: "INFLOW" | "OUTFLOW") {
+    replaceParams((next) => {
+      if (nextDirection) {
+        next.set("direction", nextDirection)
+      } else {
+        next.delete("direction")
+      }
+      next.delete("page")
+    })
+  }
+
+  function setPage(nextPage: number) {
+    replaceParams((next) => {
+      if (nextPage <= 1) {
+        next.delete("page")
+      } else {
+        next.set("page", String(nextPage))
+      }
+    })
+  }
+
+  function setPageSize(nextPageSize: number) {
+    replaceParams((next) => {
+      if (nextPageSize === 25) {
+        next.delete("pageSize")
+      } else {
+        next.set("pageSize", String(nextPageSize))
+      }
+      next.delete("page")
+    })
+  }
+
+  function clearAllFilters() {
+    startTransition(() => {
+      router.replace(pathname, { scroll: false })
+    })
+  }
+
+  function openTransaction(transaction: Transaction) {
     setSelectedTransaction(transaction)
     setSheetOpen(true)
   }
 
+  if (transactions.error) {
+    return (
+      <PageError
+        message={transactions.error}
+        refetch={transactions.refetch}
+      />
+    )
+  }
+
+  const total = transactions.data?.summary.total ?? 0
+  const results = transactions.data?.results ?? []
+  const totalPages = transactions.data?.meta.totalPages ?? 1
+  const showingFrom = total === 0 ? 0 : (page - 1) * pageSize + 1
+  const showingTo = total === 0 ? 0 : Math.min(page * pageSize, total)
+  const hasExplicitPeriod =
+    searchParams.has("period") || searchParams.has("from") || searchParams.has("to")
+
+  const activeFilters: FilterChip[] = [
+    ...(hasExplicitPeriod
+      ? [
+          {
+            key: "period",
+            label: `Período: ${period.label}`,
+            onRemove: () => {
+              replaceParams((next) => {
+                next.delete("period")
+                next.delete("from")
+                next.delete("to")
+                next.delete("page")
+              })
+            },
+          },
+        ]
+      : []),
+    ...(categoryId
+      ? [
+          {
+            key: "category",
+            label: `Categoria: ${categoriesById.get(categoryId) ?? "Categoria"}`,
+            onRemove: () => removeFilter("categoryId"),
+          },
+        ]
+      : []),
+    ...(merchantId
+      ? [
+          {
+            key: "merchant",
+            label: `Comerciante: ${merchantsById.get(merchantId) ?? "Comerciante"}`,
+            onRemove: () => removeFilter("merchantId"),
+          },
+        ]
+      : []),
+    ...((effectiveAccountId && effectiveAccountId !== "__missing__") || legacyAccountName
+      ? [
+          {
+            key: "account",
+            label: `Conta: ${
+              (effectiveAccountId && effectiveAccountId !== "__missing__"
+                ? accountsById.get(effectiveAccountId)
+                : null) ??
+              legacyAccountName ??
+              "Conta"
+            }`,
+            onRemove: () => {
+              replaceParams((next) => {
+                next.delete("accountId")
+                next.delete("accountName")
+                next.delete("page")
+              })
+            },
+          },
+        ]
+      : []),
+    ...(direction
+      ? [
+          {
+            key: "direction",
+            label: direction === "INFLOW" ? "Direção: entradas" : "Direção: saídas",
+            onRemove: () => removeFilter("direction"),
+          },
+        ]
+      : []),
+    ...(query.trim()
+      ? [
+          {
+            key: "query",
+            label: `Busca: ${query.trim()}`,
+            onRemove: () => {
+              setSearchInput("")
+              replaceParams((next) => {
+                next.delete("q")
+                next.delete("search")
+                next.delete("page")
+              })
+            },
+          },
+        ]
+      : []),
+  ]
+
   return (
-    <div className="flex flex-col gap-6 p-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Transações</h1>
-        <p className="text-muted-foreground">
-          Histórico completo de movimentações
-        </p>
-      </div>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        eyebrow="Transações"
+        title="Todas as movimentações"
+        description={
+          transactions.loading
+            ? "Carregando transações do período."
+            : total === 1
+              ? "1 transação encontrada para os filtros atuais."
+              : `${total} transações encontradas para os filtros atuais.`
+        }
+        actions={<PeriodSwitcher state={period} />}
+      />
 
-      {/* Filter Bar */}
-      <div className="flex flex-wrap items-center gap-3">
-        {/* Period Filter */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              <Filter data-icon="inline-start" />
-              {periodLabels[period]}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuLabel>Período</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {(Object.entries(periodLabels) as [PeriodFilter, string][]).map(
-              ([key, label]) => (
-                <DropdownMenuItem
-                  key={key}
-                  onClick={() => {
-                    setPeriod(key)
-                    setPage(1)
-                  }}
-                >
-                  {label}
-                  {key === period && (
-                    <Badge variant="secondary" className="ml-auto">
-                      ativo
-                    </Badge>
-                  )}
-                </DropdownMenuItem>
-              )
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        {/* Type Filter */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              <ArrowUpDown data-icon="inline-start" />
-              {typeLabels[typeFilter]}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuLabel>Tipo</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {(Object.entries(typeLabels) as [TypeFilter, string][]).map(
-              ([key, label]) => (
-                <DropdownMenuItem
-                  key={key}
-                  onClick={() => {
-                    setTypeFilter(key)
-                    setPage(1)
-                  }}
-                >
-                  {label}
-                  {key === typeFilter && (
-                    <Badge variant="secondary" className="ml-auto">
-                      ativo
-                    </Badge>
-                  )}
-                </DropdownMenuItem>
-              )
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        {/* Category Filter */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              <Filter data-icon="inline-start" />
-              {categoryFilter === "all"
-                ? "Categoria"
-                : categories.find((c) => c.id === categoryFilter)?.name ??
-                  "Categoria"}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuLabel>Categoria</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => {
-                setCategoryFilter("all")
-                setPage(1)
-              }}
-            >
-              Todas
-              {categoryFilter === "all" && (
-                <Badge variant="secondary" className="ml-auto">
-                  ativo
-                </Badge>
-              )}
-            </DropdownMenuItem>
-            {categories.map((cat) => (
-              <DropdownMenuItem
-                key={cat.id}
-                onClick={() => {
-                  setCategoryFilter(cat.id)
-                  setPage(1)
-                }}
-              >
-                {cat.name}
-                {cat.id === categoryFilter && (
-                  <Badge variant="secondary" className="ml-auto">
-                    ativo
-                  </Badge>
-                )}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        {/* Search */}
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+      <section className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative w-full max-w-xl">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Buscar transações..."
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value)
-              setPage(1)
-            }}
-            className="pl-8"
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            placeholder="Buscar por descrição, comerciante, conta ou categoria"
+            className="h-9 pl-9"
           />
         </div>
 
-        {/* Clear Filters */}
-        {(typeFilter !== "all" ||
-          categoryFilter !== "all" ||
-          searchQuery ||
-          accountNameFilter) && (
+        <div className="flex flex-wrap items-center gap-2">
           <Button
-            variant="ghost"
+            variant={direction == null ? "secondary" : "outline"}
             size="sm"
-            onClick={() => {
-              setTypeFilter("all")
-              setCategoryFilter("all")
-              setSearchQuery("")
-              setPage(1)
-              router.replace("/transactions", { scroll: false })
-            }}
+            onClick={() => setDirection(undefined)}
           >
-            Limpar filtros
+            Todas
           </Button>
-        )}
-      </div>
-
-      {/* Account filter indicator */}
-      {accountNameFilter && (
-        <div className="flex items-center gap-2">
-          <Badge variant="outline">
-            Conta: {accountNameFilter}
-          </Badge>
           <Button
-            variant="ghost"
-            size="xs"
-            onClick={() => {
-              router.replace("/transactions", { scroll: false })
-            }}
+            variant={direction === "OUTFLOW" ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setDirection("OUTFLOW")}
           >
-            Remover
+            Saídas
+          </Button>
+          <Button
+            variant={direction === "INFLOW" ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setDirection("INFLOW")}
+          >
+            Entradas
           </Button>
         </div>
-      )}
+      </section>
 
-      {/* Summary Row */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card size="sm">
-          <CardHeader>
-            <CardDescription>Total de Transações</CardDescription>
-            <CardTitle>
-              {txLoading ? (
-                <Skeleton className="h-6 w-16" />
-              ) : (
-                filtered.length
-              )}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card size="sm">
-          <CardHeader>
-            <div className="flex items-center gap-1.5">
-              <TrendingDown className="size-4 text-destructive" />
-              <CardDescription>Despesas</CardDescription>
-            </div>
-            <CardTitle className="text-destructive">
-              {txLoading ? (
-                <Skeleton className="h-6 w-24" />
-              ) : (
-                formatCurrency(totalExpenses)
-              )}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card size="sm">
-          <CardHeader>
-            <div className="flex items-center gap-1.5">
-              <TrendingUp className="size-4 text-emerald-600" />
-              <CardDescription>Receitas</CardDescription>
-            </div>
-            <CardTitle className="text-emerald-600">
-              {txLoading ? (
-                <Skeleton className="h-6 w-24" />
-              ) : (
-                formatCurrency(totalIncome)
-              )}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card size="sm">
-          <CardHeader>
-            <CardDescription>Resultado Líquido</CardDescription>
-            <CardTitle
-              className={
-                totalIncome - totalExpenses >= 0
-                  ? "text-emerald-600"
-                  : "text-destructive"
-              }
-            >
-              {txLoading ? (
-                <Skeleton className="h-6 w-24" />
-              ) : (
-                formatCurrency(totalIncome - totalExpenses)
-              )}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
+      {activeFilters.length > 0 ? (
+        <section className="flex flex-wrap items-center gap-2">
+          {activeFilters.map((chip) => (
+            <FilterPill key={chip.key} chip={chip} />
+          ))}
+          <Button variant="ghost" size="xs" onClick={clearAllFilters}>
+            Limpar tudo
+          </Button>
+        </section>
+      ) : null}
 
-      {/* Transaction Table */}
-      <Card>
-        <CardContent className="p-0">
-          {txLoading ? (
-            <div className="p-4">
-              <TableSkeleton />
+      <section className="surface overflow-hidden">
+        <div className="flex flex-col gap-3 border-b border-border/60 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="section-eyebrow">Lista densa</p>
+            <h2 className="text-sm font-semibold tracking-tight">
+              Drill-down detalhado do período
+            </h2>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            {transactions.loading ? (
+              <Skeleton className="h-4 w-32" />
+            ) : (
+              <span>
+                Mostrando {showingFrom}-{showingTo} de {total}
+              </span>
+            )}
+            <Separator orientation="vertical" className="hidden sm:block h-4" />
+            <div className="flex items-center gap-1">
+              <span>Por página</span>
+              {[25, 50, 100].map((size) => (
+                <Button
+                  key={size}
+                  variant={pageSize === size ? "secondary" : "ghost"}
+                  size="xs"
+                  onClick={() => setPageSize(size)}
+                >
+                  {size}
+                </Button>
+              ))}
             </div>
-          ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center py-12 text-center">
-              <Receipt className="size-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium mb-1">
-                Nenhuma transação encontrada
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                Tente ajustar os filtros ou o período selecionado.
-              </p>
-            </div>
-          ) : (
+          </div>
+        </div>
+
+        {transactions.loading ? (
+          <TableSkeleton />
+        ) : total === 0 ? (
+          <EmptyState />
+        ) : (
+          <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead>Conta</TableHead>
                   <TableHead>Data</TableHead>
+                  <TableHead>Descrição</TableHead>
+                  <TableHead className="hidden md:table-cell">Conta</TableHead>
+                  <TableHead className="hidden sm:table-cell">Categoria</TableHead>
                   <TableHead className="text-right">Valor</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {groupedTransactions.map((group) => (
-                  <>
-                    <TableRow key={`date-${group.date}`}>
+                {results.map((transaction) => {
+                  const signedAmount =
+                    transaction.direction === "INFLOW"
+                      ? Math.abs(transaction.amount)
+                      : -Math.abs(transaction.amount)
+
+                  return (
+                    <TableRow
+                      key={transaction.id}
+                      className="cursor-pointer"
+                      onClick={() => openTransaction(transaction)}
+                    >
+                      <TableCell className="whitespace-nowrap text-muted-foreground">
+                        {formatDate(transaction.date)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex min-w-0 items-start gap-2.5">
+                          <div
+                            className={cn(
+                              "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg",
+                              transaction.direction === "INFLOW"
+                                ? "bg-emerald-500/10 text-emerald-500"
+                                : "bg-rose-500/10 text-rose-500"
+                            )}
+                          >
+                            {transaction.direction === "INFLOW" ? (
+                              <ArrowUpRight className="size-3.5" />
+                            ) : (
+                              <ArrowDownLeft className="size-3.5" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">
+                              {transaction.description}
+                            </p>
+                            {transaction.merchantName &&
+                            transaction.merchantName !== transaction.description ? (
+                              <p className="truncate text-xs text-muted-foreground">
+                                {transaction.merchantName}
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell text-muted-foreground">
+                        {transaction.accountName || "Sem conta"}
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        <Badge variant="secondary" className="gap-1 rounded-full">
+                          <span aria-hidden>{getCategoryEmoji(transaction.categoryName)}</span>
+                          <span className="max-w-[160px] truncate">
+                            {transaction.categoryName}
+                          </span>
+                        </Badge>
+                      </TableCell>
                       <TableCell
-                        colSpan={5}
-                        className="bg-muted/50 py-1.5 text-xs font-medium text-muted-foreground"
+                        className={cn(
+                          "text-right font-medium tabular-nums",
+                          amountToneClass(signedAmount)
+                        )}
                       >
-                        {formatDateFull(group.date)}
+                        {formatSignedCurrency(signedAmount, "always")}
                       </TableCell>
                     </TableRow>
-                    {group.transactions.map((tx) => (
-                      <TableRow
-                        key={tx.id}
-                        className="cursor-pointer"
-                        onClick={() => handleTransactionClick(tx)}
-                      >
-                        <TableCell>
-                          <div className="font-medium">{tx.description}</div>
-                          {tx.merchantName &&
-                            tx.merchantName !== tx.description && (
-                              <div className="text-xs text-muted-foreground">
-                                {tx.merchantName}
-                              </div>
-                            )}
-                        </TableCell>
-                        <TableCell>
-                          {tx.category && (
-                            <Badge variant="secondary">{tx.category}</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {tx.accountName}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {formatDate(tx.date)}
-                        </TableCell>
-                        <TableCell
-                          className={`text-right font-medium ${
-                            tx.type === "INCOME"
-                              ? "text-emerald-600"
-                              : "text-destructive"
-                          }`}
-                        >
-                          {tx.type === "INCOME" ? "+" : "-"}
-                          {formatCurrency(Math.abs(tx.amount))}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </>
-                ))}
+                  )
+                })}
               </TableBody>
             </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Pagination */}
-      {!txLoading && filtered.length > 0 && (
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span>
-              Mostrando {paginatedStart + 1}-
-              {Math.min(paginatedStart + pageSize, filtered.length)} de{" "}
-              {filtered.length}
-            </span>
-            <Separator orientation="vertical" className="h-4" />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="xs">
-                  {pageSize} por página
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                {[10, 25, 50, 100].map((size) => (
-                  <DropdownMenuItem
-                    key={size}
-                    onClick={() => {
-                      setPageSize(size)
-                      setPage(1)
-                    }}
-                  >
-                    {size} por página
-                    {size === pageSize && (
-                      <Badge variant="secondary" className="ml-auto">
-                        ativo
-                      </Badge>
-                    )}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
+        )}
+      </section>
+
+      {!transactions.loading && total > 0 ? (
+        <section className="flex items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Página {page} de {totalPages}
+          </p>
+
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="icon-sm"
               disabled={page <= 1}
-              onClick={() => setPage((p) => p - 1)}
+              onClick={() => setPage(page - 1)}
             >
               <ChevronLeft />
             </Button>
-            <span className="text-sm text-muted-foreground">
-              Página {page} de {totalPages}
-            </span>
             <Button
               variant="outline"
               size="icon-sm"
               disabled={page >= totalPages}
-              onClick={() => setPage((p) => p + 1)}
+              onClick={() => setPage(page + 1)}
             >
               <ChevronRight />
             </Button>
           </div>
-        </div>
-      )}
+        </section>
+      ) : null}
 
-      {/* Transaction Detail Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent>
           <SheetHeader>
             <SheetTitle>{selectedTransaction?.description}</SheetTitle>
-            <SheetDescription>Detalhes da transação</SheetDescription>
+            <SheetDescription>Detalhes da transação selecionada.</SheetDescription>
           </SheetHeader>
-          {selectedTransaction && (
+
+          {selectedTransaction ? (
             <div className="flex flex-col gap-4 px-4 pb-4">
               <div
-                className={`text-center text-2xl font-bold ${
-                  selectedTransaction.type === "INCOME"
-                    ? "text-emerald-600"
-                    : "text-destructive"
-                }`}
+                className={cn(
+                  "text-center text-2xl font-semibold tabular-nums",
+                  amountToneClass(
+                    selectedTransaction.direction === "INFLOW"
+                      ? Math.abs(selectedTransaction.amount)
+                      : -Math.abs(selectedTransaction.amount)
+                  )
+                )}
               >
-                {selectedTransaction.type === "INCOME" ? "+" : "-"}
-                {formatCurrency(Math.abs(selectedTransaction.amount))}
+                {formatSignedCurrency(
+                  selectedTransaction.direction === "INFLOW"
+                    ? Math.abs(selectedTransaction.amount)
+                    : -Math.abs(selectedTransaction.amount),
+                  "always"
+                )}
               </div>
 
               <Separator />
 
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Descrição
-                  </span>
-                  <span className="text-sm font-medium text-right max-w-[60%]">
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Descrição</span>
+                  <span className="max-w-[60%] text-right font-medium">
                     {selectedTransaction.description}
                   </span>
                 </div>
-                {selectedTransaction.merchantName && (
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">
-                      Estabelecimento
-                    </span>
-                    <span className="text-sm">
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Data</span>
+                  <span>{formatDateFull(selectedTransaction.date)}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Conta</span>
+                  <span className="text-right">
+                    {selectedTransaction.accountName || "Sem conta"}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Categoria</span>
+                  <span className="text-right">
+                    {getCategoryEmoji(selectedTransaction.categoryName)}{" "}
+                    {selectedTransaction.categoryName}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Direção</span>
+                  <span>
+                    {selectedTransaction.direction === "INFLOW" ? "Entrada" : "Saída"}
+                  </span>
+                </div>
+                {selectedTransaction.merchantName ? (
+                  <div className="flex justify-between gap-4">
+                    <span className="text-muted-foreground">Comerciante</span>
+                    <span className="max-w-[60%] text-right">
                       {selectedTransaction.merchantName}
                     </span>
                   </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Tipo</span>
-                  <Badge
-                    variant={
-                      selectedTransaction.type === "INCOME"
-                        ? "default"
-                        : "destructive"
-                    }
-                  >
-                    {selectedTransaction.type === "INCOME"
-                      ? "Receita"
-                      : "Despesa"}
-                  </Badge>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Categoria
-                  </span>
-                  <Badge variant="secondary">
-                    {selectedTransaction.category || "Sem categoria"}
-                  </Badge>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Conta</span>
-                  <span className="text-sm">
-                    {selectedTransaction.accountName}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Data</span>
-                  <span className="text-sm">
-                    {formatDateFull(selectedTransaction.date)}
-                  </span>
-                </div>
+                ) : null}
               </div>
             </div>
-          )}
+          ) : null}
         </SheetContent>
       </Sheet>
     </div>

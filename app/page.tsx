@@ -1,63 +1,102 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { useApi } from "@/hooks/use-api"
-import { formatCurrency, formatPercent } from "@/lib/format"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardAction,
-  CardDescription,
-} from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Progress } from "@/components/ui/progress"
-import { SpendingPaceChart } from "@/components/dashboard/spending-pace-chart"
-import { NetWorthChart } from "@/components/dashboard/net-worth-chart"
-import { RecentTransactions } from "@/components/dashboard/recent-transactions"
-import { UpcomingExpenses } from "@/components/dashboard/upcoming-expenses"
+import { Suspense, useMemo } from "react"
 import Link from "next/link"
 import {
-  ArrowRight,
-  TrendingUp,
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
+  Bitcoin,
+  CalendarClock,
+  ChevronRight,
+  CreditCard,
+  Landmark,
+  PiggyBank,
+  Receipt,
+  Sparkles,
   TrendingDown,
-  Minus,
+  TrendingUp,
 } from "lucide-react"
 
-// ── Types ────────────────────────────────────────────────────────────────────
+import { useApi } from "@/hooks/use-api"
+import { usePeriod } from "@/hooks/use-period"
+import { PageHeader } from "@/components/page-header"
+import { PeriodSwitcher } from "@/components/period-switcher"
+import { PageError } from "@/components/page-error"
+import { Skeleton } from "@/components/ui/skeleton"
+import { NetWorthChart } from "@/components/dashboard/net-worth-chart"
+import {
+  amountToneClass,
+  daysUntilLabel,
+  formatCurrency,
+  formatCurrencySmart,
+  formatDate,
+  formatSignedCurrency,
+  formatSignedPercent,
+} from "@/lib/format"
+import { getCategoryColor, getCategoryEmoji } from "@/lib/category-emoji"
+import { cn } from "@/lib/utils"
+
+// ── API contracts ────────────────────────────────────────────────────────────
 
 interface OverviewData {
   summary: {
-    totalBalance: number
-    monthlyIncome: number
-    monthlyExpenses: number
-    netIncome: number
-    cashFlow: { income: number; expenses: number; net: number }
-    accounts: Array<{ id: string; name: string; balance: number }>
-    billsSummary: Record<string, unknown>
+    accountBalance: number
+    investmentsTotal: number
+    cryptoTotal: number
+    openBills: number
+    loanBalance: number
+    liabilitiesTotal: number
+    fiatAssets: number
+    fiatNetWorth: number
+    cryptoNetWorth: number
+    grossAssets: number
+    netWorth: number
+    monthlyInflow: number
+    monthlyOutflow: number
+    monthlyNet: number
+    incomeChange: number | null
+    expenseChange: number | null
+    netChange: number | null
+    usdBrlRate?: number
   }
 }
 
-interface SpendingCategoriesData {
+interface CategoriesData {
   summary: { total: number }
   results: Array<{
-    category: string
-    categoryId: string
-    total: number
-    percentage: number
-    transactionCount: number
+    name: string
+    categoryId: string | null
+    amount: number
+    sharePercent: number
+    count: number
   }>
 }
 
-interface NetWorthData {
+interface NetWorthHistory {
   summary: {
-    netWorth: number
-    totalAssets: number
-    totalLiabilities: number
-    history: Array<{ date: string; netWorth: number }>
+    current: number
+    points: Array<{
+      date: string
+      netWorth: number
+      assets?: number | null
+      fiatAssets?: number | null
+      cryptoAssets?: number | null
+      liabilities?: number | null
+      source?: string
+    }>
+    valuation: {
+      fiatAssets: number
+      accountBalance: number
+      investmentsTotal: number
+      cryptoAssets: number
+      grossAssets: number
+      liabilities: number
+      fiatNetWorth: number
+      cryptoNetWorth: number
+      netWorth: number
+      usdBrlRate?: number
+    }
   }
 }
 
@@ -67,11 +106,10 @@ interface TransactionsData {
     description: string
     amount: number
     date: string
-    type: string
-    category: string
-    categoryId?: string
+    direction: "INFLOW" | "OUTFLOW"
+    categoryName: string
+    categoryId: string | null
     accountName: string
-    merchantName?: string
   }>
 }
 
@@ -80,418 +118,742 @@ interface RecurringExpensesData {
     id: string
     description: string
     amount: number
-    frequency: string
-    category: string
     nextDate: string
+    category: string
+    frequency: string
   }>
   summary: { totalMonthly: number; count: number }
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function buildCumulativeSpending(
-  expenses: number,
-  daysInMonth: number,
-  currentDay: number
-): Array<{ day: number; cumulative: number }> {
-  // Distribute spending roughly across days elapsed
-  if (currentDay === 0) return []
-  const dailyAvg = expenses / currentDay
-  const result: Array<{ day: number; cumulative: number }> = []
-  let cumulative = 0
-  for (let d = 1; d <= currentDay; d++) {
-    cumulative += dailyAvg
-    result.push({ day: d, cumulative: Math.round(cumulative * 100) / 100 })
+interface BillsSummary {
+  summary: {
+    totalOpen: number
+    totalOverdue: number
+    counts: { total: number; open: number; overdue: number; paid: number }
+    upcoming: Array<{
+      id: string
+      dueDate: string | null
+      totalAmount: number
+      status: string
+    }>
   }
-  return result
 }
 
-function getCategoryColor(index: number): string {
-  const colors = [
-    "var(--chart-1)",
-    "var(--chart-2)",
-    "var(--chart-3)",
-    "var(--chart-4)",
-    "var(--chart-5)",
-  ]
-  return colors[index % colors.length]
+// ── Local helpers ────────────────────────────────────────────────────────────
+
+function ChangeBadge({
+  value,
+  reverse = false,
+}: {
+  value: number | null
+  reverse?: boolean
+}) {
+  if (value == null || !Number.isFinite(value)) return null
+  const positive = reverse ? value < 0 : value > 0
+  const negative = reverse ? value > 0 : value < 0
+  const tone = positive
+    ? "text-emerald-500 dark:text-emerald-400"
+    : negative
+      ? "text-rose-500 dark:text-rose-400"
+      : "text-muted-foreground"
+  const Icon = value >= 0 ? ArrowUpRight : ArrowDownRight
+  return (
+    <span className={cn("inline-flex items-center gap-0.5 text-xs font-medium tabular-nums", tone)}>
+      <Icon className="size-3" />
+      {formatSignedPercent(value)}
+    </span>
+  )
 }
 
-// ── Main Dashboard ───────────────────────────────────────────────────────────
+function StatTile({
+  label,
+  value,
+  icon: Icon,
+  hint,
+  href,
+  loading,
+  tone = "neutral",
+  delta,
+}: {
+  label: string
+  value: string
+  icon: React.ComponentType<{ className?: string }>
+  hint?: string
+  href?: string
+  loading?: boolean
+  tone?: "neutral" | "positive" | "negative" | "info"
+  delta?: React.ReactNode
+}) {
+  const toneClass = {
+    neutral: "text-foreground",
+    positive: "text-emerald-500 dark:text-emerald-400",
+    negative: "text-rose-500 dark:text-rose-400",
+    info: "text-sky-500 dark:text-sky-400",
+  }[tone]
 
-export default function Dashboard() {
-  const [netWorthPeriod, setNetWorthPeriod] = useState("6M")
-
-  const { data: overview, loading: loadingOverview } = useApi<OverviewData>(
-    "/api/domain/metrics/overview"
-  )
-  const { data: categories, loading: loadingCategories } =
-    useApi<SpendingCategoriesData>("/api/domain/metrics/spending/categories")
-  const { data: netWorth, loading: loadingNetWorth } = useApi<NetWorthData>(
-    "/api/domain/metrics/net-worth"
-  )
-  const { data: transactions, loading: loadingTransactions } =
-    useApi<TransactionsData>("/api/domain/transactions", {
-      pageSize: "8",
-      sort: "date",
-      order: "desc",
-    })
-  const { data: recurring, loading: loadingRecurring } =
-    useApi<RecurringExpensesData>("/api/recurring/expenses")
-
-  // Derived data
-  const income = overview?.summary.cashFlow.income ?? 0
-  const expenses = overview?.summary.cashFlow.expenses ?? 0
-  const net = overview?.summary.netIncome ?? 0
-  const incomeRatio = income + Math.abs(expenses) > 0
-    ? (income / (income + Math.abs(expenses))) * 100
-    : 50
-
-  // Build spending pace data from overview
-  const now = new Date()
-  const currentDay = now.getDate()
-  const daysInCurrentMonth = new Date(
-    now.getFullYear(),
-    now.getMonth() + 1,
-    0
-  ).getDate()
-  const daysInPrevMonth = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    0
-  ).getDate()
-
-  const currentMonthPace = useMemo(
-    () =>
-      buildCumulativeSpending(
-        Math.abs(expenses),
-        daysInCurrentMonth,
-        currentDay
-      ),
-    [expenses, daysInCurrentMonth, currentDay]
-  )
-
-  // For previous month, use a rough estimate (same total spread over full month)
-  const previousMonthPace = useMemo(
-    () =>
-      buildCumulativeSpending(
-        Math.abs(expenses) * 1.1, // approximate previous (10% higher as baseline)
-        daysInPrevMonth,
-        daysInPrevMonth
-      ),
-    [expenses, daysInPrevMonth]
-  )
-
-  const topCategories = categories?.results.slice(0, 6) ?? []
-  const maxCategoryTotal =
-    topCategories.length > 0
-      ? Math.max(...topCategories.map((c) => Math.abs(c.total)))
-      : 1
+  const Wrapper: React.ElementType = href ? Link : "div"
+  const wrapperProps = href ? { href } : {}
 
   return (
-    <div className="flex flex-col gap-6 p-4 md:p-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">
-          Visão geral das suas finanças
+    <Wrapper
+      {...wrapperProps}
+      className={cn(
+        "surface flex flex-col gap-2 p-4 transition-colors",
+        href && "hover:bg-accent/40"
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="section-eyebrow">{label}</p>
+        <Icon className="size-3.5 text-muted-foreground" />
+      </div>
+      {loading ? (
+        <Skeleton className="h-7 w-28" />
+      ) : (
+        <p className={cn("text-[22px] font-semibold tabular-nums tracking-tight", toneClass)}>
+          {value}
         </p>
+      )}
+      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+        {hint ? <span className="truncate">{hint}</span> : <span />}
+        {delta}
       </div>
+    </Wrapper>
+  )
+}
 
-      {/* Row 1: Spending Pace + Net Worth */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Spending Pace */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Ritmo de Gastos</CardTitle>
-            <CardDescription>
-              Comparativo de gastos acumulados dia a dia
-            </CardDescription>
-            <CardAction>
-              <Link
-                href="/spending"
-                className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+// ── Main page ────────────────────────────────────────────────────────────────
+
+export default function OverviewPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col gap-6">
+          <Skeleton className="h-8 w-56" />
+          <Skeleton className="h-44 rounded-xl" />
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <Skeleton key={index} className="h-28 rounded-xl" />
+            ))}
+          </div>
+          <Skeleton className="h-[320px] rounded-xl" />
+        </div>
+      }
+    >
+      <OverviewPageContent />
+    </Suspense>
+  )
+}
+
+function OverviewPageContent() {
+  const period = usePeriod("mtd")
+
+  const overview = useApi<OverviewData>("/api/domain/metrics/overview", period.params)
+  const categories = useApi<CategoriesData>(
+    "/api/domain/metrics/spending/categories",
+    period.params
+  )
+  const netWorth = useApi<NetWorthHistory>("/api/domain/metrics/net-worth")
+  const transactions = useApi<TransactionsData>("/api/domain/transactions", {
+    pageSize: "8",
+    sort: "date",
+    order: "desc",
+    ...period.params,
+  })
+  const recurring = useApi<RecurringExpensesData>("/api/recurring/expenses")
+  const bills = useApi<BillsSummary>("/api/domain/metrics/bills/summary")
+
+  const summary = overview.data?.summary
+  const income = summary?.monthlyInflow ?? 0
+  const expenses = summary?.monthlyOutflow ?? 0
+  const net = summary?.monthlyNet ?? 0
+  const expenseChange = summary?.expenseChange ?? null
+  const incomeChange = summary?.incomeChange ?? null
+  const netChange = summary?.netChange ?? null
+
+  const fiatNetWorth = summary?.fiatNetWorth ?? 0
+  const cryptoNetWorth = summary?.cryptoNetWorth ?? 0
+  const totalNetWorth = summary?.netWorth ?? fiatNetWorth + cryptoNetWorth
+  const accountBalance = summary?.accountBalance ?? 0
+  const investments = summary?.investmentsTotal ?? 0
+  const liabilities = summary?.liabilitiesTotal ?? 0
+  const openBills = summary?.openBills ?? 0
+
+  const incomeRatio =
+    income + expenses > 0 ? (income / (income + expenses)) * 100 : 50
+
+  // Top spending categories (truncate to 6 for the dashboard)
+  const topCategories = useMemo(() => {
+    if (!categories.data) return []
+    return categories.data.results.slice(0, 6).map((cat) => ({
+      ...cat,
+      absAmount: Math.abs(cat.amount),
+    }))
+  }, [categories.data])
+
+  const maxCategory = topCategories.length
+    ? Math.max(...topCategories.map((c) => c.absAmount))
+    : 1
+  const missingCategory = useMemo(() => {
+    return categories.data?.results.find((cat) => !cat.categoryId) ?? null
+  }, [categories.data])
+
+  // Upcoming recurring bills, sorted by nearest date, capped to the next 5
+  const upcomingBills = useMemo(() => {
+    if (!recurring.data?.rules) return []
+    return [...recurring.data.rules]
+      .sort(
+        (a, b) =>
+          new Date(a.nextDate).getTime() - new Date(b.nextDate).getTime()
+      )
+      .slice(0, 5)
+  }, [recurring.data])
+
+  // Find the soonest open due date for the alert + headline tile hints.
+  const nextBillDueDate = useMemo(() => {
+    const upcoming = bills.data?.summary?.upcoming ?? []
+    const future = upcoming
+      .filter((b) => b.status !== "PAID" && b.status !== "CLOSED" && b.dueDate)
+      .map((b) => b.dueDate as string)
+      .sort()
+    return future[0] ?? null
+  }, [bills.data])
+
+  // Alerts — only show what is genuinely actionable. Order from most urgent.
+  const alerts = useMemo(() => {
+    const out: Array<{ tone: "negative" | "warning" | "info"; text: string; href?: string }> = []
+    const overdueCount = bills.data?.summary?.counts?.overdue ?? 0
+    if (overdueCount > 0) {
+      out.push({
+        tone: "negative",
+        text: `${overdueCount} fatura(s) em atraso totalizando ${formatCurrency(bills.data?.summary?.totalOverdue ?? 0)}.`,
+        href: "/bills",
+      })
+    }
+    if (accountBalance < 0) {
+      out.push({
+        tone: "negative",
+        text: `Saldo em contas negativo em ${formatCurrency(Math.abs(accountBalance))}. Priorize cobrir o saldo antes de novos gastos.`,
+        href: "/accounts",
+      })
+    }
+    if (missingCategory) {
+      out.push({
+        tone: "warning",
+        text: `${missingCategory.count} transação(ões) sem categoria somam ${formatCurrency(Math.abs(missingCategory.amount))} no período.`,
+        href: "/categories",
+      })
+    }
+    if (net < 0) {
+      out.push({
+        tone: "warning",
+        text: `Você gastou ${formatCurrency(Math.abs(net))} a mais do que recebeu no período. Reveja as categorias com maior crescimento.`,
+        href: "/cash-flow",
+      })
+    }
+    if (expenseChange != null && expenseChange > 25) {
+      out.push({
+        tone: "warning",
+        text: `Despesas ${formatSignedPercent(expenseChange)} versus o mês anterior. Vale checar onde está o aumento.`,
+        href: "/categories",
+      })
+    }
+    if (nextBillDueDate) {
+      out.push({
+        tone: "info",
+        text: `Próxima fatura vence ${daysUntilLabel(nextBillDueDate).toLowerCase()}.`,
+        href: "/bills",
+      })
+    }
+    return out.slice(0, 3)
+  }, [
+    bills.data,
+    accountBalance,
+    missingCategory,
+    net,
+    expenseChange,
+    nextBillDueDate,
+  ])
+
+  const hasError =
+    overview.error || categories.error || netWorth.error || transactions.error || bills.error
+
+  const firstError =
+    overview.errorInfo ||
+    categories.errorInfo ||
+    netWorth.errorInfo ||
+    transactions.errorInfo ||
+    bills.errorInfo
+
+  if (hasError) {
+    return (
+      <PageError
+        message={
+          firstError
+            ? `${firstError.title}: ${firstError.message}${firstError.action ? ` ${firstError.action}` : ""}`
+            : "Erro ao carregar o painel"
+        }
+        refetch={() => {
+          overview.refetch()
+          categories.refetch()
+          netWorth.refetch()
+          transactions.refetch()
+          recurring.refetch()
+          bills.refetch()
+        }}
+      />
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        eyebrow="Visão geral"
+        title="Painel financeiro"
+        description="Sua fotografia rápida do mês: o que entrou, o que saiu, e o que merece atenção agora."
+        actions={<PeriodSwitcher state={period} />}
+      />
+
+      {/* Headline: monthly result + income/expense ratio */}
+      <section className="surface relative overflow-hidden p-5 md:p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0">
+            <p className="section-eyebrow">Resultado do período</p>
+            <div className="mt-1 flex flex-wrap items-baseline gap-3">
+              <span
+                className={cn(
+                  "text-4xl font-semibold tracking-tight tabular-nums md:text-[40px]",
+                  amountToneClass(net, { neutralOnZero: true })
+                )}
               >
-                Ver mais
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </CardAction>
-          </CardHeader>
-          <CardContent>
-            {loadingOverview ? (
-              <div className="space-y-3">
-                <Skeleton className="h-5 w-32" />
-                <Skeleton className="h-[200px] w-full" />
-              </div>
-            ) : (
-              <>
-                <div className="flex items-baseline gap-2 mb-4">
-                  <span className="text-2xl font-bold tabular-nums">
-                    {formatCurrency(Math.abs(expenses))}
-                  </span>
-                  <span className="text-sm text-muted-foreground">
-                    gastos até o dia {currentDay}
-                  </span>
-                </div>
-                <SpendingPaceChart
-                  currentMonth={currentMonthPace}
-                  previousMonth={previousMonthPace}
-                />
-                <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1.5">
-                    <div className="h-0.5 w-4 rounded-full bg-chart-1" />
-                    <span>Mês atual</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="h-0.5 w-4 rounded-full bg-chart-4 border-dashed" />
-                    <span>Mês anterior</span>
-                  </div>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+                {overview.loading ? (
+                  <Skeleton className="h-10 w-48" />
+                ) : (
+                  formatSignedCurrency(net, "always")
+                )}
+              </span>
+              <ChangeBadge value={netChange} />
+            </div>
+            <p className="mt-2 max-w-md text-sm text-muted-foreground">
+              {net >= 0
+                ? "Você está fechando o período no positivo. Mantenha o ritmo e reforce sua reserva."
+                : "Você está consumindo mais do que recebeu. Confira abaixo onde estão os maiores gastos."}
+            </p>
+          </div>
 
-        {/* Net Worth */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Patrimônio Líquido</CardTitle>
-            <CardAction>
-              <div className="flex gap-1">
-                {["1M", "3M", "6M", "1Y", "ALL"].map((p) => (
-                  <Button
-                    key={p}
-                    variant={netWorthPeriod === p ? "default" : "ghost"}
-                    size="xs"
-                    onClick={() => setNetWorthPeriod(p)}
-                  >
-                    {p === "ALL" ? "Tudo" : p}
-                  </Button>
-                ))}
+          <div className="grid w-full gap-2 lg:w-[360px]">
+            <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className="bg-emerald-500/90 transition-all"
+                style={{ width: `${Math.max(0, Math.min(100, incomeRatio))}%` }}
+              />
+              <div
+                className="bg-rose-500/80 transition-all"
+                style={{ width: `${Math.max(0, Math.min(100, 100 - incomeRatio))}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-xs">
+              <div className="flex flex-col">
+                <span className="text-muted-foreground">Receitas</span>
+                <span className="font-semibold tabular-nums">
+                  {formatCurrency(income)}
+                </span>
+                <ChangeBadge value={incomeChange} />
               </div>
-            </CardAction>
-          </CardHeader>
-          <CardContent>
-            {loadingNetWorth ? (
-              <div className="space-y-3">
-                <Skeleton className="h-7 w-40" />
-                <Skeleton className="h-[200px] w-full" />
+              <div className="flex flex-col items-end">
+                <span className="text-muted-foreground">Despesas</span>
+                <span className="font-semibold tabular-nums">
+                  {formatCurrency(expenses)}
+                </span>
+                <ChangeBadge value={expenseChange} reverse />
               </div>
-            ) : (
-              <>
-                <div className="flex items-baseline gap-3 mb-4">
-                  <span className="text-2xl font-bold tabular-nums">
-                    {formatCurrency(netWorth?.summary.netWorth ?? 0)}
-                  </span>
-                </div>
-                <div className="flex gap-4 text-xs text-muted-foreground mb-4">
-                  <span>
-                    Ativos:{" "}
-                    <span className="text-foreground font-medium">
-                      {formatCurrency(netWorth?.summary.totalAssets ?? 0)}
-                    </span>
-                  </span>
-                  <span>
-                    Passivos:{" "}
-                    <span className="text-foreground font-medium">
-                      {formatCurrency(netWorth?.summary.totalLiabilities ?? 0)}
-                    </span>
-                  </span>
-                </div>
-                <NetWorthChart
-                  history={netWorth?.summary.history ?? []}
-                  period={netWorthPeriod}
-                />
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
-      {/* Row 2: Monthly Result + Top Categories */}
-      <div className="grid gap-4 md:grid-cols-3">
-        {/* Monthly Result */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Resultado Mensal</CardTitle>
-            <CardDescription>Receitas vs Despesas</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loadingOverview ? (
-              <div className="space-y-3">
-                <Skeleton className="h-8 w-32" />
-                <Skeleton className="h-2 w-full" />
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-full" />
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`text-2xl font-bold tabular-nums ${
-                      net >= 0 ? "text-green-500" : "text-red-500"
-                    }`}
-                  >
-                    {formatCurrency(net)}
-                  </span>
-                  {net > 0 ? (
-                    <TrendingUp className="h-5 w-5 text-green-500" />
-                  ) : net < 0 ? (
-                    <TrendingDown className="h-5 w-5 text-red-500" />
-                  ) : (
-                    <Minus className="h-5 w-5 text-muted-foreground" />
-                  )}
-                </div>
-
-                {/* Progress bar */}
-                <div className="space-y-2">
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Receitas</span>
-                    <span>Despesas</span>
-                  </div>
-                  <div className="relative h-2 w-full rounded-full bg-red-500/20 overflow-hidden">
-                    <div
-                      className="absolute inset-y-0 left-0 rounded-full bg-green-500"
-                      style={{ width: `${Math.min(incomeRatio, 100)}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Breakdown */}
-                <div className="space-y-2 pt-2 border-t">
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2.5 w-2.5 rounded-full bg-green-500" />
-                      <span className="text-muted-foreground">Receitas</span>
-                    </div>
-                    <span className="font-medium tabular-nums text-green-500">
-                      {formatCurrency(income)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2.5 w-2.5 rounded-full bg-red-500" />
-                      <span className="text-muted-foreground">Despesas</span>
-                    </div>
-                    <span className="font-medium tabular-nums text-red-500">
-                      {formatCurrency(expenses)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm pt-2 border-t">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2.5 w-2.5 rounded-full bg-muted" />
-                      <span className="text-muted-foreground">Saldo</span>
-                    </div>
-                    <span
-                      className={`font-medium tabular-nums ${
-                        net >= 0 ? "text-green-500" : "text-red-500"
-                      }`}
-                    >
-                      {formatCurrency(net)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Top Categories */}
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle>Top Categorias</CardTitle>
-            <CardDescription>
-              Maiores categorias de gastos do mês
-            </CardDescription>
-            <CardAction>
-              <Link
-                href="/categories"
-                className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      {/* Alerts row — only renders when there is something actionable */}
+      {alerts.length > 0 && (
+        <section className="grid gap-2.5 lg:grid-cols-3">
+          {alerts.map((alert, idx) => {
+            const toneClasses = {
+              negative:
+                "border-rose-500/30 bg-rose-500/5 text-rose-700 dark:text-rose-300",
+              warning:
+                "border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-300",
+              info: "border-sky-500/30 bg-sky-500/5 text-sky-700 dark:text-sky-300",
+            }[alert.tone]
+            const Wrapper: React.ElementType = alert.href ? Link : "div"
+            return (
+              <Wrapper
+                key={idx}
+                {...(alert.href ? { href: alert.href } : {})}
+                className={cn(
+                  "flex items-start gap-2.5 rounded-xl border p-3 text-xs leading-relaxed transition-colors",
+                  toneClasses,
+                  alert.href && "hover:brightness-110"
+                )}
               >
-                Ver todas
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </CardAction>
-          </CardHeader>
-          <CardContent>
-            {loadingCategories ? (
-              <div className="space-y-3">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-4">
-                    <Skeleton className="h-4 w-24" />
-                    <Skeleton className="h-3 flex-1" />
-                    <Skeleton className="h-4 w-16" />
-                  </div>
-                ))}
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                <span className="flex-1">{alert.text}</span>
+                {alert.href && <ChevronRight className="mt-0.5 size-3.5 shrink-0" />}
+              </Wrapper>
+            )
+          })}
+        </section>
+      )}
+
+      {/* Stat tiles — separate fiat & crypto explicitly */}
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatTile
+          label="Patrimônio fiat"
+          value={formatCurrencySmart(fiatNetWorth)}
+          icon={Landmark}
+          hint={`${formatCurrencySmart(accountBalance)} em conta · ${formatCurrencySmart(investments)} investido`}
+          loading={overview.loading}
+          href="/portfolio"
+        />
+        <StatTile
+          label="Patrimônio cripto"
+          value={formatCurrencySmart(cryptoNetWorth)}
+          icon={Bitcoin}
+          hint={
+            summary?.usdBrlRate
+              ? `USD/BRL ${summary.usdBrlRate.toFixed(2)} · valores convertidos`
+              : "Valores convertidos para BRL"
+          }
+          tone="info"
+          loading={overview.loading}
+          href="/crypto"
+        />
+        <StatTile
+          label="Patrimônio total"
+          value={formatCurrencySmart(totalNetWorth)}
+          icon={PiggyBank}
+          hint={`Passivos: ${formatCurrency(liabilities)}`}
+          tone={totalNetWorth >= 0 ? "positive" : "negative"}
+          loading={overview.loading}
+          href="/portfolio"
+        />
+        <StatTile
+          label="Faturas em aberto"
+          value={formatCurrencySmart(openBills)}
+          icon={CreditCard}
+          hint={
+            nextBillDueDate
+              ? `Próxima ${daysUntilLabel(nextBillDueDate).toLowerCase()}`
+              : "Sem faturas em aberto"
+          }
+          tone={openBills > 0 ? "negative" : "neutral"}
+          loading={overview.loading || bills.loading}
+          href="/bills"
+        />
+      </section>
+
+      {/* Trend + categories */}
+      <section className="grid gap-4 lg:grid-cols-5">
+        <div className="surface flex flex-col gap-4 p-5 lg:col-span-3">
+          <header className="flex items-start justify-between gap-3">
+            <div>
+              <p className="section-eyebrow">Patrimônio ao longo do tempo</p>
+              <p className="mt-0.5 text-2xl font-semibold tabular-nums tracking-tight">
+                {formatCurrency(netWorth.data?.summary.current ?? totalNetWorth)}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Inclui contas, investimentos e cripto, descontados passivos.
+              </p>
+            </div>
+            <Link
+              href="/portfolio"
+              className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              Ver portfólio
+              <ChevronRight className="size-3.5" />
+            </Link>
+          </header>
+          {netWorth.loading ? (
+            <Skeleton className="h-[220px] w-full" />
+          ) : (netWorth.data?.summary.points.length ?? 0) === 0 ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              Ainda não há histórico suficiente para exibir.
+            </p>
+          ) : (
+            <NetWorthChart
+              history={netWorth.data!.summary.points}
+              period="6M"
+            />
+          )}
+          {!netWorth.loading && netWorth.data?.summary.valuation && (
+            <div className="grid gap-2 border-t border-border/60 pt-3 text-xs sm:grid-cols-4">
+              <div className="min-w-0">
+                <p className="text-muted-foreground">Ativos totais</p>
+                <p className="font-semibold tabular-nums">
+                  {formatCurrency(netWorth.data.summary.valuation.grossAssets)}
+                </p>
               </div>
-            ) : (
-              <div className="space-y-0">
-                {/* Table header */}
-                <div className="grid grid-cols-[1fr_minmax(100px,2fr)_auto] gap-3 pb-2 border-b text-xs font-medium text-muted-foreground">
-                  <span>Categoria</span>
-                  <span>Proporção</span>
-                  <span className="text-right">Valor</span>
-                </div>
-                {topCategories.map((cat, index) => {
-                  const barPercent =
-                    (Math.abs(cat.total) / maxCategoryTotal) * 100
-                  return (
-                    <div
-                      key={cat.categoryId}
-                      className="grid grid-cols-[1fr_minmax(100px,2fr)_auto] gap-3 items-center py-2.5 border-b last:border-0"
+              <div className="min-w-0">
+                <p className="text-muted-foreground">Fiat</p>
+                <p className="font-semibold tabular-nums">
+                  {formatCurrency(netWorth.data.summary.valuation.fiatAssets)}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-muted-foreground">Cripto</p>
+                <p className="font-semibold tabular-nums">
+                  {formatCurrency(netWorth.data.summary.valuation.cryptoAssets)}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-muted-foreground">Passivos</p>
+                <p className="font-semibold tabular-nums text-rose-500 dark:text-rose-400">
+                  {formatCurrency(netWorth.data.summary.valuation.liabilities)}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="surface flex flex-col gap-3 p-5 lg:col-span-2">
+          <header className="flex items-start justify-between gap-3">
+            <div>
+              <p className="section-eyebrow">Top categorias</p>
+              <p className="mt-0.5 text-2xl font-semibold tabular-nums tracking-tight">
+                {formatCurrency(categories.data?.summary.total ?? expenses)}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Onde seu dinheiro foi no período.
+              </p>
+            </div>
+            <Link
+              href="/categories"
+              className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              Ver tudo
+              <ChevronRight className="size-3.5" />
+            </Link>
+          </header>
+          {categories.loading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <Skeleton key={i} className="h-7 w-full" />
+              ))}
+            </div>
+          ) : topCategories.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Sem despesas registradas.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-2.5">
+              {topCategories.map((cat) => {
+                const color = getCategoryColor(cat.name)
+                const barWidth = (cat.absAmount / maxCategory) * 100
+                return (
+                  <li key={cat.categoryId ?? "uncategorized"}>
+                    <Link
+                      href={
+                        cat.categoryId
+                          ? `/transactions?categoryId=${encodeURIComponent(cat.categoryId)}`
+                          : "/transactions"
+                      }
+                      className="group block"
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div
-                          className="h-2.5 w-2.5 rounded-full shrink-0"
-                          style={{
-                            backgroundColor: getCategoryColor(index),
-                          }}
-                        />
-                        <span className="text-sm truncate">{cat.category}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all"
-                            style={{
-                              width: `${barPercent}%`,
-                              backgroundColor: getCategoryColor(index),
-                            }}
-                          />
-                        </div>
-                        <span className="text-xs text-muted-foreground tabular-nums w-10 text-right">
-                          {formatPercent(cat.percentage)}
+                      <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span aria-hidden>{getCategoryEmoji(cat.name)}</span>
+                          <span className="truncate font-medium text-foreground/90 group-hover:text-foreground">
+                            {cat.name}
+                          </span>
+                        </span>
+                        <span className="font-semibold tabular-nums">
+                          {formatCurrency(cat.absAmount)}
                         </span>
                       </div>
-                      <span className="text-sm font-medium tabular-nums text-right">
-                        {formatCurrency(Math.abs(cat.total))}
-                      </span>
-                    </div>
-                  )
-                })}
-                {topCategories.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    Nenhuma categoria encontrada
-                  </p>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-muted/60">
+                        <div
+                          className="h-full rounded-full transition-[width] duration-500"
+                          style={{ width: `${barWidth}%`, backgroundColor: color }}
+                        />
+                      </div>
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+      </section>
 
-      {/* Row 3: Recent Transactions + Upcoming Expenses */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <RecentTransactions
-          transactions={transactions?.results ?? null}
-          loading={loadingTransactions}
-        />
-        <UpcomingExpenses
-          rules={recurring?.rules ?? null}
-          totalMonthly={recurring?.summary.totalMonthly ?? null}
-          loading={loadingRecurring}
-        />
-      </div>
+      {/* Upcoming bills + recent transactions */}
+      <section className="grid gap-4 lg:grid-cols-5">
+        <div className="surface flex flex-col gap-3 p-5 lg:col-span-2">
+          <header className="flex items-start justify-between gap-3">
+            <div>
+              <p className="section-eyebrow">A pagar em breve</p>
+              <p className="mt-0.5 text-2xl font-semibold tabular-nums tracking-tight">
+                {formatCurrency(recurring.data?.summary.totalMonthly ?? 0)}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Soma dos compromissos recorrentes mensais.
+              </p>
+            </div>
+            <Link
+              href="/recurring"
+              className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              Ver todos
+              <ChevronRight className="size-3.5" />
+            </Link>
+          </header>
+          {recurring.loading ? (
+            <div className="space-y-2">
+              {[1, 2, 3, 4].map((i) => (
+                <Skeleton key={i} className="h-10 w-full" />
+              ))}
+            </div>
+          ) : upcomingBills.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Nenhuma despesa recorrente cadastrada.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border/50">
+              {upcomingBills.map((rule) => (
+                <li
+                  key={rule.id}
+                  className="flex items-center justify-between gap-3 py-2.5 text-sm"
+                >
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-base">
+                      {getCategoryEmoji(rule.category ?? "")}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{rule.description}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {daysUntilLabel(rule.nextDate)} · {formatDate(rule.nextDate)}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="shrink-0 font-semibold tabular-nums">
+                    {formatCurrency(Math.abs(rule.amount))}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="surface flex flex-col gap-3 p-5 lg:col-span-3">
+          <header className="flex items-start justify-between gap-3">
+            <div>
+              <p className="section-eyebrow">Movimentações recentes</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Últimas transações conciliadas no período.
+              </p>
+            </div>
+            <Link
+              href="/transactions"
+              className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              Ver tudo
+              <ChevronRight className="size-3.5" />
+            </Link>
+          </header>
+          {transactions.loading ? (
+            <div className="space-y-2">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <Skeleton key={i} className="h-10 w-full" />
+              ))}
+            </div>
+          ) : (transactions.data?.results.length ?? 0) === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Sem movimentações no período selecionado.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border/50">
+              {transactions.data!.results.slice(0, 8).map((tx) => {
+                const isInflow = tx.direction === "INFLOW"
+                return (
+                  <li
+                    key={tx.id}
+                    className="flex items-center justify-between gap-3 py-2.5 text-sm"
+                  >
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <div
+                        className={cn(
+                          "flex size-8 shrink-0 items-center justify-center rounded-lg",
+                          isInflow
+                            ? "bg-emerald-500/10 text-emerald-500"
+                            : "bg-rose-500/10 text-rose-500"
+                        )}
+                      >
+                        {isInflow ? (
+                          <TrendingUp className="size-3.5" />
+                        ) : (
+                          <TrendingDown className="size-3.5" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{tx.description}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {formatDate(tx.date)} · {tx.categoryName || "Sem categoria"}
+                        </p>
+                      </div>
+                    </div>
+                    <span
+                      className={cn(
+                        "shrink-0 font-semibold tabular-nums",
+                        amountToneClass(isInflow ? 1 : -1)
+                      )}
+                    >
+                      {formatSignedCurrency(
+                        isInflow ? Math.abs(tx.amount) : -Math.abs(tx.amount),
+                        "always"
+                      )}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+      </section>
+
+      {/* Quick links — keep rooted in user goals, not feature inventory */}
+      <section className="grid gap-3 md:grid-cols-3">
+        {[
+          {
+            href: "/cash-flow",
+            icon: Receipt,
+            title: "Fluxo de caixa",
+            desc: "Veja entradas e saídas mês a mês.",
+          },
+          {
+            href: "/projection",
+            icon: Sparkles,
+            title: "Projeção de saldo",
+            desc: "Como seu saldo evolui adiante.",
+          },
+          {
+            href: "/recurring",
+            icon: CalendarClock,
+            title: "Custos recorrentes",
+            desc: "Gerencie assinaturas e fixos.",
+          },
+        ].map(({ href, icon: Icon, title, desc }) => (
+          <Link
+            key={href}
+            href={href}
+            className="surface group flex items-center gap-3 p-4 transition-colors hover:bg-accent/40"
+          >
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground/80">
+              <Icon className="size-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">{title}</p>
+              <p className="truncate text-[11px] text-muted-foreground">{desc}</p>
+            </div>
+            <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+          </Link>
+        ))}
+      </section>
     </div>
   )
 }

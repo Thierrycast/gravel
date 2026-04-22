@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { PageError } from "@/components/page-error"
 import {
   Sheet,
   SheetContent,
@@ -26,40 +27,12 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet"
 
-interface Account {
-  id: string
-  name: string
-  type: string
-  subtype: string
-  balance: number
-  currencyCode: string
-  institution: string
-  number: string
-  providerAccountId: string
-}
-
-interface AllocationResult {
-  accountId: string
-  name: string
-  type: string
-  balance: number
-  percentage: number
-}
-
-interface AccountsResponse {
-  results: Account[]
-}
-
-interface AllocationResponse {
-  summary: {
-    totalBalance: number
-    byKind: {
-      BANK: number
-      CREDIT: number
-    }
-  }
-  results: AllocationResult[]
-}
+import {
+  type Account,
+  type AccountsResponse,
+  type AllocationResponse,
+  type AllocationResult,
+} from "@/lib/types/api"
 
 function getInitials(name: string): string {
   return name
@@ -70,20 +43,21 @@ function getInitials(name: string): string {
     .toUpperCase()
 }
 
-function getTypeLabel(type: string): string {
+function getTypeLabel(kind: string): string {
   const labels: Record<string, string> = {
     BANK: "Conta Bancária",
+    CARD: "Cartão de Crédito",
     CREDIT: "Cartão de Crédito",
     SAVINGS: "Poupança",
     CHECKING: "Conta Corrente",
     INVESTMENT: "Investimento",
   }
-  return labels[type] || type
+  return labels[kind] || kind
 }
 
-function getTypeIcon(type: string) {
-  if (type === "CREDIT") return CreditCard
-  if (type === "SAVINGS") return Landmark
+function getTypeIcon(kind: string) {
+  if (kind === "CARD" || kind === "CREDIT") return CreditCard
+  if (kind === "SAVINGS") return Landmark
   return Wallet
 }
 
@@ -107,9 +81,9 @@ function AccountCardSkeleton() {
 }
 
 export default function AccountsPage() {
-  const { data: accountsData, loading: accountsLoading } =
+  const { data: accountsData, loading: accountsLoading, error: accountsError, refetch: refetchAccounts } =
     useApi<AccountsResponse>("/api/domain/accounts")
-  const { data: allocationData, loading: allocationLoading } =
+  const { data: allocationData, loading: allocationLoading, error: allocationError, refetch: refetchAllocation } =
     useApi<AllocationResponse>("/api/domain/metrics/accounts/allocation")
 
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
@@ -117,9 +91,21 @@ export default function AccountsPage() {
 
   const loading = accountsLoading || allocationLoading
 
+  if (accountsError || allocationError) {
+    return (
+      <PageError
+        message="Erro ao carregar contas e saldos"
+        refetch={() => {
+          refetchAccounts()
+          refetchAllocation()
+        }}
+      />
+    )
+  }
+
   const accounts = accountsData?.results ?? []
-  const creditAccounts = accounts.filter((a) => a.type === "CREDIT")
-  const bankAccounts = accounts.filter((a) => a.type !== "CREDIT")
+  const creditAccounts = accounts.filter((a) => a.kind === "CARD" || a.kind === "CREDIT")
+  const bankAccounts = accounts.filter((a) => a.kind !== "CARD" && a.kind !== "CREDIT")
 
   const totalCredit = allocationData?.summary.byKind.CREDIT ?? 0
   const totalBank = allocationData?.summary.byKind.BANK ?? 0
@@ -234,7 +220,7 @@ export default function AccountsPage() {
                             </div>
                           </div>
                           <Badge variant="secondary" className="shrink-0">
-                            {getTypeLabel(account.subtype || account.type)}
+                            {getTypeLabel(account.subtype || account.kind)}
                           </Badge>
                         </div>
                       </CardHeader>
@@ -314,7 +300,7 @@ export default function AccountsPage() {
                           </div>
                         </div>
                         <Badge variant="outline" className="shrink-0">
-                          {getTypeLabel(account.subtype || account.type)}
+                          {getTypeLabel(account.subtype || account.kind)}
                         </Badge>
                       </div>
                     </CardHeader>
@@ -397,20 +383,20 @@ export default function AccountsPage() {
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Tipo</span>
                   <Badge variant="outline">
-                    {getTypeLabel(selectedAccount.subtype || selectedAccount.type)}
+                    {getTypeLabel(selectedAccount.subtype || selectedAccount.kind)}
                   </Badge>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Saldo</span>
                   <span
                     className={`font-semibold ${
-                      selectedAccount.type === "CREDIT"
+                      selectedAccount.kind === "CARD" || selectedAccount.kind === "CREDIT"
                         ? "text-destructive"
                         : ""
                     }`}
                   >
                     {formatCurrency(
-                      selectedAccount.type === "CREDIT"
+                      selectedAccount.kind === "CARD" || selectedAccount.kind === "CREDIT"
                         ? Math.abs(selectedAccount.balance)
                         : selectedAccount.balance
                     )}

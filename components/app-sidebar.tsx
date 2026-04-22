@@ -37,24 +37,24 @@ import { ThemeToggle } from "@/components/theme-toggle"
 
 const mainNavItems = [
   {
-    title: "Dashboard",
+    title: "Vis\u00e3o Geral",
     href: "/",
     icon: LayoutDashboard,
   },
   {
-    title: "Contas",
-    href: "/accounts",
-    icon: Wallet,
-  },
-  {
-    title: "Transações",
+    title: "Transa\u00e7\u00f5es",
     href: "/transactions",
     icon: ArrowLeftRight,
   },
   {
-    title: "Contas a Pagar",
-    href: "/bills",
-    icon: Receipt,
+    title: "Recorr\u00eancias",
+    href: "/recurring",
+    icon: Calendar,
+  },
+  {
+    title: "Receitas",
+    href: "/recurring/income",
+    icon: Calendar,
   },
   {
     title: "Fluxo de Caixa",
@@ -63,16 +63,39 @@ const mainNavItems = [
   },
 ]
 
+const financeNavItems = [
+  {
+    title: "Contas",
+    href: "/accounts",
+    icon: Wallet,
+  },
+  {
+    title: "Faturas",
+    href: "/bills",
+    icon: Receipt,
+  },
+  {
+    title: "Categorias",
+    href: "/categories",
+    icon: Tags,
+  },
+  {
+    title: "Comerciantes",
+    href: "/merchants",
+    icon: Store,
+  },
+]
+
 const investmentNavItems = [
+  {
+    title: "Portf\u00f3lio",
+    href: "/portfolio",
+    icon: PieChart,
+  },
   {
     title: "Investimentos",
     href: "/investments",
     icon: Landmark,
-  },
-  {
-    title: "Portfólio",
-    href: "/portfolio",
-    icon: PieChart,
   },
   {
     title: "Crypto",
@@ -83,17 +106,7 @@ const investmentNavItems = [
 
 const planningNavItems = [
   {
-    title: "Receitas Recorrentes",
-    href: "/recurring/income",
-    icon: Calendar,
-  },
-  {
-    title: "Despesas Recorrentes",
-    href: "/recurring/expenses",
-    icon: Calendar,
-  },
-  {
-    title: "Projeções",
+    title: "Proje\u00e7\u00f5es",
     href: "/projection",
     icon: TrendingUp,
   },
@@ -102,31 +115,13 @@ const planningNavItems = [
     href: "/goals",
     icon: Target,
   },
-]
-
-const otherNavItems = [
   {
-    title: "Sincronização",
-    href: "/sync",
-    icon: RefreshCw,
-  },
-  {
-    title: "Comerciantes",
-    href: "/merchants",
-    icon: Store,
-  },
-  {
-    title: "Categorias",
-    href: "/categories",
-    icon: Tags,
-  },
-  {
-    title: "Relatórios",
+    title: "Relat\u00f3rios",
     href: "/reports",
     icon: FileText,
   },
   {
-    title: "Conexões",
+    title: "Conex\u00f5es",
     href: "/connect",
     icon: LinkIcon,
   },
@@ -142,12 +137,12 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 text-white">
                   <TrendingUp className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">Gravel Finance</span>
-                  <span className="truncate text-xs">Dashboard</span>
+                  <span className="truncate font-bold tracking-tight">Gravel</span>
+                  <span className="truncate text-xs text-muted-foreground">Finance</span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -157,10 +152,28 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Principal</SidebarGroupLabel>
+          <SidebarGroupLabel>Organiza&ccedil;&atilde;o</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {mainNavItems.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton asChild isActive={pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href))}>
+                    <Link href={item.href}>
+                      <item.icon />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Controle Financeiro</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {financeNavItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton asChild isActive={pathname === item.href}>
                     <Link href={item.href}>
@@ -193,28 +206,10 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Planejamento</SidebarGroupLabel>
+          <SidebarGroupLabel>Vis&atilde;o Estrat&eacute;gica</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {planningNavItems.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={pathname === item.href}>
-                    <Link href={item.href}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Outros</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {otherNavItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton asChild isActive={pathname === item.href}>
                     <Link href={item.href}>

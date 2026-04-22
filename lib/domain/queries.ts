@@ -1,6 +1,4 @@
 import {
-  DomainAccountKind,
-  DomainTransactionDirection,
   Prisma,
 } from "@prisma/client"
 
@@ -11,14 +9,9 @@ import {
 } from "@/lib/core/filters"
 import { prisma } from "@/lib/prisma"
 
-function sumDecimals(values: Array<Prisma.Decimal | null | undefined>) {
-  return values.reduce(
-    (total: Prisma.Decimal, current) => total.plus(current ?? 0),
-    new Prisma.Decimal(0)
-  )
-}
-
 export function parseDomainQuery(searchParams: URLSearchParams) {
+  const directionParam = searchParams.get("direction")?.trim().toUpperCase()
+
   return {
     page: parseNumberParam(searchParams.get("page"), 1) ?? 1,
     pageSize: parseNumberParam(searchParams.get("pageSize"), 50) ?? 50,
@@ -29,6 +22,13 @@ export function parseDomainQuery(searchParams: URLSearchParams) {
     merchantId: searchParams.get("merchantId") ?? undefined,
     provider: searchParams.get("provider") ?? undefined,
     asset: searchParams.get("asset") ?? undefined,
+    q: searchParams.get("q")?.trim() || searchParams.get("search")?.trim() || undefined,
+    direction:
+      directionParam === "INFLOW" || directionParam === "INCOME"
+        ? "INFLOW"
+        : directionParam === "OUTFLOW" || directionParam === "EXPENSE"
+          ? "OUTFLOW"
+          : undefined,
     sortBy: searchParams.get("sortBy") ?? undefined,
     sortOrder: searchParams.get("sortOrder") === "asc" ? "asc" : "desc",
   } as const
@@ -61,6 +61,62 @@ export async function getDomainAccounts(searchParams: URLSearchParams) {
 export async function getDomainTransactions(searchParams: URLSearchParams) {
   const filters = parseDomainQuery(searchParams)
   const pagination = normalizePagination(filters.page, filters.pageSize)
+  let searchWhere: Prisma.DomainTransactionWhereInput[] | undefined
+
+  if (filters.q) {
+    const [categories, accounts, merchants] = await Promise.all([
+      prisma.domainCategory.findMany({
+        where: {
+          name: { contains: filters.q },
+        },
+        select: { id: true },
+      }),
+      prisma.domainAccount.findMany({
+        where: {
+          name: { contains: filters.q },
+        },
+        select: { id: true },
+      }),
+      prisma.domainMerchant.findMany({
+        where: {
+          displayName: { contains: filters.q },
+        },
+        select: { id: true },
+      }),
+    ])
+
+    const categoryIds = categories.map((category) => category.id)
+    const accountIds = accounts.map((account) => account.id)
+    const merchantIds = merchants.map((merchant) => merchant.id)
+
+    searchWhere = [
+      {
+        description: {
+          contains: filters.q,
+        },
+      },
+      {
+        normalizedDescription: {
+          contains: filters.q.toLowerCase(),
+        },
+      },
+      {
+        merchantName: {
+          contains: filters.q,
+        },
+      },
+      ...(categoryIds.length > 0
+        ? [{ domainCategoryId: { in: categoryIds } satisfies Prisma.StringFilter }]
+        : []),
+      ...(accountIds.length > 0
+        ? [{ domainAccountId: { in: accountIds } satisfies Prisma.StringNullableFilter }]
+        : []),
+      ...(merchantIds.length > 0
+        ? [{ domainMerchantId: { in: merchantIds } satisfies Prisma.StringNullableFilter }]
+        : []),
+    ]
+  }
+
   const where: Prisma.DomainTransactionWhereInput = {
     occurredAt: {
       gte: filters.from,
@@ -69,7 +125,9 @@ export async function getDomainTransactions(searchParams: URLSearchParams) {
     domainAccountId: filters.accountId,
     domainCategoryId: filters.categoryId,
     domainMerchantId: filters.merchantId,
+    direction: filters.direction,
     sourceProvider: filters.provider ? (filters.provider as never) : undefined,
+    ...(searchWhere ? { OR: searchWhere } : {}),
     ...(searchParams.get("ignored") === "true"
       ? {}
       : { ignored: false }),
@@ -214,143 +272,5 @@ export async function getDomainCryptoAssets(searchParams: URLSearchParams) {
     total,
     ...pagination,
     results,
-  }
-}
-
-export async function getOverviewMetrics() {
-  const [accounts, bills, investments, cryptoAssets, transactions] =
-    await Promise.all([
-      prisma.domainAccount.findMany(),
-      prisma.domainBill.findMany(),
-      prisma.domainInvestment.findMany(),
-      prisma.domainCryptoAsset.findMany(),
-      prisma.domainTransaction.findMany({
-        where: {
-          occurredAt: {
-            gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-          },
-          ignored: false,
-        },
-      }),
-    ])
-
-  const liquidAccountKinds = new Set<DomainAccountKind>([
-    DomainAccountKind.BANK,
-    DomainAccountKind.CASH,
-  ])
-  const liquidAccounts = accounts.filter((account) =>
-    liquidAccountKinds.has(account.kind)
-  )
-
-  const accountBalance = sumDecimals(liquidAccounts.map((account) => account.balance))
-  const investmentsTotal = sumDecimals(investments.map((item) => item.balance))
-  const cryptoTotal = sumDecimals(cryptoAssets.map((item) => item.value))
-  const openBills = sumDecimals(bills.map((bill) => bill.totalAmount))
-  const inflow = sumDecimals(
-    transactions
-      .filter((transaction) => transaction.direction === DomainTransactionDirection.INFLOW)
-      .map((transaction) => transaction.amount)
-  )
-  const outflow = sumDecimals(
-    transactions
-      .filter((transaction) => transaction.direction === DomainTransactionDirection.OUTFLOW)
-      .map((transaction) => transaction.amount.abs())
-  )
-
-  return {
-    accountBalance,
-    investmentsTotal,
-    cryptoTotal,
-    openBills,
-    netWorth: accountBalance.plus(investmentsTotal).plus(cryptoTotal),
-    monthlyInflow: inflow,
-    monthlyOutflow: outflow,
-    monthlyNet: inflow.minus(outflow),
-    counts: {
-      accounts: accounts.length,
-      transactions: transactions.length,
-      bills: bills.length,
-      investments: investments.length,
-      cryptoAssets: cryptoAssets.length,
-    },
-  }
-}
-
-export async function getCashFlowMetrics(searchParams: URLSearchParams) {
-  const from =
-    parseDateParam(searchParams.get("from")) ??
-    new Date(new Date().getFullYear(), new Date().getMonth() - 5, 1)
-  const to = parseDateParam(searchParams.get("to")) ?? new Date()
-  const groupBy = searchParams.get("groupBy") === "day" ? "day" : "month"
-
-  const transactions = await prisma.domainTransaction.findMany({
-    where: {
-      occurredAt: {
-        gte: from,
-        lte: to,
-      },
-      ignored: false,
-    },
-    orderBy: { occurredAt: "asc" },
-  })
-
-  const buckets = new Map<
-    string,
-    { inflow: Prisma.Decimal; outflow: Prisma.Decimal; net: Prisma.Decimal }
-  >()
-
-  for (const transaction of transactions) {
-    const date = transaction.occurredAt
-    const key =
-      groupBy === "day"
-        ? date.toISOString().slice(0, 10)
-        : `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`
-
-    const current = buckets.get(key) ?? {
-      inflow: new Prisma.Decimal(0),
-      outflow: new Prisma.Decimal(0),
-      net: new Prisma.Decimal(0),
-    }
-
-    if (transaction.direction === DomainTransactionDirection.INFLOW) {
-      current.inflow = current.inflow.plus(transaction.amount)
-    } else if (transaction.direction === DomainTransactionDirection.OUTFLOW) {
-      current.outflow = current.outflow.plus(transaction.amount.abs())
-    }
-
-    current.net = current.inflow.minus(current.outflow)
-    buckets.set(key, current)
-  }
-
-  return Array.from(buckets.entries()).map(([period, values]) => ({
-    period,
-    ...values,
-  }))
-}
-
-export async function getNetWorthMetrics() {
-  const [overview, snapshots] = await Promise.all([
-    getOverviewMetrics(),
-    prisma.portfolioSnapshot.findMany({
-      orderBy: { date: "asc" },
-      take: 120,
-    }),
-  ])
-
-  const points = snapshots.map((snapshot) => ({
-    date: snapshot.date,
-    netWorth: snapshot.netWorth,
-    source: "snapshot",
-  }))
-
-  points.push({
-    date: new Date(),
-    netWorth: overview.netWorth,
-    source: "current",
-  })
-
-  return {
-    current: overview.netWorth,
-    points,
   }
 }

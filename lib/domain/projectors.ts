@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto"
+
 import {
   DomainAccountKind,
   DomainCategoryKind,
@@ -42,6 +44,26 @@ function evaluateRule(
         return false
       }
   }
+}
+
+/**
+ * Normalize the sign/direction of a Pluggy transaction amount based on account type.
+ *
+ * For credit card accounts (type="CREDIT"), the Pluggy API sends amounts with
+ * inverted semantics: positive amount + type="CREDIT" = a purchase (expense for the user),
+ * not income. We negate the amount so that the standard `amount >= 0 → INFLOW` logic works.
+ */
+function normalizePluggyTransactionAmount(
+  rawAmount: Prisma.Decimal,
+  accountType: string | null | undefined,
+): Prisma.Decimal {
+  // Credit card accounts: Pluggy CREDIT type means purchase (bank credits the card bill).
+  // Positive amounts are charges (expenses) → negate so they become OUTFLOW.
+  // Negative amounts are payments/refunds → negate so they become INFLOW.
+  if (accountType === "CREDIT") {
+    return rawAmount.negated()
+  }
+  return rawAmount
 }
 
 function mapPluggyAccountKind(type?: string | null): DomainAccountKind {
@@ -101,29 +123,35 @@ async function ensureDefaultCategories() {
     },
   ]
 
-  for (const category of defaults) {
-    await prisma.domainCategory.upsert({
-      where: { slug: category.slug },
-      update: {
-        name: category.name,
-        kind: category.kind,
-      },
-      create: category,
-    })
-  }
+  await prisma.$transaction(
+    defaults.map((category) =>
+      prisma.domainCategory.upsert({
+        where: { slug: category.slug },
+        update: {
+          name: category.name,
+          kind: category.kind,
+        },
+        create: category,
+      })
+    )
+  )
 }
 
-async function ensureMerchant(input: {
-  displayName: string
-  cnpj?: string | null
-  sourceExternalId?: string | null
-  sourceProvider: SourceProvider
-}) {
+async function ensureMerchant(
+  input: {
+    displayName: string
+    cnpj?: string | null
+    sourceExternalId?: string | null
+    sourceProvider: SourceProvider
+  },
+  tx?: Prisma.TransactionClient
+) {
+  const client = tx ?? prisma
   const normalizedName = normalizeText(input.displayName) ?? "merchant"
 
   const existingBySource =
     input.sourceExternalId &&
-    (await prisma.domainMerchantSource.findUnique({
+    (await client.domainMerchantSource.findUnique({
       where: {
         sourceProvider_sourceExternalId: {
           sourceProvider: input.sourceProvider,
@@ -133,23 +161,23 @@ async function ensureMerchant(input: {
     }))
 
   if (existingBySource) {
-    return prisma.domainMerchant.findUnique({
+    return client.domainMerchant.findUnique({
       where: { id: existingBySource.domainMerchantId },
     })
   }
 
   let merchant =
     (input.cnpj
-      ? await prisma.domainMerchant.findUnique({
+      ? await client.domainMerchant.findUnique({
           where: { cnpj: input.cnpj },
         })
       : null) ??
-    (await prisma.domainMerchant.findUnique({
+    (await client.domainMerchant.findUnique({
       where: { normalizedName },
     }))
 
   if (!merchant) {
-    merchant = await prisma.domainMerchant.create({
+    merchant = await client.domainMerchant.create({
       data: {
         displayName: input.displayName,
         normalizedName,
@@ -157,7 +185,7 @@ async function ensureMerchant(input: {
       },
     })
   } else if (merchant.displayName !== input.displayName && !merchant.cnpj) {
-    merchant = await prisma.domainMerchant.update({
+    merchant = await client.domainMerchant.update({
       where: { id: merchant.id },
       data: {
         displayName: merchant.displayName || input.displayName,
@@ -166,7 +194,7 @@ async function ensureMerchant(input: {
   }
 
   if (input.sourceExternalId) {
-    await prisma.domainMerchantSource.upsert({
+    await client.domainMerchantSource.upsert({
       where: {
         sourceProvider_sourceExternalId: {
           sourceProvider: input.sourceProvider,
@@ -191,74 +219,30 @@ async function ensureMerchant(input: {
   return merchant
 }
 
-async function resolveMerchantFromRules(input: {
-  sourceProvider: SourceProvider
-  merchantName?: string | null
-  merchantCnpj?: string | null
-}) {
-  const rules = await prisma.merchantAliasRule.findMany({
-    where: {
-      active: true,
-      OR: [{ provider: input.sourceProvider }, { provider: null }],
-    },
-    orderBy: [{ updatedAt: "desc" }],
-  })
-
-  const merchantName = normalizeText(input.merchantName)
-  const merchantCnpj = input.merchantCnpj ?? null
-
-  for (const rule of rules) {
-    const candidate =
-      merchantCnpj && rule.matchValue === merchantCnpj
-        ? merchantCnpj
-        : merchantName
-
-    if (!evaluateRule(rule.matchType, rule.matchValue, candidate)) {
-      continue
-    }
-
-    if (rule.merchantId) {
-      const merchant = await prisma.domainMerchant.findUnique({
-        where: { id: rule.merchantId },
-      })
-      if (merchant) return merchant
-    }
-
-    if (rule.aliasName) {
-      return ensureMerchant({
-        displayName: rule.aliasName,
-        cnpj: input.merchantCnpj,
-        sourceProvider: input.sourceProvider,
-      })
-    }
+async function resolveCategoryId(
+  input: {
+    sourceProvider: SourceProvider
+    providerCategoryId?: string | null
+    merchantName?: string | null
+    merchantCnpj?: string | null
+    description?: string | null
+    amount?: Prisma.Decimal | null
+  },
+  context?: {
+    rules?: any[]
+    categoriesBySource?: Map<string, string>
+    categoriesBySlug?: Map<string, string>
   }
-
-  if (input.merchantName) {
-    return ensureMerchant({
-      displayName: input.merchantName,
-      cnpj: input.merchantCnpj,
-      sourceProvider: input.sourceProvider,
-    })
-  }
-
-  return null
-}
-
-async function resolveCategoryId(input: {
-  sourceProvider: SourceProvider
-  providerCategoryId?: string | null
-  merchantName?: string | null
-  merchantCnpj?: string | null
-  description?: string | null
-  amount?: Prisma.Decimal | null
-}) {
-  const rules = await prisma.categoryRule.findMany({
-    where: {
-      active: true,
-      OR: [{ provider: input.sourceProvider }, { provider: null }],
-    },
-    orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
-  })
+) {
+  const rules =
+    context?.rules ??
+    (await prisma.categoryRule.findMany({
+      where: {
+        active: true,
+        OR: [{ provider: input.sourceProvider }, { provider: null }],
+      },
+      orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
+    }))
 
   const candidates: Record<string, string | null> = {
     providerCategoryId: input.providerCategoryId ?? null,
@@ -274,13 +258,20 @@ async function resolveCategoryId(input: {
   }
 
   if (input.providerCategoryId) {
-    const providerCategory = await prisma.domainCategory.findFirst({
-      where: {
-        sourceProvider: input.sourceProvider,
-        sourceExternalId: input.providerCategoryId,
-      },
-    })
-    if (providerCategory) return providerCategory.id
+    const cachedId = context?.categoriesBySource?.get(
+      `${input.sourceProvider}:${input.providerCategoryId}`
+    )
+    if (cachedId) return cachedId
+
+    if (!context?.categoriesBySource) {
+      const providerCategory = await prisma.domainCategory.findFirst({
+        where: {
+          sourceProvider: input.sourceProvider,
+          sourceExternalId: input.providerCategoryId,
+        },
+      })
+      if (providerCategory) return providerCategory.id
+    }
   }
 
   const fallbackSlug =
@@ -288,42 +279,51 @@ async function resolveCategoryId(input: {
       ? "uncategorized-income"
       : "uncategorized-expense"
 
-  const fallback = await prisma.domainCategory.findUnique({
-    where: { slug: fallbackSlug },
-  })
-  return fallback?.id ?? null
+  const cachedFallbackId = context?.categoriesBySlug?.get(fallbackSlug)
+  if (cachedFallbackId) return cachedFallbackId
+
+  if (!context?.categoriesBySlug) {
+    const fallback = await prisma.domainCategory.findUnique({
+      where: { slug: fallbackSlug },
+    })
+    return fallback?.id ?? null
+  }
+
+  return null
 }
 
 async function projectPluggyCategories() {
   const records = await prisma.pluggyCategoryRecord.findMany()
   let projected = 0
 
-  for (const record of records) {
-    const slug = `pluggy-${record.externalId}`
-    await prisma.domainCategory.upsert({
-      where: { slug },
-      update: {
-        name:
-          record.descriptionTranslated ??
-          record.description ??
-          `Categoria ${record.externalId}`,
-        kind: mapCategoryKind(record.descriptionTranslated ?? record.description),
-        sourceProvider: SourceProvider.PLUGGY,
-        sourceExternalId: record.externalId,
-      },
-      create: {
-        slug,
-        name:
-          record.descriptionTranslated ??
-          record.description ??
-          `Categoria ${record.externalId}`,
-        kind: mapCategoryKind(record.descriptionTranslated ?? record.description),
-        sourceProvider: SourceProvider.PLUGGY,
-        sourceExternalId: record.externalId,
-      },
-    })
-    projected += 1
-  }
+  await prisma.$transaction(async (tx) => {
+    for (const record of records) {
+      const slug = `pluggy-${record.externalId}`
+      await tx.domainCategory.upsert({
+        where: { slug },
+        update: {
+          name:
+            record.descriptionTranslated ??
+            record.description ??
+            `Categoria ${record.externalId}`,
+          kind: mapCategoryKind(record.descriptionTranslated ?? record.description),
+          sourceProvider: SourceProvider.PLUGGY,
+          sourceExternalId: record.externalId,
+        },
+        create: {
+          slug,
+          name:
+            record.descriptionTranslated ??
+            record.description ??
+            `Categoria ${record.externalId}`,
+          kind: mapCategoryKind(record.descriptionTranslated ?? record.description),
+          sourceProvider: SourceProvider.PLUGGY,
+          sourceExternalId: record.externalId,
+        },
+      })
+      projected += 1
+    }
+  })
 
   await markDomainSyncState({
     stateKey: "domain:pluggy:categories",
@@ -338,69 +338,71 @@ async function projectPluggyAccounts() {
   const records = await prisma.pluggyAccountRecord.findMany()
   let projected = 0
 
-  for (const record of records) {
-    const domainAccount = await prisma.domainAccount.upsert({
-      where: {
-        sourceProvider_sourceExternalId: {
+  await prisma.$transaction(async (tx) => {
+    for (const record of records) {
+      const domainAccount = await tx.domainAccount.upsert({
+        where: {
+          sourceProvider_sourceExternalId: {
+            sourceProvider: SourceProvider.PLUGGY,
+            sourceExternalId: record.externalId,
+          },
+        },
+        update: {
+          name: record.name ?? record.externalId,
+          normalizedName: normalizeText(record.name) ?? undefined,
+          kind: mapPluggyAccountKind(record.type),
+          currencyCode: record.currencyCode ?? "BRL",
+          balance: record.balance ?? undefined,
+          sourceParentId: record.itemExternalId,
+          ownerName: record.owner ?? undefined,
+          institutionName: "Pluggy",
+          metadataJson: JSON.stringify({
+            subtype: record.subtype,
+            number: record.number,
+            taxNumber: record.taxNumber,
+          }),
+        },
+        create: {
+          name: record.name ?? record.externalId,
+          normalizedName: normalizeText(record.name) ?? undefined,
+          kind: mapPluggyAccountKind(record.type),
+          currencyCode: record.currencyCode ?? "BRL",
+          balance: record.balance ?? undefined,
           sourceProvider: SourceProvider.PLUGGY,
           sourceExternalId: record.externalId,
+          sourceParentId: record.itemExternalId,
+          ownerName: record.owner ?? undefined,
+          institutionName: "Pluggy",
+          metadataJson: JSON.stringify({
+            subtype: record.subtype,
+            number: record.number,
+            taxNumber: record.taxNumber,
+          }),
         },
-      },
-      update: {
-        name: record.name ?? record.externalId,
-        normalizedName: normalizeText(record.name) ?? undefined,
-        kind: mapPluggyAccountKind(record.type),
-        currencyCode: record.currencyCode ?? "BRL",
-        balance: record.balance ?? undefined,
-        sourceParentId: record.itemExternalId,
-        ownerName: record.owner ?? undefined,
-        institutionName: "Pluggy",
-        metadataJson: JSON.stringify({
-          subtype: record.subtype,
-          number: record.number,
-          taxNumber: record.taxNumber,
-        }),
-      },
-      create: {
-        name: record.name ?? record.externalId,
-        normalizedName: normalizeText(record.name) ?? undefined,
-        kind: mapPluggyAccountKind(record.type),
-        currencyCode: record.currencyCode ?? "BRL",
-        balance: record.balance ?? undefined,
-        sourceProvider: SourceProvider.PLUGGY,
-        sourceExternalId: record.externalId,
-        sourceParentId: record.itemExternalId,
-        ownerName: record.owner ?? undefined,
-        institutionName: "Pluggy",
-        metadataJson: JSON.stringify({
-          subtype: record.subtype,
-          number: record.number,
-          taxNumber: record.taxNumber,
-        }),
-      },
-    })
+      })
 
-    await prisma.domainAccountSource.upsert({
-      where: {
-        sourceProvider_sourceExternalId: {
+      await tx.domainAccountSource.upsert({
+        where: {
+          sourceProvider_sourceExternalId: {
+            sourceProvider: SourceProvider.PLUGGY,
+            sourceExternalId: record.externalId,
+          },
+        },
+        update: {
+          domainAccountId: domainAccount.id,
+          sourceParentId: record.itemExternalId,
+        },
+        create: {
+          domainAccountId: domainAccount.id,
           sourceProvider: SourceProvider.PLUGGY,
           sourceExternalId: record.externalId,
+          sourceParentId: record.itemExternalId,
         },
-      },
-      update: {
-        domainAccountId: domainAccount.id,
-        sourceParentId: record.itemExternalId,
-      },
-      create: {
-        domainAccountId: domainAccount.id,
-        sourceProvider: SourceProvider.PLUGGY,
-        sourceExternalId: record.externalId,
-        sourceParentId: record.itemExternalId,
-      },
-    })
+      })
 
-    projected += 1
-  }
+      projected += 1
+    }
+  })
 
   await markDomainSyncState({
     stateKey: "domain:pluggy:accounts",
@@ -415,15 +417,17 @@ async function projectPluggyMerchants() {
   const records = await prisma.pluggyMerchantRecord.findMany()
   let projected = 0
 
-  for (const record of records) {
-    await ensureMerchant({
-      displayName: record.businessName ?? record.name ?? record.cnpj,
-      cnpj: record.cnpj,
-      sourceExternalId: record.externalId ?? record.cnpj,
-      sourceProvider: SourceProvider.PLUGGY,
-    })
-    projected += 1
-  }
+  await prisma.$transaction(async (tx) => {
+    for (const record of records) {
+      await ensureMerchant({
+        displayName: record.businessName ?? record.name ?? record.cnpj,
+        cnpj: record.cnpj,
+        sourceExternalId: record.externalId ?? record.cnpj,
+        sourceProvider: SourceProvider.PLUGGY,
+      }, tx)
+      projected += 1
+    }
+  })
 
   await markDomainSyncState({
     stateKey: "domain:pluggy:merchants",
@@ -434,128 +438,437 @@ async function projectPluggyMerchants() {
   return projected
 }
 
+type MerchantLike = {
+  id: string
+  displayName: string
+  normalizedName: string
+  cnpj: string | null
+}
+
+/**
+ * Resolve the target merchant for a record purely against in-memory maps,
+ * registering new merchants / merchant-sources in the provided "pending"
+ * arrays so the caller can bulk-insert them in a single round-trip.
+ */
+function resolveMerchantInMemory(
+  input: {
+    sourceProvider: SourceProvider
+    merchantName?: string | null
+    merchantCnpj?: string | null
+  },
+  ctx: {
+    rules: { matchType: RuleMatchType; matchValue: string; merchantId: string | null; aliasName: string | null }[]
+    merchantsById: Map<string, MerchantLike>
+    merchantByCnpj: Map<string, MerchantLike>
+    merchantByNormalized: Map<string, MerchantLike>
+    merchantSourceByExtId: Map<string, { domainMerchantId: string }>
+    pendingMerchants: { id: string; displayName: string; normalizedName: string; cnpj?: string | null }[]
+    pendingMerchantSources: {
+      id: string
+      domainMerchantId: string
+      sourceProvider: SourceProvider
+      sourceExternalId: string
+      sourceName: string | null
+      sourceCnpj: string | null
+    }[]
+  }
+): MerchantLike | null {
+  const ensure = (input: {
+    displayName: string
+    cnpj?: string | null
+    sourceExternalId?: string | null
+    sourceProvider: SourceProvider
+  }): MerchantLike => {
+    const normalizedName = normalizeText(input.displayName) ?? "merchant"
+
+    if (input.sourceExternalId) {
+      const existingSrc = ctx.merchantSourceByExtId.get(input.sourceExternalId)
+      if (existingSrc) {
+        const m = ctx.merchantsById.get(existingSrc.domainMerchantId)
+        if (m) return m
+      }
+    }
+
+    let merchant: MerchantLike | undefined =
+      (input.cnpj ? ctx.merchantByCnpj.get(input.cnpj) : undefined) ??
+      ctx.merchantByNormalized.get(normalizedName)
+
+    if (!merchant) {
+      const newMerchant: MerchantLike = {
+        id: randomUUID(),
+        displayName: input.displayName,
+        normalizedName,
+        cnpj: input.cnpj ?? null,
+      }
+      ctx.pendingMerchants.push({
+        id: newMerchant.id,
+        displayName: newMerchant.displayName,
+        normalizedName: newMerchant.normalizedName,
+        cnpj: newMerchant.cnpj ?? undefined,
+      })
+      ctx.merchantsById.set(newMerchant.id, newMerchant)
+      ctx.merchantByNormalized.set(newMerchant.normalizedName, newMerchant)
+      if (newMerchant.cnpj) ctx.merchantByCnpj.set(newMerchant.cnpj, newMerchant)
+      merchant = newMerchant
+    }
+
+    if (input.sourceExternalId && !ctx.merchantSourceByExtId.has(input.sourceExternalId)) {
+      const sourceRow = {
+        id: randomUUID(),
+        domainMerchantId: merchant.id,
+        sourceProvider: input.sourceProvider,
+        sourceExternalId: input.sourceExternalId,
+        sourceName: input.displayName,
+        sourceCnpj: input.cnpj ?? null,
+      }
+      ctx.pendingMerchantSources.push(sourceRow)
+      ctx.merchantSourceByExtId.set(input.sourceExternalId, {
+        domainMerchantId: merchant.id,
+      })
+    }
+
+    return merchant
+  }
+
+  const merchantName = normalizeText(input.merchantName)
+  const merchantCnpj = input.merchantCnpj ?? null
+
+  for (const rule of ctx.rules) {
+    const candidate =
+      merchantCnpj && rule.matchValue === merchantCnpj ? merchantCnpj : merchantName
+
+    if (!evaluateRule(rule.matchType, rule.matchValue, candidate)) continue
+
+    if (rule.merchantId) {
+      const merchant = ctx.merchantsById.get(rule.merchantId)
+      if (merchant) return merchant
+    }
+
+    if (rule.aliasName) {
+      return ensure({
+        displayName: rule.aliasName,
+        cnpj: input.merchantCnpj,
+        sourceProvider: input.sourceProvider,
+      })
+    }
+  }
+
+  if (input.merchantName) {
+    return ensure({
+      displayName: input.merchantName,
+      cnpj: input.merchantCnpj,
+      sourceProvider: input.sourceProvider,
+    })
+  }
+
+  return null
+}
+
 async function projectPluggyTransactions() {
   const records = await prisma.pluggyTransactionRecord.findMany({
     orderBy: { date: "asc" },
   })
-  let projected = 0
+
+  if (records.length === 0) {
+    await markDomainSyncState({
+      stateKey: "domain:pluggy:transactions",
+      status: OpsRunStatus.SUCCESS,
+      meta: { projected: 0 },
+    })
+    return 0
+  }
+
+  // Single batch pre-fetch — everything the projector needs lives in these
+  // maps, so the per-record loop hits zero database round-trips.
+  const [
+    accounts,
+    pluggyAccounts,
+    merchantRules,
+    categoryRules,
+    categories,
+    existingTransactions,
+    existingTransactionSources,
+    existingMerchants,
+    existingMerchantSources,
+    ignoredRows,
+  ] = await Promise.all([
+    prisma.domainAccount.findMany({
+      where: { sourceProvider: SourceProvider.PLUGGY },
+      select: { id: true, sourceExternalId: true },
+    }),
+    prisma.pluggyAccountRecord.findMany({
+      select: { externalId: true, type: true },
+    }),
+    prisma.merchantAliasRule.findMany({
+      where: {
+        active: true,
+        OR: [{ provider: SourceProvider.PLUGGY }, { provider: null }],
+      },
+      orderBy: [{ updatedAt: "desc" }],
+    }),
+    prisma.categoryRule.findMany({
+      where: {
+        active: true,
+        OR: [{ provider: SourceProvider.PLUGGY }, { provider: null }],
+      },
+      orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
+    }),
+    prisma.domainCategory.findMany({
+      select: { id: true, slug: true, sourceProvider: true, sourceExternalId: true },
+    }),
+    prisma.domainTransaction.findMany({
+      where: { sourceProvider: SourceProvider.PLUGGY },
+      select: { id: true, sourceExternalId: true },
+    }),
+    prisma.domainTransactionSource.findMany({
+      where: { sourceProvider: SourceProvider.PLUGGY },
+      select: { id: true, sourceExternalId: true, domainTransactionId: true },
+    }),
+    prisma.domainMerchant.findMany({
+      select: { id: true, displayName: true, normalizedName: true, cnpj: true },
+    }),
+    prisma.domainMerchantSource.findMany({
+      where: { sourceProvider: SourceProvider.PLUGGY },
+      select: { sourceExternalId: true, domainMerchantId: true },
+    }),
+    prisma.ignoredTransaction.findMany({ select: { domainTransactionId: true } }),
+  ])
+
+  const accountMap = new Map<string, string>(
+    accounts
+      .filter((a) => a.sourceExternalId !== null)
+      .map((a) => [a.sourceExternalId as string, a.id])
+  )
+  const accountTypeMap = new Map<string, string | null>(
+    pluggyAccounts.map((a) => [a.externalId, a.type])
+  )
+  const categoriesBySlug = new Map<string, string>(
+    categories.map((c) => [c.slug, c.id])
+  )
+  const categoriesBySource = new Map<string, string>(
+    categories
+      .filter((c) => c.sourceProvider === SourceProvider.PLUGGY && c.sourceExternalId)
+      .map((c) => [`${c.sourceProvider}:${c.sourceExternalId as string}`, c.id])
+  )
+  const existingTxByExtId = new Map<string, string>(
+    existingTransactions.map((t) => [t.sourceExternalId, t.id])
+  )
+  const existingSourceByExtId = new Map<string, { id: string; domainTransactionId: string }>(
+    existingTransactionSources.map((s) => [
+      s.sourceExternalId,
+      { id: s.id, domainTransactionId: s.domainTransactionId },
+    ])
+  )
+
+  const merchantsById = new Map<string, MerchantLike>(
+    existingMerchants.map((m) => [m.id, m])
+  )
+  const merchantByCnpj = new Map<string, MerchantLike>(
+    existingMerchants
+      .filter((m): m is MerchantLike & { cnpj: string } => m.cnpj !== null)
+      .map((m) => [m.cnpj, m])
+  )
+  const merchantByNormalized = new Map<string, MerchantLike>(
+    existingMerchants.map((m) => [m.normalizedName, m])
+  )
+  const merchantSourceByExtId = new Map<string, { domainMerchantId: string }>(
+    existingMerchantSources.map((s) => [
+      s.sourceExternalId,
+      { domainMerchantId: s.domainMerchantId },
+    ])
+  )
+
+  const pendingMerchants: {
+    id: string
+    displayName: string
+    normalizedName: string
+    cnpj?: string | null
+  }[] = []
+  const pendingMerchantSources: {
+    id: string
+    domainMerchantId: string
+    sourceProvider: SourceProvider
+    sourceExternalId: string
+    sourceName: string | null
+    sourceCnpj: string | null
+  }[] = []
+
+  const ignoredIds = new Set(ignoredRows.map((r) => r.domainTransactionId))
+
+  type TxCreateData = Prisma.DomainTransactionCreateManyInput
+  type TxUpdateData = Prisma.DomainTransactionUncheckedUpdateInput
+  const creates: TxCreateData[] = []
+  const updates: { id: string; data: TxUpdateData }[] = []
+  const sourceCreates: Prisma.DomainTransactionSourceCreateManyInput[] = []
+  const sourceUpdates: {
+    id: string
+    data: Prisma.DomainTransactionSourceUncheckedUpdateInput
+  }[] = []
 
   for (const record of records) {
-    const account = await prisma.domainAccount.findUnique({
-      where: {
-        sourceProvider_sourceExternalId: {
-          sourceProvider: SourceProvider.PLUGGY,
-          sourceExternalId: record.accountExternalId,
-        },
+    const accountId = record.accountExternalId
+      ? accountMap.get(record.accountExternalId)
+      : undefined
+
+    const merchant = resolveMerchantInMemory(
+      {
+        sourceProvider: SourceProvider.PLUGGY,
+        merchantName: record.merchantName,
+        merchantCnpj: record.merchantCnpj,
       },
-    })
+      {
+        rules: merchantRules,
+        merchantsById,
+        merchantByCnpj,
+        merchantByNormalized,
+        merchantSourceByExtId,
+        pendingMerchants,
+        pendingMerchantSources,
+      }
+    )
 
-    const merchant = await resolveMerchantFromRules({
-      sourceProvider: SourceProvider.PLUGGY,
-      merchantName: record.merchantName,
-      merchantCnpj: record.merchantCnpj,
-    })
+    const rawAmount = record.amount ?? new Prisma.Decimal(0)
+    const pluggyAccountType = accountTypeMap.get(record.accountExternalId)
+    const amount = normalizePluggyTransactionAmount(rawAmount, pluggyAccountType)
+    const direction = amount.greaterThanOrEqualTo(0)
+      ? DomainTransactionDirection.INFLOW
+      : DomainTransactionDirection.OUTFLOW
 
-    const amount = record.amount ?? new Prisma.Decimal(0)
-    const categoryId = await resolveCategoryId({
-      sourceProvider: SourceProvider.PLUGGY,
-      providerCategoryId: record.categoryId,
-      merchantName: record.merchantName,
-      merchantCnpj: record.merchantCnpj,
-      description: record.description,
-      amount,
-    })
-
-    const transaction = await prisma.domainTransaction.upsert({
-      where: {
-        sourceProvider_sourceExternalId: {
-          sourceProvider: SourceProvider.PLUGGY,
-          sourceExternalId: record.externalId,
-        },
-      },
-      update: {
-        occurredAt: record.date ?? record.createdAt,
+    const categoryId = await resolveCategoryId(
+      {
+        sourceProvider: SourceProvider.PLUGGY,
+        providerCategoryId: record.categoryId,
+        merchantName: record.merchantName,
+        merchantCnpj: record.merchantCnpj,
         description: record.description,
-        normalizedDescription:
-          normalizeText(record.description ?? record.descriptionRaw) ?? undefined,
+        amount,
+      },
+      { rules: categoryRules, categoriesBySource, categoriesBySlug }
+    )
+
+    const metadataJson = JSON.stringify({
+      providerCode: record.providerCode,
+      providerId: record.providerId,
+      status: record.status,
+      type: record.type,
+    })
+    const normalizedDescription =
+      normalizeText(record.description ?? record.descriptionRaw) ?? null
+    const occurredAt = record.date ?? record.createdAt
+    const existingTxId = existingTxByExtId.get(record.externalId)
+
+    if (existingTxId) {
+      const updateData: TxUpdateData = {
+        occurredAt,
+        description: record.description,
+        normalizedDescription,
         amount,
         currencyCode: record.currencyCode ?? "BRL",
-        direction:
-          amount.greaterThanOrEqualTo(0)
-            ? DomainTransactionDirection.INFLOW
-            : DomainTransactionDirection.OUTFLOW,
+        direction,
         sourceParentId: record.accountExternalId,
-        domainAccountId: account?.id,
-        domainMerchantId: merchant?.id,
-        providerCategoryId: record.categoryId ?? undefined,
-        merchantName: record.merchantName ?? undefined,
-        merchantCnpj: record.merchantCnpj ?? undefined,
-        metadataJson: JSON.stringify({
-          providerCode: record.providerCode,
-          providerId: record.providerId,
-          status: record.status,
-          type: record.type,
-        }),
-        ...(categoryId ? { domainCategoryId: categoryId } : {}),
-      },
-      create: {
-        occurredAt: record.date ?? record.createdAt,
+        domainAccountId: accountId ?? null,
+        domainMerchantId: merchant?.id ?? null,
+        providerCategoryId: record.categoryId ?? null,
+        merchantName: record.merchantName ?? null,
+        merchantCnpj: record.merchantCnpj ?? null,
+        metadataJson,
+        ignored: ignoredIds.has(existingTxId),
+      }
+      if (categoryId) updateData.domainCategoryId = categoryId
+      updates.push({ id: existingTxId, data: updateData })
+    } else {
+      const newId = randomUUID()
+      creates.push({
+        id: newId,
+        occurredAt,
         description: record.description,
-        normalizedDescription:
-          normalizeText(record.description ?? record.descriptionRaw) ?? undefined,
+        normalizedDescription,
         amount,
         currencyCode: record.currencyCode ?? "BRL",
-        direction:
-          amount.greaterThanOrEqualTo(0)
-            ? DomainTransactionDirection.INFLOW
-            : DomainTransactionDirection.OUTFLOW,
+        direction,
         sourceProvider: SourceProvider.PLUGGY,
         sourceExternalId: record.externalId,
         sourceParentId: record.accountExternalId,
-        domainAccountId: account?.id,
-        domainMerchantId: merchant?.id,
-        domainCategoryId: categoryId ?? undefined,
-        providerCategoryId: record.categoryId ?? undefined,
-        merchantName: record.merchantName ?? undefined,
-        merchantCnpj: record.merchantCnpj ?? undefined,
-        metadataJson: JSON.stringify({
-          providerCode: record.providerCode,
-          providerId: record.providerId,
-          status: record.status,
-          type: record.type,
-        }),
-      },
-    })
+        domainAccountId: accountId ?? null,
+        domainMerchantId: merchant?.id ?? null,
+        domainCategoryId: categoryId ?? null,
+        providerCategoryId: record.categoryId ?? null,
+        merchantName: record.merchantName ?? null,
+        merchantCnpj: record.merchantCnpj ?? null,
+        ignored: false,
+        metadataJson,
+      })
+      existingTxByExtId.set(record.externalId, newId)
+    }
 
-    await prisma.domainTransactionSource.upsert({
-      where: {
-        sourceProvider_sourceExternalId: {
-          sourceProvider: SourceProvider.PLUGGY,
-          sourceExternalId: record.externalId,
+    const txId = existingTxByExtId.get(record.externalId) as string
+    const existingSource = existingSourceByExtId.get(record.externalId)
+    if (existingSource) {
+      sourceUpdates.push({
+        id: existingSource.id,
+        data: {
+          domainTransactionId: txId,
+          sourceParentId: record.accountExternalId,
         },
-      },
-      update: {
-        domainTransactionId: transaction.id,
-        sourceParentId: record.accountExternalId,
-      },
-      create: {
-        domainTransactionId: transaction.id,
+      })
+    } else {
+      sourceCreates.push({
+        id: randomUUID(),
+        domainTransactionId: txId,
         sourceProvider: SourceProvider.PLUGGY,
         sourceExternalId: record.externalId,
         sourceParentId: record.accountExternalId,
-      },
-    })
-
-    projected += 1
+      })
+    }
   }
 
-  const ignored = await prisma.ignoredTransaction.findMany()
-  for (const current of ignored) {
-    await prisma.domainTransaction.updateMany({
-      where: { id: current.domainTransactionId },
-      data: { ignored: true },
-    })
-  }
+  await prisma.$transaction(async (tx) => {
+    if (pendingMerchants.length > 0) {
+      await tx.domainMerchant.createMany({
+        data: pendingMerchants.map((m) => ({
+          id: m.id,
+          displayName: m.displayName,
+          normalizedName: m.normalizedName,
+          cnpj: m.cnpj ?? undefined,
+        })),
+      })
+    }
+    if (pendingMerchantSources.length > 0) {
+      await tx.domainMerchantSource.createMany({
+        data: pendingMerchantSources.map((s) => ({
+          id: s.id,
+          domainMerchantId: s.domainMerchantId,
+          sourceProvider: s.sourceProvider,
+          sourceExternalId: s.sourceExternalId,
+          sourceName: s.sourceName ?? undefined,
+          sourceCnpj: s.sourceCnpj ?? undefined,
+        })),
+      })
+    }
+
+    if (creates.length > 0) {
+      await tx.domainTransaction.createMany({ data: creates })
+    }
+    for (const { id, data } of updates) {
+      await tx.domainTransaction.update({ where: { id }, data })
+    }
+
+    if (sourceCreates.length > 0) {
+      await tx.domainTransactionSource.createMany({ data: sourceCreates })
+    }
+    for (const { id, data } of sourceUpdates) {
+      await tx.domainTransactionSource.update({ where: { id }, data })
+    }
+
+    if (ignoredIds.size > 0) {
+      await tx.domainTransaction.updateMany({
+        where: { id: { in: Array.from(ignoredIds) } },
+        data: { ignored: true },
+      })
+    }
+  })
+
+  const projected = records.length
 
   await markDomainSyncState({
     stateKey: "domain:pluggy:transactions",
@@ -566,54 +879,86 @@ async function projectPluggyTransactions() {
   return projected
 }
 
+function inferBillStatus(dueDate: Date | null, totalAmount: Prisma.Decimal | null): string {
+  if (!dueDate) return "OPEN"
+  const now = new Date()
+  const total = totalAmount ? totalAmount.toNumber() : 0
+
+  // Zero or negative amount bills are considered closed
+  if (total <= 0) return "CLOSED"
+
+  // Past due date
+  if (dueDate < now) {
+    // If due date was more than 30 days ago, likely paid/closed
+    const daysPast = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
+    if (daysPast > 30) return "CLOSED"
+    return "OVERDUE"
+  }
+
+  // Due within 7 days
+  const daysUntil = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+  if (daysUntil <= 0) return "CLOSED"
+
+  return "OPEN"
+}
+
 async function projectPluggyBills() {
   const records = await prisma.pluggyBillRecord.findMany()
+
+  // Pre-fetch accounts
+  const accounts = await prisma.domainAccount.findMany({
+    where: { sourceProvider: SourceProvider.PLUGGY },
+  })
+  const accountMap = new Map<string, string>(
+    accounts
+      .filter((a) => a.sourceExternalId !== null)
+      .map((a) => [a.sourceExternalId as string, a.id])
+  )
+
   let projected = 0
 
-  for (const record of records) {
-    const account = record.accountExternalId
-      ? await prisma.domainAccount.findUnique({
-          where: {
-            sourceProvider_sourceExternalId: {
-              sourceProvider: SourceProvider.PLUGGY,
-              sourceExternalId: record.accountExternalId,
-            },
-          },
-        })
-      : null
+  await prisma.$transaction(async (tx) => {
+    for (const record of records) {
+      const accountId = record.accountExternalId
+        ? accountMap.get(record.accountExternalId)
+        : undefined
 
-    await prisma.domainBill.upsert({
-      where: {
-        sourceProvider_sourceExternalId: {
+      const status = inferBillStatus(record.dueDate, record.totalAmount)
+
+      await tx.domainBill.upsert({
+        where: {
+          sourceProvider_sourceExternalId: {
+            sourceProvider: SourceProvider.PLUGGY,
+            sourceExternalId: record.externalId,
+          },
+        },
+        update: {
+          sourceParentId: record.accountExternalId ?? undefined,
+          domainAccountId: accountId,
+          dueDate: record.dueDate ?? undefined,
+          totalAmount: record.totalAmount ?? undefined,
+          minimumPaymentAmount: record.minimumPaymentAmount ?? undefined,
+          currencyCode: record.totalAmountCurrencyCode ?? undefined,
+          allowsInstallments: record.allowsInstallments ?? undefined,
+          status,
+        },
+        create: {
           sourceProvider: SourceProvider.PLUGGY,
           sourceExternalId: record.externalId,
+          sourceParentId: record.accountExternalId ?? undefined,
+          domainAccountId: accountId,
+          dueDate: record.dueDate ?? undefined,
+          totalAmount: record.totalAmount ?? undefined,
+          minimumPaymentAmount: record.minimumPaymentAmount ?? undefined,
+          currencyCode: record.totalAmountCurrencyCode ?? undefined,
+          allowsInstallments: record.allowsInstallments ?? undefined,
+          status,
         },
-      },
-      update: {
-        sourceParentId: record.accountExternalId ?? undefined,
-        domainAccountId: account?.id,
-        dueDate: record.dueDate ?? undefined,
-        totalAmount: record.totalAmount ?? undefined,
-        minimumPaymentAmount: record.minimumPaymentAmount ?? undefined,
-        currencyCode: record.totalAmountCurrencyCode ?? undefined,
-        allowsInstallments: record.allowsInstallments ?? undefined,
-      },
-      create: {
-        sourceProvider: SourceProvider.PLUGGY,
-        sourceExternalId: record.externalId,
-        sourceParentId: record.accountExternalId ?? undefined,
-        domainAccountId: account?.id,
-        dueDate: record.dueDate ?? undefined,
-        totalAmount: record.totalAmount ?? undefined,
-        minimumPaymentAmount: record.minimumPaymentAmount ?? undefined,
-        currencyCode: record.totalAmountCurrencyCode ?? undefined,
-        allowsInstallments: record.allowsInstallments ?? undefined,
-        status: "OPEN",
-      },
-    })
+      })
 
-    projected += 1
-  }
+      projected += 1
+    }
+  })
 
   await markDomainSyncState({
     stateKey: "domain:pluggy:bills",
@@ -628,46 +973,48 @@ async function projectPluggyInvestments() {
   const records = await prisma.pluggyInvestmentRecord.findMany()
   let projected = 0
 
-  for (const record of records) {
-    await prisma.domainInvestment.upsert({
-      where: {
-        sourceProvider_sourceExternalId: {
+  await prisma.$transaction(async (tx) => {
+    for (const record of records) {
+      await tx.domainInvestment.upsert({
+        where: {
+          sourceProvider_sourceExternalId: {
+            sourceProvider: SourceProvider.PLUGGY,
+            sourceExternalId: record.externalId,
+          },
+        },
+        update: {
+          name: record.name ?? record.externalId,
+          type: record.type ?? undefined,
+          subtype: record.subtype ?? undefined,
+          balance: record.balance ?? undefined,
+          currencyCode: record.currencyCode ?? undefined,
+          status: record.status ?? undefined,
+          sourceParentId: record.itemExternalId,
+          metadataJson: JSON.stringify({
+            amountOriginal: record.amountOriginal,
+            amountProfit: record.amountProfit,
+          }),
+        },
+        create: {
+          name: record.name ?? record.externalId,
+          type: record.type ?? undefined,
+          subtype: record.subtype ?? undefined,
+          balance: record.balance ?? undefined,
+          currencyCode: record.currencyCode ?? undefined,
+          status: record.status ?? undefined,
           sourceProvider: SourceProvider.PLUGGY,
           sourceExternalId: record.externalId,
+          sourceParentId: record.itemExternalId,
+          metadataJson: JSON.stringify({
+            amountOriginal: record.amountOriginal,
+            amountProfit: record.amountProfit,
+          }),
         },
-      },
-      update: {
-        name: record.name ?? record.externalId,
-        type: record.type ?? undefined,
-        subtype: record.subtype ?? undefined,
-        balance: record.balance ?? undefined,
-        currencyCode: record.currencyCode ?? undefined,
-        status: record.status ?? undefined,
-        sourceParentId: record.itemExternalId,
-        metadataJson: JSON.stringify({
-          amountOriginal: record.amountOriginal,
-          amountProfit: record.amountProfit,
-        }),
-      },
-      create: {
-        name: record.name ?? record.externalId,
-        type: record.type ?? undefined,
-        subtype: record.subtype ?? undefined,
-        balance: record.balance ?? undefined,
-        currencyCode: record.currencyCode ?? undefined,
-        status: record.status ?? undefined,
-        sourceProvider: SourceProvider.PLUGGY,
-        sourceExternalId: record.externalId,
-        sourceParentId: record.itemExternalId,
-        metadataJson: JSON.stringify({
-          amountOriginal: record.amountOriginal,
-          amountProfit: record.amountProfit,
-        }),
-      },
-    })
+      })
 
-    projected += 1
-  }
+      projected += 1
+    }
+  })
 
   await markDomainSyncState({
     stateKey: "domain:pluggy:investments",
@@ -700,70 +1047,72 @@ export async function projectBinanceReadModels() {
 
   let projected = 0
 
-  for (const asset of latestBalances) {
-    const balance = await prisma.binanceAssetBalanceSnapshot.findFirst({
-      where: { asset: asset.asset },
-      orderBy: { fetchedAt: "desc" },
-    })
-    if (!balance) continue
+  await prisma.$transaction(async (tx) => {
+    for (const asset of latestBalances) {
+      const balance = await tx.binanceAssetBalanceSnapshot.findFirst({
+        where: { asset: asset.asset },
+        orderBy: { fetchedAt: "desc" },
+      })
+      if (!balance) continue
 
-    const price = await prisma.binanceAssetPriceSnapshot.findFirst({
-      where: { asset: asset.asset },
-      orderBy: { fetchedAt: "desc" },
-    })
+      const price = await tx.binanceAssetPriceSnapshot.findFirst({
+        where: { asset: asset.asset },
+        orderBy: { fetchedAt: "desc" },
+      })
 
-    const aggregate = tradeAggregates.get(asset.asset)
-    const avgCost = aggregate?.averageCost ?? null
-    const currentValue = price?.price
-      ? price.price.mul(balance.total)
-      : null
-    const currentCost = avgCost ? avgCost.mul(balance.total) : null
-    const pnl =
-      currentValue && currentCost ? currentValue.minus(currentCost) : null
+      const aggregate = tradeAggregates.get(asset.asset)
+      const avgCost = aggregate?.averageCost ?? null
+      const currentValue = price?.price
+        ? price.price.mul(balance.total)
+        : null
+      const currentCost = avgCost ? avgCost.mul(balance.total) : null
+      const pnl =
+        currentValue && currentCost ? currentValue.minus(currentCost) : null
 
-    await prisma.domainCryptoAsset.upsert({
-      where: { asset: asset.asset },
-      update: {
-        quantity: balance.total,
-        price: price?.price ?? undefined,
-        value: currentValue ?? undefined,
-        quoteAsset: price?.quoteAsset ?? undefined,
-        costBasis: avgCost ?? undefined,
-        pnlUnrealized: pnl ?? undefined,
-        metadataJson: JSON.stringify({
-          balanceSnapshotId: balance.id,
-          priceSnapshotId: price?.id,
-          totalCostBasis: currentCost,
-          realizedPnl: aggregate?.realizedPnl ?? null,
-          lastTradeAt: aggregate?.lastTradeAt ?? null,
-          firstTradeAt: aggregate?.firstTradeAt ?? null,
-          tradeCount: aggregate?.tradeCount ?? 0,
-        }),
-      },
-      create: {
-        asset: asset.asset,
-        quantity: balance.total,
-        price: price?.price ?? undefined,
-        value: currentValue ?? undefined,
-        quoteAsset: price?.quoteAsset ?? undefined,
-        sourceProvider: SourceProvider.BINANCE,
-        sourceExternalId: asset.asset,
-        costBasis: avgCost ?? undefined,
-        pnlUnrealized: pnl ?? undefined,
-        metadataJson: JSON.stringify({
-          balanceSnapshotId: balance.id,
-          priceSnapshotId: price?.id,
-          totalCostBasis: currentCost,
-          realizedPnl: aggregate?.realizedPnl ?? null,
-          lastTradeAt: aggregate?.lastTradeAt ?? null,
-          firstTradeAt: aggregate?.firstTradeAt ?? null,
-          tradeCount: aggregate?.tradeCount ?? 0,
-        }),
-      },
-    })
+      await tx.domainCryptoAsset.upsert({
+        where: { asset: asset.asset },
+        update: {
+          quantity: balance.total,
+          price: price?.price ?? undefined,
+          value: currentValue ?? undefined,
+          quoteAsset: price?.quoteAsset ?? undefined,
+          costBasis: avgCost ?? undefined,
+          pnlUnrealized: pnl ?? undefined,
+          metadataJson: JSON.stringify({
+            balanceSnapshotId: balance.id,
+            priceSnapshotId: price?.id,
+            totalCostBasis: currentCost,
+            realizedPnl: aggregate?.realizedPnl ?? null,
+            lastTradeAt: aggregate?.lastTradeAt ?? null,
+            firstTradeAt: aggregate?.firstTradeAt ?? null,
+            tradeCount: aggregate?.tradeCount ?? 0,
+          }),
+        },
+        create: {
+          asset: asset.asset,
+          quantity: balance.total,
+          price: price?.price ?? undefined,
+          value: currentValue ?? undefined,
+          quoteAsset: price?.quoteAsset ?? undefined,
+          sourceProvider: SourceProvider.BINANCE,
+          sourceExternalId: asset.asset,
+          costBasis: avgCost ?? undefined,
+          pnlUnrealized: pnl ?? undefined,
+          metadataJson: JSON.stringify({
+            balanceSnapshotId: balance.id,
+            priceSnapshotId: price?.id,
+            totalCostBasis: currentCost,
+            realizedPnl: aggregate?.realizedPnl ?? null,
+            lastTradeAt: aggregate?.lastTradeAt ?? null,
+            firstTradeAt: aggregate?.firstTradeAt ?? null,
+            tradeCount: aggregate?.tradeCount ?? 0,
+          }),
+        },
+      })
 
-    projected += 1
-  }
+      projected += 1
+    }
+  })
 
   await markDomainSyncState({
     stateKey: "domain:binance:crypto-assets",

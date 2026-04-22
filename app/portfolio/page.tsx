@@ -1,399 +1,407 @@
 "use client"
 
-import { useState } from "react"
+import type { ComponentType } from "react"
 import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-} from "recharts"
-import { TrendingUp, TrendingDown } from "lucide-react"
-import { useApi } from "@/hooks/use-api"
-import { formatCurrency, formatPercent } from "@/lib/format"
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "@/components/ui/card"
+  Bitcoin,
+  CreditCard,
+  Landmark,
+  PiggyBank,
+  Wallet,
+} from "lucide-react"
+
+import { PageError } from "@/components/page-error"
+import { PageHeader } from "@/components/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
-import {
-  Table,
-  TableHeader,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
-} from "@/components/ui/table"
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart"
+import { useApi } from "@/hooks/use-api"
+import { amountToneClass, formatCurrency } from "@/lib/format"
+import { cn } from "@/lib/utils"
 
-interface AssetItem {
+interface PortfolioItem {
+  name: string
+  type: string
+  value: number
+  sharePercent: number
+}
+
+interface LiabilityItem {
   name: string
   type: string
   value: number
   percentage: number
 }
 
-interface PortfolioGroup {
-  total: number
-  items: AssetItem[]
-}
-
-interface HistoryPoint {
-  date: string
+interface PortfolioResponse {
   netWorth: number
-  assets: number
-  liabilities: number
-}
-
-interface PortfolioData {
-  assets: PortfolioGroup
-  liabilities: PortfolioGroup
-  netWorth: number
-  history: HistoryPoint[]
-  recurring: {
-    monthlyIncome: number
-    monthlyExpenses: number
+  liabilities: {
+    total: number
+    items: LiabilityItem[]
+  }
+  breakdown: {
+    fiat: {
+      liquid: number
+      investments: number
+      total: number
+      netWorth: number
+      items: PortfolioItem[]
+    }
+    crypto: {
+      total: number
+      netWorth: number
+      items: PortfolioItem[]
+      usdBrlRate: number
+    }
   }
 }
 
-const periods = [
-  { label: "1M", value: "1M" },
-  { label: "3M", value: "3M" },
-  { label: "YTD", value: "YTD" },
-  { label: "1Y", value: "1Y" },
-  { label: "ALL", value: "ALL" },
+const compositionPalette = [
+  "bg-sky-500",
+  "bg-emerald-500",
+  "bg-amber-500",
+  "bg-rose-500",
+  "bg-violet-500",
+  "bg-cyan-500",
 ]
 
-const chartConfig: ChartConfig = {
-  netWorth: {
-    label: "Patrimônio Líquido",
-    color: "var(--chart-1)",
-  },
+function LoadingState() {
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="space-y-2">
+        <Skeleton className="h-3 w-24" />
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-4 w-80" />
+      </div>
+
+      <Skeleton className="h-40 rounded-xl" />
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Skeleton className="h-[420px] rounded-xl" />
+        <Skeleton className="h-[420px] rounded-xl" />
+      </div>
+
+      <Skeleton className="h-[220px] rounded-xl" />
+    </div>
+  )
 }
 
-const typeColors: Record<string, string> = {
-  checking: "bg-blue-500",
-  savings: "bg-emerald-500",
-  investment: "bg-violet-500",
-  crypto: "bg-amber-500",
-  property: "bg-rose-500",
-  credit: "bg-red-500",
-  loan: "bg-orange-500",
-  other: "bg-gray-500",
+function SummaryStat({
+  label,
+  value,
+  tone = "neutral",
+  icon: Icon,
+}: {
+  label: string
+  value: string
+  tone?: "neutral" | "positive" | "negative" | "info"
+  icon: ComponentType<{ className?: string }>
+}) {
+  const toneClass = {
+    neutral: "text-foreground",
+    positive: "text-emerald-500 dark:text-emerald-400",
+    negative: "text-rose-500 dark:text-rose-400",
+    info: "text-sky-500 dark:text-sky-400",
+  }[tone]
+
+  return (
+    <div className="surface flex items-center justify-between gap-3 p-4">
+      <div className="min-w-0">
+        <p className="section-eyebrow">{label}</p>
+        <p className={cn("mt-1 text-lg font-semibold tracking-tight tabular-nums", toneClass)}>
+          {value}
+        </p>
+      </div>
+      <Icon className="size-4 shrink-0 text-muted-foreground" />
+    </div>
+  )
 }
 
-function getTypeColor(type: string): string {
-  return typeColors[type.toLowerCase()] ?? typeColors.other
+function CompositionBar({ items }: { items: PortfolioItem[] }) {
+  const visible = items.slice(0, 6)
+
+  if (visible.length === 0) {
+    return <div className="h-2 w-full rounded-full bg-muted" />
+  }
+
+  return (
+    <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
+      {visible.map((item, index) => (
+        <div
+          key={item.name}
+          className={compositionPalette[index % compositionPalette.length]}
+          style={{ width: `${Math.max(item.sharePercent, 4)}%` }}
+          title={`${item.name}: ${item.sharePercent.toFixed(1)}%`}
+        />
+      ))}
+    </div>
+  )
+}
+
+function PortfolioColumn({
+  eyebrow,
+  title,
+  subtitle,
+  total,
+  items,
+  stats,
+}: {
+  eyebrow: string
+  title: string
+  subtitle: string
+  total: number
+  items: PortfolioItem[]
+  stats: React.ReactNode
+}) {
+  return (
+    <section className="surface flex flex-col gap-5 p-5">
+      <div className="flex flex-col gap-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="section-eyebrow">{eyebrow}</p>
+            <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+          </div>
+          <Badge variant="outline" className="rounded-full px-3">
+            {items.length} {items.length === 1 ? "item" : "itens"}
+          </Badge>
+        </div>
+
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="section-eyebrow">Total</p>
+            <p className="mt-1 text-[28px] font-semibold tracking-tight tabular-nums">
+              {formatCurrency(total)}
+            </p>
+          </div>
+          <div className="grid gap-2 text-sm text-muted-foreground">{stats}</div>
+        </div>
+
+        <CompositionBar items={items} />
+      </div>
+
+      <div className="space-y-3">
+        {items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nenhum item encontrado.</p>
+        ) : (
+          items.map((item, index) => (
+            <div key={`${item.type}:${item.name}`} className="flex flex-col gap-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{item.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {item.sharePercent.toFixed(1)}% da coluna
+                  </p>
+                </div>
+                <p className="shrink-0 text-sm font-semibold tabular-nums">
+                  {formatCurrency(item.value)}
+                </p>
+              </div>
+
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn(
+                    "h-full rounded-full",
+                    compositionPalette[index % compositionPalette.length]
+                  )}
+                  style={{ width: `${Math.max(0, Math.min(100, item.sharePercent))}%` }}
+                />
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  )
+}
+
+function getLiabilityLabel(type: string) {
+  if (type === "loan") return "Empréstimo"
+  if (type === "credit") return "Cartão / crédito"
+  return "Passivo"
 }
 
 export default function PortfolioPage() {
-  const [period, setPeriod] = useState("YTD")
-  const [activeTab, setActiveTab] = useState<"assets" | "liabilities">("assets")
-  const [expandedRow, setExpandedRow] = useState<string | null>(null)
+  const portfolio = useApi<PortfolioResponse>("/api/portfolio")
 
-  const { data, loading } = useApi<PortfolioData>("/api/portfolio", {
-    period,
-  })
+  if (portfolio.loading) {
+    return <LoadingState />
+  }
 
-  const filteredHistory = (() => {
-    if (!data?.history) return []
-    const now = new Date()
-    let cutoff: Date
-
-    switch (period) {
-      case "1M":
-        cutoff = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate())
-        break
-      case "3M":
-        cutoff = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate())
-        break
-      case "YTD":
-        cutoff = new Date(now.getFullYear(), 0, 1)
-        break
-      case "1Y":
-        cutoff = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate())
-        break
-      default:
-        return data.history
-    }
-
-    return data.history.filter((h) => new Date(h.date) >= cutoff)
-  })()
-
-  if (loading) {
+  if (portfolio.error || !portfolio.data) {
     return (
-      <div className="flex flex-col gap-6 p-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Skeleton className="h-40" />
-          <Skeleton className="h-40" />
-        </div>
-        <Skeleton className="h-72" />
-        <Skeleton className="h-64" />
-      </div>
+      <PageError
+        message={portfolio.error ?? "Erro ao carregar portfólio"}
+        refetch={portfolio.refetch}
+      />
     )
   }
 
-  const currentGroup =
-    activeTab === "assets" ? data?.assets : data?.liabilities
+  const { breakdown, liabilities, netWorth } = portfolio.data
 
   return (
-    <div className="flex flex-col gap-6 p-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Patrimônio</h1>
-        <p className="text-muted-foreground">
-          Visão geral de ativos, dívidas e patrimônio líquido
-        </p>
-      </div>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        eyebrow="Portfólio"
+        title="Patrimônio consolidado"
+        description="Visão separada entre patrimônio fiat e carteira cripto, com passivos destacados fora das posições."
+      />
 
-      {/* Top Cards */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* Net Worth Card */}
-        <Card>
-          <CardHeader>
-            <CardDescription>Patrimônio Líquido</CardDescription>
-            <CardTitle
-              className={`text-3xl ${
-                (data?.netWorth ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"
-              }`}
-            >
-              {formatCurrency(data?.netWorth ?? 0)}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="size-4 text-emerald-600" />
-                  <span className="text-sm text-muted-foreground">Ativos</span>
-                </div>
-                <span className="text-sm font-medium text-emerald-600">
-                  {formatCurrency(data?.assets.total ?? 0)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <TrendingDown className="size-4 text-red-500" />
-                  <span className="text-sm text-muted-foreground">Dívidas</span>
-                </div>
-                <span className="text-sm font-medium text-red-500">
-                  {formatCurrency(data?.liabilities.total ?? 0)}
-                </span>
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>Receita mensal: {formatCurrency(data?.recurring.monthlyIncome ?? 0)}</span>
-                <span>Despesa mensal: {formatCurrency(data?.recurring.monthlyExpenses ?? 0)}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* History Chart Card */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Histórico</CardTitle>
-              <div className="flex items-center gap-1">
-                {periods.map((p) => (
-                  <Button
-                    key={p.value}
-                    variant={period === p.value ? "default" : "outline"}
-                    size="xs"
-                    onClick={() => setPeriod(p.value)}
-                  >
-                    {p.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer config={chartConfig} className="h-40 w-full">
-              <AreaChart data={filteredHistory} accessibilityLayer>
-                <defs>
-                  <linearGradient id="netWorthGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop
-                      offset="0%"
-                      stopColor="var(--color-netWorth)"
-                      stopOpacity={0.3}
-                    />
-                    <stop
-                      offset="100%"
-                      stopColor="var(--color-netWorth)"
-                      stopOpacity={0.05}
-                    />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid vertical={false} />
-                <XAxis
-                  dataKey="date"
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(v) => {
-                    const d = new Date(v)
-                    return `${d.getDate()}/${d.getMonth() + 1}`
-                  }}
-                />
-                <YAxis
-                  tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value) => (
-                        <span>{formatCurrency(Number(value))}</span>
-                      )}
-                    />
-                  }
-                />
-                <Area
-                  dataKey="netWorth"
-                  type="monotone"
-                  fill="url(#netWorthGrad)"
-                  stroke="var(--color-netWorth)"
-                  strokeWidth={2}
-                />
-              </AreaChart>
-            </ChartContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Tabs: Ativos / Dividas */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Button
-              variant={activeTab === "assets" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setActiveTab("assets")}
-            >
-              Ativos
-            </Button>
-            <Button
-              variant={activeTab === "liabilities" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setActiveTab("liabilities")}
-            >
-              Dívidas
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {/* Allocation bar */}
-          {currentGroup && currentGroup.items.length > 0 && (
-            <div className="flex h-3 w-full overflow-hidden rounded-full">
-              {currentGroup.items.map((item) => (
-                <div
-                  key={item.name}
-                  className={`${getTypeColor(item.type)} transition-all`}
-                  style={{ width: `${item.percentage}%` }}
-                  title={`${item.name}: ${formatPercent(item.percentage)}`}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Legend */}
-          {currentGroup && currentGroup.items.length > 0 && (
-            <div className="flex flex-wrap gap-3">
-              {currentGroup.items.map((item) => (
-                <div key={item.name} className="flex items-center gap-1.5">
-                  <div
-                    className={`size-2.5 rounded-full ${getTypeColor(item.type)}`}
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    {item.name}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Table */}
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead className="text-right">Peso (%)</TableHead>
-                <TableHead className="text-right">Valor</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(!currentGroup || currentGroup.items.length === 0) && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground">
-                    Nenhum item encontrado.
-                  </TableCell>
-                </TableRow>
+      <section className="surface flex flex-col gap-5 p-5 md:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0">
+            <p className="section-eyebrow">Patrimônio líquido total</p>
+            <p
+              className={cn(
+                "mt-1 text-4xl font-semibold tracking-tight tabular-nums md:text-[40px]",
+                amountToneClass(netWorth, { neutralOnZero: true })
               )}
-              {currentGroup?.items.map((item) => (
-                <TableRow
-                  key={item.name}
-                  className="cursor-pointer"
-                  onClick={() =>
-                    setExpandedRow(
-                      expandedRow === item.name ? null : item.name
-                    )
-                  }
-                >
-                  <TableCell className="font-medium">{item.name}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className="text-xs">
-                      {item.type}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {formatPercent(item.percentage)}
-                  </TableCell>
-                  <TableCell
-                    className={`text-right font-medium ${
-                      activeTab === "liabilities" ? "text-red-500" : ""
-                    }`}
-                  >
-                    {formatCurrency(item.value)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+            >
+              {formatCurrency(netWorth)}
+            </p>
+            <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+              O topo já soma patrimônio fiat e cripto, mas a composição abaixo mantém os dois universos separados.
+            </p>
+          </div>
 
-          {/* Total */}
-          {currentGroup && currentGroup.items.length > 0 && (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <SummaryStat
+              label="Fiat total"
+              value={formatCurrency(breakdown.fiat.total)}
+              tone="info"
+              icon={Landmark}
+            />
+            <SummaryStat
+              label="Cripto total"
+              value={formatCurrency(breakdown.crypto.total)}
+              tone="neutral"
+              icon={Bitcoin}
+            />
+            <SummaryStat
+              label="Passivos"
+              value={formatCurrency(liabilities.total)}
+              tone="negative"
+              icon={CreditCard}
+            />
+            <SummaryStat
+              label="USD/BRL"
+              value={breakdown.crypto.usdBrlRate.toFixed(2)}
+              tone="neutral"
+              icon={Wallet}
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <PortfolioColumn
+          eyebrow="Fiat"
+          title="Caixa + investimentos"
+          subtitle="Saldo bancário e aplicações tradicionais, sem misturar exposição cripto."
+          total={breakdown.fiat.total}
+          items={breakdown.fiat.items}
+          stats={
             <>
-              <Separator />
-              <div className="flex items-center justify-between px-2">
-                <span className="text-sm font-semibold">Total</span>
+              <div className="flex items-center justify-between gap-4">
+                <span>Liquidez</span>
+                <span className="font-medium tabular-nums">
+                  {formatCurrency(breakdown.fiat.liquid)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span>Investimentos</span>
+                <span className="font-medium tabular-nums">
+                  {formatCurrency(breakdown.fiat.investments)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span>Patrimônio líquido fiat</span>
                 <span
-                  className={`text-sm font-semibold ${
-                    activeTab === "liabilities"
-                      ? "text-red-500"
-                      : "text-emerald-600"
-                  }`}
+                  className={cn(
+                    "font-medium tabular-nums",
+                    amountToneClass(breakdown.fiat.netWorth, {
+                      neutralOnZero: true,
+                    })
+                  )}
                 >
-                  {formatCurrency(currentGroup.total)}
+                  {formatCurrency(breakdown.fiat.netWorth)}
                 </span>
               </div>
             </>
-          )}
-        </CardContent>
-      </Card>
+          }
+        />
+
+        <PortfolioColumn
+          eyebrow="Cripto"
+          title="Carteira digital"
+          subtitle={`Valores convertidos para BRL com USD/BRL ${breakdown.crypto.usdBrlRate.toFixed(2)}.`}
+          total={breakdown.crypto.total}
+          items={breakdown.crypto.items}
+          stats={
+            <>
+              <div className="flex items-center justify-between gap-4">
+                <span>Exposição líquida</span>
+                <span className="font-medium tabular-nums">
+                  {formatCurrency(breakdown.crypto.netWorth)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span>Ativos acompanhados</span>
+                <span className="font-medium tabular-nums">
+                  {breakdown.crypto.items.length}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span>Alocação média</span>
+                <span className="font-medium tabular-nums">
+                  {breakdown.crypto.items.length > 0
+                    ? `${(100 / breakdown.crypto.items.length).toFixed(1)}%`
+                    : "0%"}
+                </span>
+              </div>
+            </>
+          }
+        />
+      </section>
+
+      <section className="surface flex flex-col gap-4 p-5">
+        <div>
+          <p className="section-eyebrow">Passivos</p>
+          <h2 className="text-lg font-semibold tracking-tight">
+            Cartões e empréstimos
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Dívidas abertas separadas visualmente do patrimônio para não inflarem a leitura das posições.
+          </p>
+        </div>
+
+        {liabilities.items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nenhum passivo em aberto.</p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {liabilities.items.map((item) => (
+              <div
+                key={`${item.type}:${item.name}`}
+                className="rounded-xl border border-border/60 bg-background/70 p-4"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{item.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {getLiabilityLabel(item.type)}
+                    </p>
+                  </div>
+                  <CreditCard className="size-4 shrink-0 text-muted-foreground" />
+                </div>
+                <p className="mt-3 text-lg font-semibold tabular-nums text-rose-500 dark:text-rose-400">
+                  {formatCurrency(item.value)}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {item.percentage.toFixed(1)}% do total de passivos
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   )
 }

@@ -1,9 +1,8 @@
 "use client"
 
-import { useState, useMemo, useCallback } from "react"
+import { Suspense, useState, useMemo } from "react"
+import Link from "next/link"
 import {
-  ChevronLeft,
-  ChevronRight,
   Plus,
   Pencil,
   Trash2,
@@ -22,7 +21,6 @@ import {
 } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import {
@@ -54,47 +52,30 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart"
 import { useApi } from "@/hooks/use-api"
+import { usePeriod } from "@/hooks/use-period"
+import { PageHeader } from "@/components/page-header"
+import { PeriodSwitcher } from "@/components/period-switcher"
 import { formatCurrency, formatPercent } from "@/lib/format"
+import { getCategoryEmoji, getCategoryColor } from "@/lib/category-emoji"
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface Category {
-  id: string
-  name: string
-  parentId: string | null
-}
-
-interface CategoriesResponse {
-  results: Category[]
-}
-
 interface SpendingCategory {
-  category: string
+  name: string
   categoryId: string
-  total: number
-  percentage: number
-  transactionCount: number
+  amount: number
+  sharePercent: number
+  count: number
 }
 
 interface SpendingResponse {
   summary: {
     total: number
+    appliedFilters?: { from?: string; to?: string }
   }
   results: SpendingCategory[]
-}
-
-interface TagItem {
-  id: string
-  name: string
-  color: string
-  createdAt: string
-  updatedAt: string
-}
-
-interface TagsResponse {
-  results: TagItem[]
 }
 
 interface DomainCategory {
@@ -107,6 +88,18 @@ interface DomainCategory {
 
 interface DomainCategoriesResponse {
   results: DomainCategory[]
+}
+
+interface TagItem {
+  id: string
+  name: string
+  color: string
+  createdAt: string
+  updatedAt: string
+}
+
+interface TagsResponse {
+  results: TagItem[]
 }
 
 interface RuleCategory {
@@ -138,24 +131,8 @@ interface AutomationsResponse {
 
 type TabKey = "categorias" | "tags" | "automacoes"
 
-const COLORS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-]
-
-const HSL_COLORS = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
-]
-
 const MATCH_FIELD_LABELS: Record<string, string> = {
-  description: "Descri\u00e7\u00e3o",
+  description: "Descrição",
   merchantName: "Nome do Comerciante",
   merchantCnpj: "CNPJ",
   providerCategoryId: "Categoria do Provider",
@@ -163,7 +140,7 @@ const MATCH_FIELD_LABELS: Record<string, string> = {
 
 const MATCH_TYPE_LABELS: Record<string, string> = {
   EXACT: "Exato",
-  CONTAINS: "Cont\u00e9m",
+  CONTAINS: "Contém",
   PREFIX: "Prefixo",
   REGEX: "Regex",
 }
@@ -172,8 +149,12 @@ const MATCH_TYPE_LABELS: Record<string, string> = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function getMonthParam(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
+function getMonthRange(date: Date): { from: string; to: string } {
+  const year = date.getFullYear()
+  const month = date.getMonth()
+  const from = new Date(year, month, 1).toISOString().split("T")[0]
+  const to = new Date(year, month + 1, 0).toISOString().split("T")[0]
+  return { from, to }
 }
 
 function formatMonthLabel(date: Date): string {
@@ -186,35 +167,40 @@ function formatMonthLabel(date: Date): string {
 
 function LoadingSkeleton() {
   return (
-    <div className="flex flex-col gap-6 p-6">
-      <div className="space-y-2">
-        <Skeleton className="h-8 w-40" />
-        <Skeleton className="h-4 w-64" />
+    <div className="flex flex-col gap-6">
+      <Skeleton className="mx-auto h-[200px] w-[200px] rounded-full" />
+      <div className="space-y-3">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <Skeleton key={i} className="h-16 w-full rounded-xl" />
+        ))}
       </div>
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-4 w-32" />
-          </CardHeader>
-          <CardContent>
-            <Skeleton className="mx-auto h-[200px] w-[200px] rounded-full" />
-          </CardContent>
-        </Card>
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <Skeleton className="h-4 w-48" />
-          </CardHeader>
-          <CardContent>
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="flex items-center gap-4 py-3">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-2 flex-1" />
-                <Skeleton className="h-4 w-20" />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Category Badge - colored circle with emoji
+// ---------------------------------------------------------------------------
+
+function CategoryBadge({
+  name,
+  index,
+  size = "md",
+}: {
+  name: string
+  index?: number
+  size?: "sm" | "md"
+}) {
+  const emoji = getCategoryEmoji(name)
+  const color = getCategoryColor(name, index)
+  const sizeClasses = size === "sm" ? "size-8 text-sm" : "size-10 text-lg"
+
+  return (
+    <div
+      className={`${sizeClasses} flex shrink-0 items-center justify-center rounded-full`}
+      style={{ backgroundColor: `${color}20` }}
+    >
+      <span>{emoji}</span>
     </div>
   )
 }
@@ -282,7 +268,7 @@ function TagsTab() {
         <div>
           <h2 className="text-xl font-semibold">Tags</h2>
           <p className="text-sm text-muted-foreground">
-            Gerencie tags para organizar suas transa\u00e7\u00f5es.
+            Gerencie tags para organizar suas transações.
           </p>
         </div>
         <Button size="sm" onClick={openCreate}>
@@ -343,7 +329,7 @@ function TagsTab() {
             <DialogDescription>
               {editingTag
                 ? "Atualize o nome e a cor da tag."
-                : "Crie uma nova tag para organizar suas transa\u00e7\u00f5es."}
+                : "Crie uma nova tag para organizar suas transações."}
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4">
@@ -478,14 +464,14 @@ function AutomacoesTab() {
     <>
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold">Automa\u00e7\u00f5es</h2>
+          <h2 className="text-xl font-semibold">Automações</h2>
           <p className="text-sm text-muted-foreground">
-            Regras autom\u00e1ticas para categorizar transa\u00e7\u00f5es.
+            Regras automáticas para categorizar transações.
           </p>
         </div>
         <Button size="sm" onClick={openCreate}>
           <Plus className="mr-1 size-4" />
-          Nova Automa\u00e7\u00e3o
+          Nova Automação
         </Button>
       </div>
 
@@ -493,7 +479,7 @@ function AutomacoesTab() {
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Zap className="mb-3 size-10 text-muted-foreground" />
-            <p className="text-muted-foreground">Nenhuma automa\u00e7\u00e3o criada</p>
+            <p className="text-muted-foreground">Nenhuma automação criada</p>
           </CardContent>
         </Card>
       ) : (
@@ -508,7 +494,7 @@ function AutomacoesTab() {
                   <TableHead>Categoria</TableHead>
                   <TableHead className="text-center">Prioridade</TableHead>
                   <TableHead className="text-center">Status</TableHead>
-                  <TableHead className="text-right">A\u00e7\u00f5es</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -575,12 +561,12 @@ function AutomacoesTab() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {editingRule ? "Editar Automa\u00e7\u00e3o" : "Nova Automa\u00e7\u00e3o"}
+              {editingRule ? "Editar Automação" : "Nova Automação"}
             </DialogTitle>
             <DialogDescription>
               {editingRule
-                ? "Atualize a regra de categoriza\u00e7\u00e3o."
-                : "Crie uma nova regra para categorizar transa\u00e7\u00f5es automaticamente."}
+                ? "Atualize a regra de categorização."
+                : "Crie uma nova regra para categorizar transações automaticamente."}
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4">
@@ -591,21 +577,21 @@ function AutomacoesTab() {
                 onChange={(e) => setMatchField(e.target.value)}
                 className="h-9 w-full rounded-md border bg-background px-3 text-sm"
               >
-                <option value="description">Descri\u00e7\u00e3o</option>
+                <option value="description">Descrição</option>
                 <option value="merchantName">Nome do Comerciante</option>
                 <option value="merchantCnpj">CNPJ</option>
                 <option value="providerCategoryId">Categoria do Provider</option>
               </select>
             </div>
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium">Tipo de Correspond\u00eancia</label>
+              <label className="text-sm font-medium">Tipo de Correspondência</label>
               <select
                 value={matchType}
                 onChange={(e) => setMatchType(e.target.value)}
                 className="h-9 w-full rounded-md border bg-background px-3 text-sm"
               >
                 <option value="EXACT">Exato</option>
-                <option value="CONTAINS">Cont\u00e9m</option>
+                <option value="CONTAINS">Contém</option>
                 <option value="PREFIX">Prefixo</option>
                 <option value="REGEX">Regex</option>
               </select>
@@ -613,7 +599,7 @@ function AutomacoesTab() {
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium">Valor</label>
               <Input
-                placeholder="Valor para correspond\u00eancia"
+                placeholder="Valor para correspondência"
                 value={matchValue}
                 onChange={(e) => setMatchValue(e.target.value)}
               />
@@ -643,7 +629,7 @@ function AutomacoesTab() {
                 min={1}
               />
               <p className="text-xs text-muted-foreground">
-                Menor n\u00famero = maior prioridade
+                Menor número = maior prioridade
               </p>
             </div>
           </div>
@@ -668,34 +654,54 @@ function AutomacoesTab() {
 // Main page
 // ---------------------------------------------------------------------------
 
-export default function CategoriesPage() {
-  const [activeTab, setActiveTab] = useState<TabKey>("categorias")
-  const [currentMonth, setCurrentMonth] = useState(() => new Date())
+function CategoriesLoadingFallback() {
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-4 w-80" />
+        </div>
+        <Skeleton className="h-8 w-28" />
+      </div>
+      <Skeleton className="h-10 w-full rounded-xl" />
+      <Skeleton className="h-[420px] rounded-xl" />
+    </div>
+  )
+}
 
-  const monthParam = useMemo(() => getMonthParam(currentMonth), [currentMonth])
+export default function CategoriesPage() {
+  return (
+    <Suspense fallback={<CategoriesLoadingFallback />}>
+      <CategoriesPageContent />
+    </Suspense>
+  )
+}
+
+function CategoriesPageContent() {
+  const [activeTab, setActiveTab] = useState<TabKey>("categorias")
+  const period = usePeriod("mtd")
 
   const { data: spending, loading: spendingLoading } =
     useApi<SpendingResponse>("/api/domain/metrics/spending/categories", {
-      month: monthParam,
+      ...period.params,
+      limit: "30",
     })
 
-  const { loading: categoriesLoading } = useApi<CategoriesResponse>(
-    "/api/domain/categories"
-  )
-
-  const loading = spendingLoading || categoriesLoading
+  const loading = spendingLoading
 
   const sortedCategories = useMemo(() => {
     if (!spending?.results) return []
-    return [...spending.results].sort((a, b) => b.total - a.total)
+    return [...spending.results].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
   }, [spending])
 
   const chartConfig = useMemo(() => {
     const config: ChartConfig = {}
     sortedCategories.forEach((cat, i) => {
-      config[cat.category] = {
-        label: cat.category,
-        color: HSL_COLORS[i % HSL_COLORS.length],
+      config[cat.name] = {
+        label: cat.name,
+        color: getCategoryColor(cat.name, i),
       }
     })
     return config
@@ -703,59 +709,28 @@ export default function CategoriesPage() {
 
   const pieData = useMemo(() => {
     return sortedCategories.map((cat, i) => ({
-      name: cat.category,
-      value: cat.total,
-      fill: HSL_COLORS[i % HSL_COLORS.length],
+      name: cat.name,
+      value: Math.abs(cat.amount),
+      fill: getCategoryColor(cat.name, i),
     }))
   }, [sortedCategories])
 
-  function goToPreviousMonth() {
-    setCurrentMonth((prev) => {
-      const next = new Date(prev)
-      next.setMonth(next.getMonth() - 1)
-      return next
-    })
-  }
-
-  function goToNextMonth() {
-    setCurrentMonth((prev) => {
-      const next = new Date(prev)
-      next.setMonth(next.getMonth() + 1)
-      return next
-    })
-  }
+  const totalSpending = spending?.summary?.total ?? 0
 
   const tabs: { key: TabKey; label: string; icon: React.ReactNode }[] = [
     { key: "categorias", label: "Categorias", icon: <BarChart3 className="size-4" /> },
     { key: "tags", label: "Tags", icon: <Tag className="size-4" /> },
-    { key: "automacoes", label: "Automa\u00e7\u00f5es", icon: <Zap className="size-4" /> },
+    { key: "automacoes", label: "Automações", icon: <Zap className="size-4" /> },
   ]
 
   return (
-    <div className="flex flex-col gap-6 p-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Categorias</h1>
-          <p className="text-muted-foreground">
-            Distribui\u00e7\u00e3o dos gastos por categoria.
-          </p>
-        </div>
-
-        {activeTab === "categorias" && (
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={goToPreviousMonth}>
-              <ChevronLeft className="size-4" />
-            </Button>
-            <span className="min-w-[160px] text-center text-sm font-medium capitalize">
-              {formatMonthLabel(currentMonth)}
-            </span>
-            <Button variant="outline" size="icon" onClick={goToNextMonth}>
-              <ChevronRight className="size-4" />
-            </Button>
-          </div>
-        )}
-      </div>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        eyebrow="Categorias"
+        title="Categorias e regras"
+        description="Acompanhe onde o dinheiro saiu no período e mantenha tags e automações em ordem."
+        actions={activeTab === "categorias" ? <PeriodSwitcher state={period} /> : null}
+      />
 
       {/* Tab navigation */}
       <div className="flex gap-1 rounded-lg bg-muted p-1">
@@ -781,140 +756,135 @@ export default function CategoriesPage() {
           {loading ? (
             <LoadingSkeleton />
           ) : (
-            <div className="grid gap-4 lg:grid-cols-3">
-              {/* Donut Chart Card */}
+            <div className="flex flex-col gap-6">
+              {/* Hero: Month overview with donut */}
               <Card>
-                <CardHeader>
-                  <CardDescription>Distribui\u00e7\u00e3o de Gastos</CardDescription>
-                  <CardTitle className="text-2xl">
-                    {formatCurrency(spending?.summary?.total ?? 0)}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ChartContainer
-                    config={chartConfig}
-                    className="mx-auto aspect-square h-[220px]"
-                  >
-                    <PieChart>
-                      <ChartTooltip
-                        content={
-                          <ChartTooltipContent
-                            formatter={(value) =>
-                              formatCurrency(value as number)
-                            }
-                          />
-                        }
-                      />
-                      <Pie
-                        data={pieData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={90}
-                        paddingAngle={2}
-                        dataKey="value"
-                        nameKey="name"
-                      >
-                        {pieData.map((entry, index) => (
-                          <Cell
-                            key={`cell-${entry.name}`}
-                            fill={HSL_COLORS[index % HSL_COLORS.length]}
-                          />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ChartContainer>
-
-                  {/* Legend */}
-                  <div className="mt-4 flex flex-wrap justify-center gap-3">
-                    {sortedCategories.slice(0, 5).map((cat, i) => (
-                      <div
-                        key={cat.categoryId}
-                        className="flex items-center gap-1.5"
-                      >
-                        <div
-                          className="size-2.5 rounded-full"
-                          style={{
-                            backgroundColor: HSL_COLORS[i % HSL_COLORS.length],
-                          }}
-                        />
-                        <span className="text-xs text-muted-foreground">
-                          {cat.category}
-                        </span>
-                      </div>
-                    ))}
+                <CardContent className="flex flex-col items-center gap-5 p-5 sm:flex-row sm:justify-between">
+                  <div className="flex flex-col items-center gap-1 sm:items-start">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                      Gasto {period.period === "mtd" ? "neste mês" : period.period === "ytd" ? "neste ano" : `em ${period.label.toLowerCase()}`}
+                    </p>
+                    <p className="text-4xl font-bold tabular-nums tracking-tight">
+                      {formatCurrency(totalSpending)}
+                    </p>
                   </div>
+
+                  {pieData.length > 0 && (
+                    <ChartContainer
+                      config={chartConfig}
+                      className="aspect-square h-[160px] shrink-0"
+                    >
+                      <PieChart>
+                        <ChartTooltip
+                          content={
+                            <ChartTooltipContent
+                              formatter={(value) =>
+                                formatCurrency(value as number)
+                              }
+                            />
+                          }
+                        />
+                        <Pie
+                          data={pieData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={50}
+                          outerRadius={72}
+                          paddingAngle={2}
+                          dataKey="value"
+                          nameKey="name"
+                          strokeWidth={0}
+                        >
+                          {pieData.map((entry) => (
+                            <Cell key={entry.name} fill={entry.fill} />
+                          ))}
+                        </Pie>
+                      </PieChart>
+                    </ChartContainer>
+                  )}
                 </CardContent>
               </Card>
 
-              {/* Categories Table */}
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <CardTitle>Detalhamento por Categoria</CardTitle>
-                  <CardDescription>
-                    {sortedCategories.length} categorias neste per\u00edodo
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Categoria</TableHead>
-                        <TableHead className="text-center">
-                          Transa\u00e7\u00f5es
-                        </TableHead>
-                        <TableHead className="hidden sm:table-cell">
-                          Progresso
-                        </TableHead>
-                        <TableHead className="text-right">Valor</TableHead>
-                        <TableHead className="text-right">%</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {sortedCategories.map((cat, i) => (
-                        <TableRow key={cat.categoryId}>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
+              {/* Info banner */}
+              <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                Clique numa categoria para abrir a lista de transações já filtrada.
+              </div>
+
+              {/* Category list */}
+              {sortedCategories.length === 0 ? (
+                <Card>
+                  <CardContent className="flex flex-col items-center justify-center py-12">
+                    <BarChart3 className="mb-3 size-10 text-muted-foreground" />
+                    <p className="font-medium">Nenhum gasto registrado</p>
+                    <p className="text-sm text-muted-foreground">
+                      Nenhuma despesa encontrada neste período.
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="rounded-xl border bg-card">
+                  {/* Table header */}
+                  <div className="grid grid-cols-[1fr_auto_auto] items-center gap-4 border-b px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground sm:grid-cols-[1fr_120px_80px_100px]">
+                    <span>Categoria</span>
+                    <span className="hidden text-right sm:block">Saldo</span>
+                    <span className="text-right">%</span>
+                    <span className="hidden text-right sm:block">Transações</span>
+                  </div>
+
+                  {/* Category rows */}
+                  {sortedCategories.map((cat, i) => {
+                    const color = getCategoryColor(cat.name, i)
+                    const barPercent = Math.min(
+                      (Math.abs(cat.amount) / Math.abs(sortedCategories[0].amount)) * 100,
+                      100
+                    )
+
+                    return (
+                      <Link
+                        href={`/transactions?categoryId=${encodeURIComponent(cat.categoryId)}`}
+                        key={cat.categoryId}
+                        className="group grid grid-cols-[1fr_auto_auto] items-center gap-4 border-b border-border/50 px-4 py-3 transition-colors last:border-0 hover:bg-muted/20 sm:grid-cols-[1fr_120px_80px_100px]"
+                      >
+                        {/* Category name with badge */}
+                        <div className="flex items-center gap-3 min-w-0">
+                          <CategoryBadge name={cat.name} index={i} />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">
+                              {cat.name}
+                            </p>
+                            <div className="mt-1 h-1.5 w-full max-w-[200px] overflow-hidden rounded-full bg-muted/50">
                               <div
-                                className="size-2.5 shrink-0 rounded-full"
+                                className="h-full rounded-full transition-all duration-500"
                                 style={{
-                                  backgroundColor:
-                                    HSL_COLORS[i % HSL_COLORS.length],
+                                  width: `${barPercent}%`,
+                                  backgroundColor: color,
                                 }}
                               />
-                              <span className="font-medium">
-                                {cat.category}
-                              </span>
                             </div>
-                          </TableCell>
-                          <TableCell className="text-center text-muted-foreground">
-                            {cat.transactionCount}
-                          </TableCell>
-                          <TableCell className="hidden sm:table-cell">
-                            <Progress value={cat.percentage} className="h-1.5" />
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {formatCurrency(cat.total)}
-                          </TableCell>
-                          <TableCell className="text-right text-muted-foreground">
-                            {formatPercent(cat.percentage)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {sortedCategories.length === 0 && (
-                        <TableRow>
-                          <TableCell
-                            colSpan={5}
-                            className="py-8 text-center text-muted-foreground"
-                          >
-                            Nenhum gasto registrado neste per\u00edodo.
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
+                          </div>
+                        </div>
+
+                        {/* Amount */}
+                        <p className="hidden text-right text-sm font-semibold tabular-nums sm:block">
+                          {formatCurrency(Math.abs(cat.amount))}
+                        </p>
+
+                        {/* Percentage */}
+                        <p className="text-right text-sm tabular-nums text-muted-foreground">
+                          {formatPercent(cat.sharePercent)}
+                        </p>
+
+                        {/* Transaction count */}
+                        <div className="hidden text-right sm:block">
+                          <Badge variant="secondary" className="text-xs">
+                            {cat.count} {cat.count === 1 ? "transação" : "transações"}
+                          </Badge>
+                        </div>
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
         </>

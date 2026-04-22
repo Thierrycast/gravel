@@ -18,19 +18,18 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <body className="antialiased">
-        <ThemeProvider
-          defaultTheme="system"
-          storageKey="gravel-ui-theme"
-        >
-          <TooltipProvider>
+        <ThemeProvider defaultTheme="system" storageKey="gravel-ui-theme">
+          <TooltipProvider delayDuration={150}>
             <SidebarProvider>
               <AppSidebar />
-              <main className="flex-1 w-full">
-                <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-background px-4 py-2">
-                  <SidebarTrigger />
-                </div>
+              <main className="flex min-h-svh flex-1 flex-col w-full">
+                <header className="sticky top-0 z-30 flex h-12 items-center gap-2 border-b border-border/60 bg-background/75 px-3 backdrop-blur-md md:px-4">
+                  <SidebarTrigger className="-ml-1" />
+                </header>
                 <div className="flex-1">
-                  {children}
+                  <div className="page-container py-5 md:py-6 lg:py-8">
+                    {children}
+                  </div>
                 </div>
               </main>
             </SidebarProvider>
