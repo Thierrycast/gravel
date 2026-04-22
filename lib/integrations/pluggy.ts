@@ -136,7 +136,7 @@ type PluggyRequestOptions = {
   apiKey?: string
 }
 
-async function pluggyRequest(path: string, options: PluggyRequestOptions = {}) {
+async function _pluggyRequest(path: string, options: PluggyRequestOptions = {}) {
   const apiKey = options.apiKey ?? (await getApiKey())
   const url = new URL(`${getBaseUrl()}${path}`)
 
@@ -208,6 +208,37 @@ async function handlePluggyResponse(response: Response) {
     }
     default:
       throw new Error(`Erro Pluggy: ${response.status} ${message}`.trim())
+  }
+}
+
+async function pluggyRequest(path: string, options: PluggyRequestOptions = {}) {
+  let attempt = 0;
+  const maxRetries = 3;
+
+  while (true) {
+    attempt++;
+    try {
+      return await _pluggyRequest(path, options);
+    } catch (error) {
+      if (attempt >= maxRetries) throw error;
+
+      const message = error instanceof Error ? error.message : "";
+      const isRateLimit = message.includes("Rate limit do Pluggy");
+      const isServerError = message.includes("502") || message.includes("503") || message.includes("504") || message.includes("fetch failed") || message.includes("ECONNRESET");
+
+      if (isRateLimit || isServerError) {
+        let delayMs = Math.pow(2, attempt) * 1000;
+        if (isRateLimit) {
+          const match = message.match(/em (\d+)s/);
+          if (match && match[1]) delayMs = Number.parseInt(match[1], 10) * 1000;
+        }
+        console.warn(`[Pluggy Sync] Transient error on ${path} (attempt ${attempt}/${maxRetries}). Retrying in ${delayMs}ms... Error: ${message}`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        continue;
+      }
+
+      throw error;
+    }
   }
 }
 

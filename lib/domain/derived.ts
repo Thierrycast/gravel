@@ -125,7 +125,7 @@ export async function refreshRecurringDerived(options?: {
     prisma.domainRecurringRule.findMany(),
   ])
 
-  const categoryMap = new Map<string, any>(categories.map((category) => [category.id, category]))
+  const categoryMap = new Map<string, typeof categories[number]>(categories.map((category) => [category.id, category]))
   const groups = new Map<string, typeof transactions>()
 
   for (const transaction of transactions) {
@@ -365,7 +365,7 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
   ])
 
   // Variable (non-recurring) expenses: exclude internal transfers and known recurring rules
-  const categoryMap = new Map<string, any>(categories.map((c) => [c.id, c]))
+  const categoryMap = new Map<string, typeof categories[number]>(categories.map((c) => [c.id, c]))
   const EXCLUDED_SPENDING_CATEGORIES = new Set([
     "pagamento de cartão de crédito",
     "transferência mesma titularidade",
@@ -415,6 +415,7 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
     let recurringOutflow = ZERO
     let installmentsOutflow = ZERO
 
+    // 1. Recurring Rules
     for (const rule of recurringRules) {
       if (!rule.active) continue
       const nextDate = rule.nextDate
@@ -431,18 +432,48 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
       }
     }
 
-    const billsOutflow = sumDecimals(
-      bills
-        .filter((bill) => bill.dueDate && bill.dueDate >= pointDate && bill.dueDate <= pointMonthEnd)
-        .map((bill) => bill.totalAmount)
-    ).abs()
+    // 2. Bills
+    const monthlyBills = bills.filter(
+      (bill) => bill.dueDate && bill.dueDate >= pointDate && bill.dueDate <= pointMonthEnd
+    )
+    const billsOutflow = sumDecimals(monthlyBills.map((bill) => bill.totalAmount)).abs()
 
-    const income = safeNumber(recurringInflow)
+    // 3. Smart Installment Detection (from past transactions)
+    // Look for transactions that are part of an installment plan (e.g. "Purchase 1/3")
+    // If we are in month index=1, and there was a "1/3" in month -1, then month 1 is "3/3".
+    const detectedInstallments = pastTransactions.filter((tx) => {
+      const match = tx.description?.match(/(\d+)\/(\d+)/)
+      if (!match) return false
+      const current = parseInt(match[1], 10)
+      const total = parseInt(match[2], 10)
+      if (current >= total) return false
+
+      // Calculate if this installment should fall into the current projection month
+      const txDate = new Date(tx.occurredAt)
+      const monthsSinceTx = 
+        (pointDate.getUTCFullYear() - txDate.getUTCFullYear()) * 12 + 
+        (pointDate.getUTCMonth() - txDate.getUTCMonth())
+      
+      const projectedInstallmentNumber = current + monthsSinceTx
+      return projectedInstallmentNumber <= total
+    })
+    
+    const smartInstallmentsOutflow = sumDecimals(detectedInstallments.map(tx => tx.amount.abs()))
+
+    // 4. Future Transactions (Manual or scheduled)
+    const futureTransactions = pastTransactions.filter(tx => 
+      tx.occurredAt >= pointDate && tx.occurredAt <= pointMonthEnd
+    )
+    const futureInflow = sumDecimals(futureTransactions.filter(tx => tx.direction === "INFLOW").map(tx => tx.amount))
+    const futureOutflow = sumDecimals(futureTransactions.filter(tx => tx.direction === "OUTFLOW").map(tx => tx.amount.abs()))
+
+    const income = safeNumber(recurringInflow.plus(futureInflow))
     const recurringExpenses = safeNumber(recurringOutflow)
-    const installments = safeNumber(installmentsOutflow.plus(billsOutflow))
+    const installments = safeNumber(installmentsOutflow.plus(billsOutflow).plus(smartInstallmentsOutflow))
     const variableExpenses = avgVariableExpenses
+    const knownFutureOutflow = safeNumber(futureOutflow)
 
-    const totalOutflow = recurringExpenses + installments + variableExpenses
+    const totalOutflow = recurringExpenses + installments + variableExpenses + knownFutureOutflow
     const monthlyNet = income - totalOutflow
     currentBalance = currentBalance.plus(new Prisma.Decimal(monthlyNet.toFixed(2)))
 
@@ -453,7 +484,7 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
       income,
       recurringExpenses,
       installments,
-      variableExpenses,
+      variableExpenses: variableExpenses + knownFutureOutflow,
       projected: monthlyNet,
       balance: safeNumber(currentBalance),
     })

@@ -1,10 +1,11 @@
 import { existsSync } from "node:fs"
+import path from "node:path"
 import { Command } from "commander"
 import Table from "cli-table3"
 import chalk from "chalk"
 
 import { log } from "../core/logger.js"
-import { ENV_FILE, PRISMA_SCHEMA } from "../core/paths.js"
+import { ENV_FILE, PRISMA_SCHEMA, PROJECT_ROOT } from "../core/paths.js"
 
 export const doctorCommand = new Command("doctor")
   .description("Verifica ambiente e saude local do Gravel")
@@ -16,20 +17,47 @@ export const doctorCommand = new Command("doctor")
       detail: string
     }> = []
 
-    // 1. Check .env
-    const envExists = existsSync(ENV_FILE)
+    // 0. Check Node.js version
+    const nodeVersion = process.version
+    const majorVersion = parseInt(nodeVersion.slice(1).split(".")[0])
     checks.push({
-      name: ".env",
-      status: envExists ? "ok" : "fail",
-      detail: envExists ? "Encontrado" : "Arquivo .env nao encontrado",
+      name: "Node.js",
+      status: majorVersion >= 20 ? "ok" : "warn",
+      detail: `${nodeVersion} (Recomendado >= 20)`,
     })
+
+    // 1. Check .env and keys
+    const envExists = existsSync(ENV_FILE)
+    if (!envExists) {
+      checks.push({
+        name: ".env",
+        status: "fail",
+        detail: "Arquivo .env nao encontrado",
+      })
+    } else {
+      const requiredKeys = ["DATABASE_URL", "PLUGGY_CLIENT_ID", "PLUGGY_CLIENT_SECRET"]
+      const missingKeys = requiredKeys.filter((k) => !process.env[k])
+      
+      checks.push({
+        name: ".env Keys",
+        status: missingKeys.length === 0 ? "ok" : "warn",
+        detail: missingKeys.length === 0 
+          ? "Chaves principais encontradas" 
+          : `Faltando: ${missingKeys.join(", ")}`,
+      })
+    }
 
     // 2. Check DATABASE_URL
     const dbUrl = process.env.DATABASE_URL
+    const dbFile = dbUrl?.startsWith("file:") ? dbUrl.replace("file:", "") : null
+    const dbFileExists = dbFile ? existsSync(path.resolve(PROJECT_ROOT, dbFile)) : false
+
     checks.push({
       name: "DATABASE_URL",
-      status: dbUrl ? "ok" : "fail",
-      detail: dbUrl ? dbUrl.replace(/\/[^/]*$/, "/***") : "Nao definido",
+      status: dbUrl && dbFileExists ? "ok" : "fail",
+      detail: dbUrl 
+        ? `${dbUrl.replace(/\/[^/]*$/, "/***")} (${dbFileExists ? "Arquivo OK" : "Arquivo nao encontrado"})` 
+        : "Nao definido",
     })
 
     // 3. Check Prisma schema

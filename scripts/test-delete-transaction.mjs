@@ -12,7 +12,7 @@ async function request(path, init = {}) {
   let body = null
   try {
     body = await response.json()
-  } catch (e) {
+  } catch {
     // ignore
   }
   return { status: response.status, body }

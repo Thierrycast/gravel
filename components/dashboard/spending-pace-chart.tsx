@@ -7,7 +7,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
-import { formatCurrency } from "@/lib/format"
+import { useCurrency } from "@/lib/currency-context"
 
 interface SpendingPaceChartProps {
   currentMonth: Array<{ day: number; cumulative: number }>
@@ -17,11 +17,11 @@ interface SpendingPaceChartProps {
 const chartConfig = {
   current: {
     label: "M\u00eas atual",
-    color: "#f43f5e",
+    color: "oklch(0.60 0.25 25)", // Neon Red for spending
   },
   previous: {
     label: "M\u00eas anterior",
-    color: "#6b7280",
+    color: "oklch(0.40 0 0)", // Muted grey
   },
 } satisfies ChartConfig
 
@@ -29,6 +29,7 @@ export function SpendingPaceChart({
   currentMonth,
   previousMonth,
 }: SpendingPaceChartProps) {
+  const { format, formatCompact } = useCurrency()
   const maxDay = Math.max(
     currentMonth.length > 0 ? currentMonth[currentMonth.length - 1].day : 0,
     previousMonth.length > 0 ? previousMonth[previousMonth.length - 1].day : 0,
@@ -49,19 +50,21 @@ export function SpendingPaceChart({
   return (
     <ChartContainer config={chartConfig} className="aspect-[2/1] w-full">
       <LineChart data={data} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+        <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="oklch(0.25 0 0)" />
         <XAxis
           dataKey="day"
           tickLine={false}
           axisLine={false}
+          tick={{ fontSize: 10, fontFamily: "monospace", fill: "oklch(0.55 0 0)" }}
           tickFormatter={(v) => `${v}`}
           interval="preserveStartEnd"
         />
         <YAxis
           tickLine={false}
           axisLine={false}
-          tickFormatter={(v) => formatCurrency(v)}
-          width={80}
+          tick={{ fontSize: 10, fontFamily: "monospace", fill: "oklch(0.55 0 0)" }}
+          tickFormatter={(v) => formatCompact(v)}
+          width={60}
         />
         <ChartTooltip
           content={
@@ -72,7 +75,7 @@ export function SpendingPaceChart({
                   <div className="flex items-center justify-between gap-4">
                     <span className="text-muted-foreground">{label}</span>
                     <span className="font-mono font-medium tabular-nums">
-                      {formatCurrency(value as number)}
+                      {format(value as number)}
                     </span>
                   </div>
                 )

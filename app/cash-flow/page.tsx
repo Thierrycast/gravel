@@ -39,7 +39,8 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart"
 import { useApi } from "@/hooks/use-api"
-import { formatCurrency, formatPercent } from "@/lib/format"
+import { useCurrency } from "@/lib/currency-context"
+import { formatPercent } from "@/lib/format"
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -103,13 +104,6 @@ function formatMonth(dateStr: string) {
   return date.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" })
 }
 
-function compactValue(value: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    notation: "compact",
-    compactDisplay: "short",
-  }).format(value)
-}
-
 // ── Change Badge ─────────────────────────────────────────────────────────────
 
 function ChangeBadge({
@@ -142,7 +136,7 @@ function ChangeBadge({
 
 function LoadingSkeleton() {
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <Skeleton className="h-7 w-40" />
         <Skeleton className="h-8 w-48" />
@@ -159,6 +153,7 @@ function LoadingSkeleton() {
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CashFlowPage() {
+  const { format, formatCompact } = useCurrency()
   const [selectedPeriod, setSelectedPeriod] = useState(PERIOD_OPTIONS[1])
 
   const { data: cashFlow, loading: cashFlowLoading } =
@@ -197,7 +192,7 @@ export default function CashFlowPage() {
 
   return (
     <TooltipProvider>
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6">
       {/* Header row */}
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold tracking-tight">
@@ -247,19 +242,19 @@ export default function CashFlowPage() {
               totals.totalNet >= 0 ? "text-blue-400" : "text-red-400"
             }`}
           >
-            {formatCurrency(totals.totalNet)}
+            {format(totals.totalNet)}
           </span>
           <ChangeBadge value={overview?.summary?.netChange} />
         </div>
 
         {/* Summary row */}
-        <div className="mt-4 flex gap-6 border-t border-border/50 pt-4">
+        <div className="mt-4 flex flex-wrap gap-4 sm:gap-6 border-t border-border/50 pt-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
               Receitas
             </p>
             <p className="mt-0.5 text-sm font-semibold tabular-nums text-emerald-400">
-              {formatCurrency(totals.totalIncome)}
+              {format(totals.totalIncome)}
             </p>
           </div>
           <div>
@@ -267,7 +262,7 @@ export default function CashFlowPage() {
               Despesas
             </p>
             <p className="mt-0.5 text-sm font-semibold tabular-nums text-pink-400">
-              {formatCurrency(totals.totalExpense)}
+              {format(totals.totalExpense)}
             </p>
           </div>
           <div>
@@ -275,7 +270,7 @@ export default function CashFlowPage() {
               Medio Mensal
             </p>
             <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">
-              {formatCurrency(
+              {format(
                 chartData.length > 0
                   ? totals.totalNet / chartData.length
                   : 0
@@ -307,7 +302,7 @@ export default function CashFlowPage() {
               <ChangeBadge value={overview?.summary?.incomeChange} />
             </div>
             <CardTitle className="text-xl font-bold tabular-nums text-emerald-400">
-              {formatCurrency(totals.totalIncome)}
+              {format(totals.totalIncome)}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -337,13 +332,13 @@ export default function CashFlowPage() {
                   tickLine={false}
                   axisLine={false}
                   tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                  tickFormatter={compactValue}
+                  tickFormatter={formatCompact}
                   width={48}
                 />
                 <ChartTooltip
                   content={
                     <ChartTooltipContent
-                      formatter={(value) => formatCurrency(value as number)}
+                      formatter={(value) => format(value as number)}
                     />
                   }
                 />
@@ -382,7 +377,7 @@ export default function CashFlowPage() {
               />
             </div>
             <CardTitle className="text-xl font-bold tabular-nums text-pink-400">
-              {formatCurrency(totals.totalExpense)}
+              {format(totals.totalExpense)}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -406,13 +401,13 @@ export default function CashFlowPage() {
                   tickLine={false}
                   axisLine={false}
                   tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                  tickFormatter={compactValue}
+                  tickFormatter={formatCompact}
                   width={48}
                 />
                 <ChartTooltip
                   content={
                     <ChartTooltipContent
-                      formatter={(value) => formatCurrency(value as number)}
+                      formatter={(value) => format(value as number)}
                     />
                   }
                 />
@@ -458,14 +453,14 @@ export default function CashFlowPage() {
                 tickLine={false}
                 axisLine={false}
                 tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                tickFormatter={compactValue}
+                tickFormatter={formatCompact}
                 width={48}
               />
               <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="3 3" />
               <ChartTooltip
                 content={
                   <ChartTooltipContent
-                    formatter={(value) => formatCurrency(value as number)}
+                    formatter={(value) => format(value as number)}
                   />
                 }
               />
@@ -525,17 +520,17 @@ export default function CashFlowPage() {
                   {item.label}
                 </span>
                 <span className="text-right text-sm tabular-nums text-emerald-400">
-                  {formatCurrency(item.income)}
+                  {format(item.income)}
                 </span>
                 <span className="text-right text-sm tabular-nums text-pink-400">
-                  {formatCurrency(item.expense)}
+                  {format(item.expense)}
                 </span>
                 <span
                   className={`text-right text-sm font-medium tabular-nums ${
                     item.net >= 0 ? "text-blue-400" : "text-red-400"
                   }`}
                 >
-                  {formatCurrency(item.net)}
+                  {format(item.net)}
                 </span>
               </div>
             ))}

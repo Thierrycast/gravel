@@ -1,14 +1,15 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useMemo } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
   TrendingUp,
   TrendingDown,
   ArrowUpRight,
   ArrowDownRight,
-  ChevronDown,
   ExternalLink,
+  BarChart3,
 } from "lucide-react"
 import { PieChart, Pie, Cell } from "recharts"
 import {
@@ -18,13 +19,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { Badge } from "@/components/ui/badge"
 import {
   ChartContainer,
   ChartTooltip,
@@ -32,9 +27,13 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart"
 import { useApi } from "@/hooks/use-api"
-import { formatCurrency, formatPercent } from "@/lib/format"
+import { formatPercent } from "@/lib/format"
+import { useCurrency } from "@/lib/currency-context"
 import { getCategoryEmoji } from "@/lib/category-emoji"
 import { SankeyChart } from "@/components/charts/sankey-chart"
+import { usePeriod } from "@/hooks/use-period"
+import { PeriodSwitcher } from "@/components/period-switcher"
+import { PageHeader } from "@/components/page-header"
 
 interface OverviewResponse {
   summary: {
@@ -62,37 +61,59 @@ interface SpendingResponse {
   results: SpendingCategory[]
 }
 
-const PERIOD_OPTIONS = [
-  { label: "Este mês", value: "this_month" },
-  { label: "Últimos 3 meses", value: "3m" },
-  { label: "Últimos 6 meses", value: "6m" },
-  { label: "Este ano", value: "ytd" },
-] satisfies Array<{ label: string; value: string }>
-
 const CATEGORY_COLORS = [
-  "#f43f5e", // rose-500
-  "#ec4899", // pink-500
-  "#a855f7", // purple-500
-  "#6366f1", // indigo-500
-  "#3b82f6", // blue-500
-  "#06b6d4", // cyan-500
-  "#10b981", // emerald-500
-  "#f59e0b", // amber-500
-  "#ef4444", // red-500
-  "#8b5cf6", // violet-500
+  "oklch(0.60 0.25 25)",   // Neon Red
+  "oklch(0.60 0.20 330)",  // Pink
+  "oklch(0.60 0.15 290)",  // Purple
+  "oklch(0.70 0.20 150)",  // Neon Green
+  "oklch(0.85 0.15 200)",  // Cyan
+  "oklch(0.80 0.20 75)",   // Amber
+  "oklch(0.65 0.20 260)",  // Blue
+  "oklch(0.70 0.18 180)",  // Teal
+  "oklch(0.75 0.15 30)",   // Orange
+  "oklch(0.55 0.20 310)",  // Violet
 ]
+
+function StatCard({
+  label,
+  value,
+  sub,
+  tone = "neutral",
+}: {
+  label: string
+  value: string
+  sub?: React.ReactNode
+  tone?: "positive" | "negative" | "neutral" | "info"
+}) {
+  const toneClass = {
+    positive: "text-emerald-400",
+    negative: "text-rose-500",
+    neutral: "text-foreground",
+    info: "text-primary",
+  }[tone]
+
+  return (
+    <div className="border border-border p-4 flex flex-col gap-1">
+      <p className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">{label}</p>
+      <p className={`font-mono text-xl tabular-nums font-semibold ${toneClass}`}>{value}</p>
+      {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
+    </div>
+  )
+}
 
 function LoadingSkeleton() {
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <Skeleton className="h-8 w-40" />
+        <Skeleton className="h-10 w-48" />
         <Skeleton className="h-8 w-32" />
       </div>
-      <Skeleton className="h-28 w-full" />
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20" />)}
+      </div>
       <div className="grid gap-4 lg:grid-cols-5">
-        <Skeleton className="h-[400px] lg:col-span-3" />
-        <Skeleton className="h-[400px] lg:col-span-2" />
+        <Skeleton className="h-[360px] lg:col-span-3" />
+        <Skeleton className="h-[360px] lg:col-span-2" />
       </div>
       <Skeleton className="h-[400px] w-full" />
     </div>
@@ -100,13 +121,17 @@ function LoadingSkeleton() {
 }
 
 export default function ReportsPage() {
-  const [selectedPeriod, setSelectedPeriod] = useState(PERIOD_OPTIONS[0])
+  const router = useRouter()
+  const { format } = useCurrency()
+  const period = usePeriod("mtd")
+
+  const apiParams = period.params
 
   const { data: overview, loading: overviewLoading } =
-    useApi<OverviewResponse>("/api/domain/metrics/overview")
+    useApi<OverviewResponse>("/api/domain/metrics/overview", apiParams)
 
   const { data: spending, loading: spendingLoading } =
-    useApi<SpendingResponse>("/api/domain/metrics/spending/categories")
+    useApi<SpendingResponse>("/api/domain/metrics/spending/categories", apiParams)
 
   const loading = overviewLoading || spendingLoading
 
@@ -141,84 +166,97 @@ export default function ReportsPage() {
   const netChange = overview?.summary?.netChange ?? null
   const totalSpending = spending?.summary?.total ?? 0
 
-  if (loading) return <LoadingSkeleton />
+  // Derived stats
+  const savingsRate = monthlyIncome > 0 ? (netResult / monthlyIncome) * 100 : 0
+  const yearStart = new Date(new Date().getFullYear(), 0, 1)
+  const daysInYear = Math.ceil((Date.now() - yearStart.getTime()) / 86_400_000)
+  const daysInPeriod = period.period === "mtd"
+    ? new Date().getDate()
+    : period.period === "30d" ? 30
+    : period.period === "90d" ? 90
+    : period.period === "ytd" || period.period === "12m" ? daysInYear
+    : 30 // fallback
+  
+  const dailyAvgSpend = monthlyExpenses / Math.max(daysInPeriod, 1)
 
-  // Income/expense ratio bar
+  // Income/expense ratio
   const total = monthlyIncome + monthlyExpenses
   const incomePercent = total > 0 ? (monthlyIncome / total) * 100 : 50
 
+  if (loading) return <LoadingSkeleton />
+
   return (
-    <div className="flex flex-col gap-6 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Relatórios</h1>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              {selectedPeriod.label}
-              <ChevronDown className="ml-1 size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {PERIOD_OPTIONS.map((option) => (
-              <DropdownMenuItem
-                key={option.value}
-                onClick={() => setSelectedPeriod(option)}
-              >
-                {option.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Relatórios"
+        description="Análise detalhada de receitas, despesas e fluxo de caixa"
+        actions={<PeriodSwitcher state={period} />}
+      />
+
+      {/* Stat strip */}
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+        <StatCard
+          label="Total Gasto"
+          value={format(monthlyExpenses)}
+          tone="negative"
+          sub={
+            expenseChange != null && (
+              <span className={expenseChange <= 0 ? "text-emerald-400" : "text-rose-500"}>
+                {expenseChange <= 0 ? "↓" : "↑"} {formatPercent(Math.abs(expenseChange))} vs período ant.
+              </span>
+            )
+          }
+        />
+        <StatCard
+          label="Receita"
+          value={format(monthlyIncome)}
+          tone="positive"
+        />
+        <StatCard
+          label="Resultado"
+          value={format(netResult)}
+          tone={netResult >= 0 ? "positive" : "negative"}
+          sub={
+            netChange != null && (
+              <span className={netChange >= 0 ? "text-emerald-400" : "text-rose-500"}>
+                {netChange >= 0 ? "↑" : "↓"} {formatPercent(Math.abs(netChange))} vs mês ant.
+              </span>
+            )
+          }
+        />
+        <StatCard
+          label="Taxa de Poupança"
+          value={`${savingsRate.toFixed(1)}%`}
+          tone={savingsRate >= 20 ? "positive" : savingsRate >= 0 ? "neutral" : "negative"}
+          sub={<span>~{format(dailyAvgSpend)}/dia em gastos</span>}
+        />
       </div>
 
-      {/* Hero: Total Gasto */}
-      <div className="rounded-xl border bg-card p-6">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">
-          Total Gasto
-        </p>
-        <div className="flex items-baseline gap-3">
-          <span className="text-4xl font-bold tabular-nums tracking-tight">
-            {formatCurrency(monthlyExpenses)}
-          </span>
-          {expenseChange != null && (
-            <span
-              className={`inline-flex items-center gap-0.5 text-sm font-medium ${
-                expenseChange <= 0 ? "text-emerald-500" : "text-red-500"
-              }`}
-            >
-              {expenseChange <= 0 ? (
-                <ArrowDownRight className="size-4" />
-              ) : (
-                <ArrowUpRight className="size-4" />
-              )}
-              {formatPercent(Math.abs(expenseChange))}
-              <span className="text-muted-foreground font-normal ml-1">vs período anterior</span>
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Main Grid: Categories + Resultado */}
+      {/* Main grid */}
       <div className="grid gap-4 lg:grid-cols-5">
         {/* Gastos por Categoria */}
-        <Card className="lg:col-span-3">
+        <Card className="lg:col-span-3 rounded-none border-border">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-              Gastos por Categoria
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
+                Gastos por Categoria
+              </CardTitle>
+              <Badge variant="outline" className="font-mono text-[10px]">
+                {sortedCategories.length} cats
+              </Badge>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col items-center gap-6 sm:flex-row">
               <ChartContainer
                 config={categoryChartConfig}
-                className="aspect-square h-[220px] shrink-0"
+                className="aspect-square h-[200px] shrink-0"
               >
                 <PieChart>
                   <ChartTooltip
                     content={
                       <ChartTooltipContent
-                        formatter={(value) => formatCurrency(value as number)}
+                        formatter={(value) => format(value as number)}
                       />
                     }
                   />
@@ -226,43 +264,57 @@ export default function ReportsPage() {
                     data={pieData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={65}
-                    outerRadius={95}
+                    innerRadius={60}
+                    outerRadius={85}
                     paddingAngle={2}
                     dataKey="value"
                     nameKey="name"
                     strokeWidth={0}
+                    className="cursor-pointer"
                   >
                     {pieData.map((entry, index) => (
                       <Cell
                         key={`cell-${entry.name}`}
                         fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]}
+                        onClick={() => {
+                          const cat = sortedCategories.find(c => c.name === entry.name)
+                          if (cat?.categoryId) {
+                            router.push(`/transactions?categoryId=${cat.categoryId}&period=${period.period}`)
+                          }
+                        }}
+                        className="outline-none hover:opacity-80 transition-opacity"
                       />
                     ))}
                   </Pie>
                 </PieChart>
               </ChartContainer>
 
-              <div className="flex w-full flex-col gap-3">
-                {sortedCategories.slice(0, 6).map((cat, i) => (
-                  <div key={cat.categoryId ?? cat.name} className="flex items-center gap-3">
+              <div className="flex w-full flex-col gap-1.5">
+                {sortedCategories.slice(0, 8).map((cat, i) => (
+                  <button
+                    key={cat.categoryId ?? cat.name}
+                    onClick={() => router.push(`/transactions?categoryId=${cat.categoryId}&period=${period.period}`)}
+                    className="flex items-center gap-2.5 py-1 hover:bg-muted/40 px-1 transition-colors group text-left w-full"
+                  >
                     <div
-                      className="size-3 shrink-0 rounded-full"
-                      style={{
-                        backgroundColor: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
-                      }}
+                      className="size-2 shrink-0"
+                      style={{ backgroundColor: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }}
                     />
-                    <span className="flex-1 truncate text-sm">
+                    <span className="flex-1 truncate text-xs font-mono">
                       {getCategoryEmoji(cat.name)} {cat.name}
                     </span>
-                    <span className="text-sm font-semibold tabular-nums">
-                      {formatCurrency(Math.abs(cat.amount))}
+                    <span className="text-xs font-mono tabular-nums text-muted-foreground">
+                      {cat.sharePercent.toFixed(1)}%
                     </span>
-                  </div>
+                    <span className="text-xs font-mono tabular-nums font-medium">
+                      {format(Math.abs(cat.amount))}
+                    </span>
+                    <ExternalLink className="size-2.5 opacity-0 group-hover:opacity-60 text-primary transition-opacity shrink-0" />
+                  </button>
                 ))}
-                {sortedCategories.length > 6 && (
-                  <p className="text-xs text-muted-foreground pl-6">
-                    +{sortedCategories.length - 6} outras categorias
+                {sortedCategories.length > 8 && (
+                  <p className="text-[10px] font-mono text-muted-foreground pl-4">
+                    +{sortedCategories.length - 8} outras categorias
                   </p>
                 )}
               </div>
@@ -271,114 +323,103 @@ export default function ReportsPage() {
         </Card>
 
         {/* Resultado Parcial */}
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-2 rounded-none border-border">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-                Resultado Parcial
+              <CardTitle className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
+                Resultado
               </CardTitle>
               <Link
                 href="/cash-flow"
-                className="text-xs text-blue-500 hover:text-blue-400 inline-flex items-center gap-1"
+                className="font-mono text-[10px] text-primary hover:text-primary/80 inline-flex items-center gap-1"
               >
-                fluxo de caixa
-                <ExternalLink className="size-3" />
+                fluxo_caixa
+                <ExternalLink className="size-2.5" />
               </Link>
             </div>
           </CardHeader>
-          <CardContent className="space-y-5">
-            {/* Net result */}
+          <CardContent className="space-y-4">
+            {/* Net */}
             <div>
               <span
-                className={`text-3xl font-bold tabular-nums ${
-                  netResult >= 0 ? "text-emerald-500" : "text-red-500"
+                className={`font-mono text-3xl font-bold tabular-nums ${
+                  netResult >= 0 ? "text-emerald-400" : "text-rose-500"
                 }`}
               >
-                {formatCurrency(netResult)}
+                {format(netResult)}
               </span>
               {netChange != null && (
                 <div className="flex items-center gap-2 mt-1">
-                  <span
-                    className={`inline-flex items-center gap-0.5 text-xs font-medium ${
-                      netChange >= 0 ? "text-emerald-500" : "text-red-500"
-                    }`}
-                  >
-                    {netChange >= 0 ? (
-                      <TrendingUp className="size-3" />
-                    ) : (
-                      <TrendingDown className="size-3" />
-                    )}
-                    {netChange >= 0 ? "+" : ""}
-                    {formatPercent(Math.abs(netChange))}
+                  <span className={`inline-flex items-center gap-0.5 font-mono text-xs font-medium ${
+                    netChange >= 0 ? "text-emerald-400" : "text-rose-500"
+                  }`}>
+                    {netChange >= 0 ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
+                    {netChange >= 0 ? "+" : ""}{formatPercent(Math.abs(netChange))}
                   </span>
-                  <span className="text-xs text-muted-foreground">
-                    vs mês anterior
-                  </span>
+                  <span className="font-mono text-[10px] text-muted-foreground">vs período anterior</span>
                 </div>
               )}
             </div>
 
-            {/* Income/Expense bar */}
-            <div className="flex h-3 w-full overflow-hidden rounded-full">
-              <div
-                className="bg-blue-500 transition-all"
-                style={{ width: `${incomePercent}%` }}
-              />
-              <div
-                className="bg-purple-500/60 transition-all"
-                style={{ width: `${100 - incomePercent}%` }}
-              />
+            {/* Income/Expense bar — flat, no rounding */}
+            <div className="flex h-2 w-full overflow-hidden">
+              <div className="bg-emerald-500 transition-all" style={{ width: `${incomePercent}%` }} />
+              <div className="bg-rose-500/70 transition-all" style={{ width: `${100 - incomePercent}%` }} />
             </div>
 
             {/* Breakdown */}
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-0.5">Receita</p>
-                <p className="text-sm font-bold tabular-nums">
-                  {formatCurrency(monthlyIncome)}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="border border-border p-3">
+                <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Receita</p>
+                <p className="font-mono text-sm font-bold tabular-nums text-emerald-400">{format(monthlyIncome)}</p>
+              </div>
+              <div className="border border-border p-3">
+                <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Gasto</p>
+                <p className="font-mono text-sm font-bold tabular-nums text-rose-500">{format(monthlyExpenses)}</p>
+              </div>
+              <div className="border border-border p-3">
+                <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Poupança</p>
+                <p className={`font-mono text-sm font-bold tabular-nums ${savingsRate >= 0 ? "text-emerald-400" : "text-rose-500"}`}>
+                  {savingsRate.toFixed(1)}%
                 </p>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-0.5">Gasto</p>
-                <p className="text-sm font-bold tabular-nums">
-                  {formatCurrency(monthlyExpenses)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-0.5">Excluído</p>
-                <p className="text-sm font-bold tabular-nums text-muted-foreground">
-                  {formatCurrency(0)}
-                </p>
+              <div className="border border-border p-3">
+                <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Média/dia</p>
+                <p className="font-mono text-sm font-bold tabular-nums">{format(dailyAvgSpend)}</p>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Sankey: Fluxo de Caixa */}
-      <Card>
+      {/* Sankey */}
+      <Card className="rounded-none border-border">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+            <CardTitle className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase flex items-center gap-2">
+              <BarChart3 className="size-3" />
               Fluxo de Caixa
             </CardTitle>
-            <span className="text-sm font-semibold tabular-nums">
-              {formatCurrency(totalSpending)}
+            <span className="font-mono text-xs tabular-nums text-muted-foreground">
+              total gasto: {format(totalSpending)}
             </span>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-0">
+          <p className="font-mono text-[10px] text-muted-foreground mb-3">
+            Clique em uma categoria para ver as transações correspondentes
+          </p>
           <SankeyChart
             data={{
               income: monthlyIncome,
+              periodParam: period.period,
               categories: sortedCategories.map((cat, i) => ({
                 name: cat.name,
                 total: Math.abs(cat.amount),
                 color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+                categoryId: cat.categoryId,
               })),
             }}
-            width={1100}
-            height={Math.max(350, sortedCategories.length * 38)}
           />
         </CardContent>
       </Card>

@@ -223,27 +223,53 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
       }),
     ])
 
-  // Include all non-investment accounts in the liquid balance calculation.
-  // CARD accounts with positive balance are digital wallets / payment accounts
-  // (e.g. Mercado Pago, Nubank), not credit card debt. Only negative CARD
-  // balances represent actual credit card liabilities.
-  const nonInvestmentKinds = new Set<DomainAccountKind>([
+  // Split accounts by semantic role:
+  // - BANK / CASH / OTHER: true liquid assets (positive = money you have)
+  // - CARD / CREDIT: Pluggy stores the outstanding bill as a POSITIVE value
+  //   (the amount you OWE). These are liabilities, NOT assets.
+  const trueAssetKinds = new Set<DomainAccountKind>([
     DomainAccountKind.BANK,
     DomainAccountKind.CASH,
-    DomainAccountKind.CARD,
     DomainAccountKind.OTHER,
   ])
+  const creditKinds = new Set<DomainAccountKind>([
+    DomainAccountKind.CARD,
+  ])
 
-  const liquidAccounts = accounts.filter(
-    (account) => nonInvestmentKinds.has(account.kind)
-  )
+  const liquidAccounts = accounts.filter((a) => trueAssetKinds.has(a.kind))
+  const creditAccounts = accounts.filter((a) => creditKinds.has(a.kind))
 
   const accountBalance = sumDecimals(liquidAccounts.map((account) => account.balance))
+  // Credit card outstanding balance (positive in Pluggy = debt owed by the user)
+  const creditCardDebt = sumDecimals(
+    creditAccounts.map((account) => {
+      const bal = decimal(account.balance)
+      // Positive balance = debt owed; negative balance = credit in favour (rare, treat as 0)
+      return bal.greaterThan(0) ? bal : ZERO
+    })
+  )
   const investmentsTotal = sumDecimals(investments.map((item) => item.balance))
   const cryptoTotal = sumDecimals(cryptoAssets.map((item) => item.value))
-  const openBills = sumDecimals(bills.map((bill) => bill.totalAmount))
+  
+  // Liabilities logic:
+  // We need to be careful not to double count credit card debt.
+  // We separate bills into those linked to a credit card account and those that aren't.
+  const creditAccountIds = new Set(creditAccounts.map(a => a.id))
+  
+  const cardBills = bills.filter(b => b.domainAccountId && creditAccountIds.has(b.domainAccountId))
+  const otherBills = bills.filter(b => !b.domainAccountId || !creditAccountIds.has(b.domainAccountId))
+  
+  const openCardBillsAmount = sumDecimals(cardBills.map(b => b.totalAmount))
+  const otherBillsAmount = sumDecimals(otherBills.map(b => b.totalAmount))
+  
+  // For cards, we take the maximum of the statement (bill) or the current balance (debt).
+  // This handles the transition between billing cycles correctly.
+  const creditCardLiabilities = creditCardDebt.greaterThan(openCardBillsAmount) 
+    ? creditCardDebt 
+    : openCardBillsAmount
+
   const loanBalance = sumDecimals(loans.map((loan) => loan.contractAmount))
-  const liabilitiesTotal = openBills.plus(loanBalance)
+  const liabilitiesTotal = creditCardLiabilities.plus(otherBillsAmount).plus(loanBalance)
   // Build category lookup to exclude transfers from income/expense totals
   const allCategories = await prisma.domainCategory.findMany()
   const overviewCatMap = new Map(allCategories.map((c) => [c.id, c]))
@@ -276,7 +302,7 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
     accountBalance,
     investmentsTotal,
     cryptoTotal,
-    openBills,
+    openBills: openCardBillsAmount.plus(otherBillsAmount),
     loanBalance,
     liabilitiesTotal,
     fiatAssets,
@@ -442,37 +468,62 @@ export async function getAccountAllocationMetrics(searchParams: URLSearchParams)
     orderBy: [{ balance: "desc" }, { name: "asc" }],
   })
 
+  // Net worth = bank/investment assets MINUS credit card liabilities
+  // Credit cards store their balance as the outstanding debt (positive = you owe that amount)
+  // so we subtract them from the total.
+  const creditKinds = new Set(["CARD", "CREDIT"])
+
+  const netWorth = accounts.reduce((sum, account) => {
+    const bal = decimal(account.balance)
+    if (creditKinds.has(account.kind)) {
+      // Credit card balance is a liability — subtract it
+      return sum.minus(bal.abs())
+    }
+    return sum.plus(bal)
+  }, ZERO)
+
+  // For the per-account breakdown we show absolute values with the frontend
+  // deciding sign based on kind, so we use the raw balance.
   const positiveAccounts = accounts.filter(
     (account) => account.balance && account.balance.greaterThan(0)
   )
-  const total = sumDecimals(positiveAccounts.map((account) => account.balance))
+  const assetsTotal = sumDecimals(positiveAccounts.map((account) => account.balance))
 
-  const byAccount = positiveAccounts.slice(0, filters.limit).map((account) => ({
+  const byAccount = accounts.slice(0, filters.limit).map((account) => ({
     id: account.id,
     name: account.name,
     kind: account.kind,
     institutionName: account.institutionName,
     sourceProvider: account.sourceProvider,
     balance: decimal(account.balance),
-    sharePercent: percentOf(decimal(account.balance), total),
+    // sharePercent is relative to total positive assets for display purposes
+    sharePercent: assetsTotal.isZero()
+      ? ZERO
+      : percentOf(decimal(account.balance).abs(), assetsTotal),
   }))
 
   const byKindMap = new Map<DomainAccountKind, Prisma.Decimal>()
-  for (const account of positiveAccounts) {
+  for (const account of accounts) {
+    const bal = decimal(account.balance)
     const current = byKindMap.get(account.kind) ?? ZERO
-    byKindMap.set(account.kind, current.plus(decimal(account.balance)))
+    if (creditKinds.has(account.kind)) {
+      // Store as negative so the frontend shows correctly signed values
+      byKindMap.set(account.kind, current.minus(bal.abs()))
+    } else {
+      byKindMap.set(account.kind, current.plus(bal))
+    }
   }
 
   const byKind = Array.from(byKindMap.entries())
     .map(([kind, balance]) => ({
       kind,
       balance,
-      sharePercent: percentOf(balance, total),
+      sharePercent: assetsTotal.isZero() ? ZERO : percentOf(balance.abs(), assetsTotal),
     }))
     .sort((left, right) => right.balance.comparedTo(left.balance))
 
   return {
-    total,
+    total: netWorth,
     byAccount,
     byKind,
     counts: {

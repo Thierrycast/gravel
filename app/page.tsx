@@ -28,12 +28,10 @@ import { NetWorthChart } from "@/components/dashboard/net-worth-chart"
 import {
   amountToneClass,
   daysUntilLabel,
-  formatCurrency,
-  formatCurrencySmart,
   formatDate,
-  formatSignedCurrency,
   formatSignedPercent,
 } from "@/lib/format"
+import { useCurrency } from "@/lib/currency-context"
 import { getCategoryColor, getCategoryEmoji } from "@/lib/category-emoji"
 import { cn } from "@/lib/utils"
 
@@ -245,6 +243,7 @@ export default function OverviewPage() {
 }
 
 function OverviewPageContent() {
+  const { format, formatSigned, formatCompact } = useCurrency()
   const period = usePeriod("mtd")
 
   const overview = useApi<OverviewData>("/api/domain/metrics/overview", period.params)
@@ -325,28 +324,28 @@ function OverviewPageContent() {
     if (overdueCount > 0) {
       out.push({
         tone: "negative",
-        text: `${overdueCount} fatura(s) em atraso totalizando ${formatCurrency(bills.data?.summary?.totalOverdue ?? 0)}.`,
+        text: `${overdueCount} fatura(s) em atraso totalizando ${format(bills.data?.summary?.totalOverdue ?? 0)}.`,
         href: "/bills",
       })
     }
     if (accountBalance < 0) {
       out.push({
         tone: "negative",
-        text: `Saldo em contas negativo em ${formatCurrency(Math.abs(accountBalance))}. Priorize cobrir o saldo antes de novos gastos.`,
+        text: `Saldo em contas negativo em ${format(Math.abs(accountBalance))}. Priorize cobrir o saldo antes de novos gastos.`,
         href: "/accounts",
       })
     }
     if (missingCategory) {
       out.push({
         tone: "warning",
-        text: `${missingCategory.count} transação(ões) sem categoria somam ${formatCurrency(Math.abs(missingCategory.amount))} no período.`,
+        text: `${missingCategory.count} transação(ões) sem categoria somam ${format(Math.abs(missingCategory.amount))} no período.`,
         href: "/categories",
       })
     }
     if (net < 0) {
       out.push({
         tone: "warning",
-        text: `Você gastou ${formatCurrency(Math.abs(net))} a mais do que recebeu no período. Reveja as categorias com maior crescimento.`,
+        text: `Você gastou ${format(Math.abs(net))} a mais do que recebeu no período. Reveja as categorias com maior crescimento.`,
         href: "/cash-flow",
       })
     }
@@ -428,7 +427,7 @@ function OverviewPageContent() {
                 {overview.loading ? (
                   <Skeleton className="h-10 w-48" />
                 ) : (
-                  formatSignedCurrency(net, "always")
+                  format(net)
                 )}
               </span>
               <ChangeBadge value={netChange} />
@@ -455,14 +454,14 @@ function OverviewPageContent() {
               <div className="flex flex-col">
                 <span className="text-muted-foreground">Receitas</span>
                 <span className="font-semibold tabular-nums">
-                  {formatCurrency(income)}
+                  {format(income)}
                 </span>
                 <ChangeBadge value={incomeChange} />
               </div>
               <div className="flex flex-col items-end">
                 <span className="text-muted-foreground">Despesas</span>
                 <span className="font-semibold tabular-nums">
-                  {formatCurrency(expenses)}
+                  {format(expenses)}
                 </span>
                 <ChangeBadge value={expenseChange} reverse />
               </div>
@@ -473,7 +472,7 @@ function OverviewPageContent() {
 
       {/* Alerts row — only renders when there is something actionable */}
       {alerts.length > 0 && (
-        <section className="grid gap-2.5 lg:grid-cols-3">
+        <section className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
           {alerts.map((alert, idx) => {
             const toneClasses = {
               negative:
@@ -506,20 +505,20 @@ function OverviewPageContent() {
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
           label="Patrimônio fiat"
-          value={formatCurrencySmart(fiatNetWorth)}
+          value={format(fiatNetWorth)}
           icon={Landmark}
-          hint={`${formatCurrencySmart(accountBalance)} em conta · ${formatCurrencySmart(investments)} investido`}
+          hint={`${format(accountBalance)} em conta · ${format(investments)} investido`}
           loading={overview.loading}
           href="/portfolio"
         />
         <StatTile
           label="Patrimônio cripto"
-          value={formatCurrencySmart(cryptoNetWorth)}
+          value={format(cryptoNetWorth)}
           icon={Bitcoin}
           hint={
             summary?.usdBrlRate
               ? `USD/BRL ${summary.usdBrlRate.toFixed(2)} · valores convertidos`
-              : "Valores convertidos para BRL"
+              : "Valores convertidos"
           }
           tone="info"
           loading={overview.loading}
@@ -527,16 +526,16 @@ function OverviewPageContent() {
         />
         <StatTile
           label="Patrimônio total"
-          value={formatCurrencySmart(totalNetWorth)}
+          value={format(totalNetWorth)}
           icon={PiggyBank}
-          hint={`Passivos: ${formatCurrency(liabilities)}`}
+          hint={`Passivos: ${format(liabilities)}`}
           tone={totalNetWorth >= 0 ? "positive" : "negative"}
           loading={overview.loading}
           href="/portfolio"
         />
         <StatTile
           label="Faturas em aberto"
-          value={formatCurrencySmart(openBills)}
+          value={format(openBills)}
           icon={CreditCard}
           hint={
             nextBillDueDate
@@ -556,7 +555,7 @@ function OverviewPageContent() {
             <div>
               <p className="section-eyebrow">Patrimônio ao longo do tempo</p>
               <p className="mt-0.5 text-2xl font-semibold tabular-nums tracking-tight">
-                {formatCurrency(netWorth.data?.summary.current ?? totalNetWorth)}
+                {format(netWorth.data?.summary.current ?? totalNetWorth)}
               </p>
               <p className="text-xs text-muted-foreground">
                 Inclui contas, investimentos e cripto, descontados passivos.
@@ -587,25 +586,25 @@ function OverviewPageContent() {
               <div className="min-w-0">
                 <p className="text-muted-foreground">Ativos totais</p>
                 <p className="font-semibold tabular-nums">
-                  {formatCurrency(netWorth.data.summary.valuation.grossAssets)}
+                  {format(netWorth.data.summary.valuation.grossAssets)}
                 </p>
               </div>
               <div className="min-w-0">
                 <p className="text-muted-foreground">Fiat</p>
                 <p className="font-semibold tabular-nums">
-                  {formatCurrency(netWorth.data.summary.valuation.fiatAssets)}
+                  {format(netWorth.data.summary.valuation.fiatAssets)}
                 </p>
               </div>
               <div className="min-w-0">
                 <p className="text-muted-foreground">Cripto</p>
                 <p className="font-semibold tabular-nums">
-                  {formatCurrency(netWorth.data.summary.valuation.cryptoAssets)}
+                  {format(netWorth.data.summary.valuation.cryptoAssets)}
                 </p>
               </div>
               <div className="min-w-0">
                 <p className="text-muted-foreground">Passivos</p>
                 <p className="font-semibold tabular-nums text-rose-500 dark:text-rose-400">
-                  {formatCurrency(netWorth.data.summary.valuation.liabilities)}
+                  {format(netWorth.data.summary.valuation.liabilities)}
                 </p>
               </div>
             </div>
@@ -617,7 +616,7 @@ function OverviewPageContent() {
             <div>
               <p className="section-eyebrow">Top categorias</p>
               <p className="mt-0.5 text-2xl font-semibold tabular-nums tracking-tight">
-                {formatCurrency(categories.data?.summary.total ?? expenses)}
+                {format(categories.data?.summary.total ?? expenses)}
               </p>
               <p className="text-xs text-muted-foreground">
                 Onde seu dinheiro foi no período.
@@ -664,7 +663,7 @@ function OverviewPageContent() {
                           </span>
                         </span>
                         <span className="font-semibold tabular-nums">
-                          {formatCurrency(cat.absAmount)}
+                          {format(cat.absAmount)}
                         </span>
                       </div>
                       <div className="h-1.5 overflow-hidden rounded-full bg-muted/60">
@@ -689,7 +688,7 @@ function OverviewPageContent() {
             <div>
               <p className="section-eyebrow">A pagar em breve</p>
               <p className="mt-0.5 text-2xl font-semibold tabular-nums tracking-tight">
-                {formatCurrency(recurring.data?.summary.totalMonthly ?? 0)}
+                {format(recurring.data?.summary.totalMonthly ?? 0)}
               </p>
               <p className="text-xs text-muted-foreground">
                 Soma dos compromissos recorrentes mensais.
@@ -732,7 +731,7 @@ function OverviewPageContent() {
                     </div>
                   </div>
                   <span className="shrink-0 font-semibold tabular-nums">
-                    {formatCurrency(Math.abs(rule.amount))}
+                    {format(Math.abs(rule.amount))}
                   </span>
                 </li>
               ))}
@@ -803,7 +802,7 @@ function OverviewPageContent() {
                         amountToneClass(isInflow ? 1 : -1)
                       )}
                     >
-                      {formatSignedCurrency(
+                      {formatSigned(
                         isInflow ? Math.abs(tx.amount) : -Math.abs(tx.amount),
                         "always"
                       )}

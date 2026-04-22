@@ -4,7 +4,8 @@ import { useState } from "react"
 import Link from "next/link"
 import { Plus, Building2, CreditCard, Landmark, Wallet } from "lucide-react"
 import { useApi } from "@/hooks/use-api"
-import { formatCurrency, formatPercent } from "@/lib/format"
+import { formatPercent } from "@/lib/format"
+import { useCurrency } from "@/lib/currency-context"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -81,6 +82,7 @@ function AccountCardSkeleton() {
 }
 
 export default function AccountsPage() {
+  const { format } = useCurrency()
   const { data: accountsData, loading: accountsLoading, error: accountsError, refetch: refetchAccounts } =
     useApi<AccountsResponse>("/api/domain/accounts")
   const { data: allocationData, loading: allocationLoading, error: allocationError, refetch: refetchAllocation } =
@@ -120,16 +122,16 @@ export default function AccountsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Contas</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Contas</h1>
           <p className="text-muted-foreground">
             Bancos, carteiras e saldos atuais
           </p>
         </div>
-        <Button asChild>
+        <Button asChild className="self-start sm:self-auto">
           <Link href="/connect">
             <Plus data-icon="inline-start" />
             Adicionar Conta
@@ -142,25 +144,31 @@ export default function AccountsPage() {
         <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardHeader>
-              <CardDescription>Patrimônio Total</CardDescription>
-              <CardTitle className="text-2xl">
-                {formatCurrency(allocationData.summary.totalBalance)}
+              <CardDescription>Patrimônio Líquido</CardDescription>
+              <CardTitle
+                className={`text-2xl font-mono ${
+                  allocationData.summary.totalBalance >= 0
+                    ? "text-emerald-400"
+                    : "text-destructive"
+                }`}
+              >
+                {format(allocationData.summary.totalBalance)}
               </CardTitle>
             </CardHeader>
           </Card>
           <Card>
             <CardHeader>
               <CardDescription>Contas Bancárias</CardDescription>
-              <CardTitle className="text-2xl">
-                {formatCurrency(totalBank)}
+              <CardTitle className="text-2xl font-mono">
+                {format(totalBank)}
               </CardTitle>
             </CardHeader>
           </Card>
           <Card>
             <CardHeader>
-              <CardDescription>Cartões de Crédito</CardDescription>
-              <CardTitle className="text-2xl text-destructive">
-                {formatCurrency(totalCredit)}
+              <CardDescription>Dívida em Cartões</CardDescription>
+              <CardTitle className={`text-2xl font-mono ${totalCredit < 0 ? "text-destructive" : ""}`}>
+                {format(totalCredit)}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -230,8 +238,8 @@ export default function AccountsPage() {
                             <span className="text-muted-foreground">
                               Fatura Atual
                             </span>
-                            <span className="font-semibold text-destructive">
-                              {formatCurrency(Math.abs(account.balance))}
+                            <span className={`font-semibold ${account.balance > 0 ? "text-destructive" : "text-emerald-400"}`}>
+                              {format(Math.abs(account.balance))}
                             </span>
                           </div>
                           <Progress
@@ -255,7 +263,7 @@ export default function AccountsPage() {
 
           {!loading && creditAccounts.length > 0 && (
             <div className="mt-3 text-right text-sm text-muted-foreground">
-              Total: <span className="font-medium text-destructive">{formatCurrency(totalCredit)}</span>
+              Total: <span className="font-medium text-destructive">{format(totalCredit)}</span>
             </div>
           )}
         </div>
@@ -310,7 +318,7 @@ export default function AccountsPage() {
                           Saldo
                         </span>
                         <span className="text-lg font-semibold">
-                          {formatCurrency(account.balance)}
+                          {format(account.balance)}
                         </span>
                       </div>
                       {allocation && (
@@ -326,7 +334,7 @@ export default function AccountsPage() {
 
         {!loading && bankAccounts.length > 0 && (
           <div className="mt-3 text-right text-sm text-muted-foreground">
-            Total: <span className="font-medium">{formatCurrency(totalBank)}</span>
+            Total: <span className="font-medium">{format(totalBank)}</span>
           </div>
         )}
       </div>
@@ -395,7 +403,7 @@ export default function AccountsPage() {
                         : ""
                     }`}
                   >
-                    {formatCurrency(
+                    {format(
                       selectedAccount.kind === "CARD" || selectedAccount.kind === "CREDIT"
                         ? Math.abs(selectedAccount.balance)
                         : selectedAccount.balance
@@ -431,16 +439,14 @@ export default function AccountsPage() {
                     <Progress value={Math.min(allocation.percentage, 100)} />
                     <div className="text-xs text-muted-foreground">
                       {formatPercent(allocation.percentage)} do total (
-                      {formatCurrency(allocation.balance)})
+                      {format(allocation.balance)})
                     </div>
                   </div>
                 )
               })()}
 
               <Button variant="outline" asChild className="mt-2">
-                <Link
-                  href={`/transactions?accountName=${encodeURIComponent(selectedAccount.name)}`}
-                >
+                <Link href={`/transactions?accountId=${selectedAccount.id}`}>
                   Ver Transações
                 </Link>
               </Button>

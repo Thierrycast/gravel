@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Search, Store, Users, DollarSign } from "lucide-react"
 import { useApi } from "@/hooks/use-api"
 import { usePeriod } from "@/hooks/use-period"
-import { formatCurrency } from "@/lib/format"
+import { useCurrency } from "@/lib/currency-context"
 import { PageHeader } from "@/components/page-header"
 import { PeriodSwitcher } from "@/components/period-switcher"
 import { Input } from "@/components/ui/input"
@@ -103,7 +103,7 @@ export default function MerchantsPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex flex-col gap-6 p-6">
+        <div className="flex flex-col gap-6">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-96 w-full" />
         </div>
@@ -115,6 +115,7 @@ export default function MerchantsPage() {
 }
 
 function MerchantsContent() {
+  const { format } = useCurrency()
   const [searchQuery, setSearchQuery] = useState("")
   const period = usePeriod("mtd")
 
@@ -198,7 +199,7 @@ function MerchantsContent() {
                 <CardDescription>Total Gasto</CardDescription>
               </div>
               <CardTitle className="text-destructive">
-                {formatCurrency(totalSpent)}
+                {format(totalSpent)}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -275,7 +276,7 @@ function MerchantsContent() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right font-medium text-destructive">
-                      {formatCurrency(merchant.total)}
+                      {format(merchant.total)}
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">
                       {(Number.isFinite(merchant.percentage) ? merchant.percentage : 0).toFixed(1)}%

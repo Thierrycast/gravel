@@ -53,9 +53,10 @@ import {
 } from "@/components/ui/chart"
 import { useApi } from "@/hooks/use-api"
 import { usePeriod } from "@/hooks/use-period"
+import { useCurrency } from "@/lib/currency-context"
 import { PageHeader } from "@/components/page-header"
 import { PeriodSwitcher } from "@/components/period-switcher"
-import { formatCurrency, formatPercent } from "@/lib/format"
+import { formatPercent } from "@/lib/format"
 import { getCategoryEmoji, getCategoryColor } from "@/lib/category-emoji"
 
 // ---------------------------------------------------------------------------
@@ -680,6 +681,7 @@ export default function CategoriesPage() {
 }
 
 function CategoriesPageContent() {
+  const { format } = useCurrency()
   const [activeTab, setActiveTab] = useState<TabKey>("categorias")
   const period = usePeriod("mtd")
 
@@ -765,7 +767,7 @@ function CategoriesPageContent() {
                       Gasto {period.period === "mtd" ? "neste mês" : period.period === "ytd" ? "neste ano" : `em ${period.label.toLowerCase()}`}
                     </p>
                     <p className="text-4xl font-bold tabular-nums tracking-tight">
-                      {formatCurrency(totalSpending)}
+                      {format(totalSpending)}
                     </p>
                   </div>
 
@@ -779,7 +781,7 @@ function CategoriesPageContent() {
                           content={
                             <ChartTooltipContent
                               formatter={(value) =>
-                                formatCurrency(value as number)
+                                format(value as number)
                               }
                             />
                           }
@@ -824,7 +826,7 @@ function CategoriesPageContent() {
               ) : (
                 <div className="rounded-xl border bg-card">
                   {/* Table header */}
-                  <div className="grid grid-cols-[1fr_auto_auto] items-center gap-4 border-b px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground sm:grid-cols-[1fr_120px_80px_100px]">
+                  <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2 sm:gap-4 border-b px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground sm:grid-cols-[1fr_120px_80px_100px]">
                     <span>Categoria</span>
                     <span className="hidden text-right sm:block">Saldo</span>
                     <span className="text-right">%</span>
@@ -843,7 +845,7 @@ function CategoriesPageContent() {
                       <Link
                         href={`/transactions?categoryId=${encodeURIComponent(cat.categoryId)}`}
                         key={cat.categoryId}
-                        className="group grid grid-cols-[1fr_auto_auto] items-center gap-4 border-b border-border/50 px-4 py-3 transition-colors last:border-0 hover:bg-muted/20 sm:grid-cols-[1fr_120px_80px_100px]"
+                        className="group grid grid-cols-[1fr_auto_auto] items-center gap-2 sm:gap-4 border-b border-border/50 px-4 py-3 transition-colors last:border-0 hover:bg-muted/20 sm:grid-cols-[1fr_120px_80px_100px]"
                       >
                         {/* Category name with badge */}
                         <div className="flex items-center gap-3 min-w-0">
@@ -866,7 +868,7 @@ function CategoriesPageContent() {
 
                         {/* Amount */}
                         <p className="hidden text-right text-sm font-semibold tabular-nums sm:block">
-                          {formatCurrency(Math.abs(cat.amount))}
+                          {format(Math.abs(cat.amount))}
                         </p>
 
                         {/* Percentage */}

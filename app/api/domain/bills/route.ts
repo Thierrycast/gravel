@@ -47,6 +47,7 @@ export async function GET(request: Request) {
     // Map to UI-expected fields
     const mapped = bills.map((bill) => ({
       id: bill.id,
+      accountId: bill.domainAccountId ?? null,
       accountName: bill.domainAccountId ? accountMap.get(bill.domainAccountId) ?? "Conta" : "Conta",
       dueDate: bill.dueDate,
       totalAmount: bill.totalAmount,

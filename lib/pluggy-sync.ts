@@ -170,40 +170,44 @@ async function savePayloadSnapshot(input: {
   )
 }
 
-async function fetchAllPages<T>(
+async function* iterateAllPages<T>(
   getPage: (page: number, pageSize: number) => Promise<{
     totalPages?: number
     results?: T[]
   }>,
   pageSize: number
 ) {
-  console.log(`[fetchAllPages] Buscando página 1 com pageSize ${pageSize}`);
   const firstPage = await getPage(1, pageSize)
-  console.log(`[fetchAllPages] Página 1 retornada. totalPages: ${firstPage?.totalPages}, results length: ${firstPage?.results?.length}`);
   
   const totalPages = Math.max(Number(firstPage?.totalPages ?? 1), 1)
-  const results = Array.isArray(firstPage?.results) ? [...firstPage.results] : []
-
-  for (let page = 2; page <= totalPages; page += 1) {
-    console.log(`[fetchAllPages] Buscando página ${page} de ${totalPages}`);
-    const currentPage = await getPage(page, pageSize)
-    if (Array.isArray(currentPage?.results)) {
-      results.push(...currentPage.results)
+  
+  if (Array.isArray(firstPage?.results)) {
+    for (const item of firstPage.results) {
+      yield item
     }
   }
 
-  return results
+  for (let page = 2; page <= totalPages; page += 1) {
+    const currentPage = await getPage(page, pageSize)
+    if (Array.isArray(currentPage?.results)) {
+      for (const item of currentPage.results) {
+        yield item
+      }
+    }
+  }
 }
 
 async function syncCategories(pageSize: number) {
-  const categories = await fetchAllPages(
+  const categories = iterateAllPages(
     (page, currentPageSize) => fetchCategories({ page, pageSize: currentPageSize }),
     pageSize
   )
 
   let inserted = 0
+  let total = 0
 
-  for (const category of categories) {
+  for await (const category of categories) {
+    total += 1
     const currentCategory = category as Record<string, unknown>
     const externalId = toStringOrNull(currentCategory.id)
     if (!externalId) continue
@@ -239,7 +243,7 @@ async function syncCategories(pageSize: number) {
 
   return {
     inserted,
-    total: categories.length,
+    total,
   }
 }
 
@@ -676,13 +680,13 @@ export async function syncPluggyData(options: SyncOptions = {}) {
         continue
       }
 
-      const accounts = await fetchAllPages(
+      const accounts = iterateAllPages(
         (page, currentPageSize) =>
           fetchAccounts({ itemId, page, pageSize: currentPageSize }),
         pageSize
       )
 
-      for (const account of accounts) {
+      for await (const account of accounts) {
         const accountResult = await syncAccountEntity(
           itemId,
           account as Record<string, unknown>
@@ -697,13 +701,13 @@ export async function syncPluggyData(options: SyncOptions = {}) {
         }
 
         if (resources.includes("bills")) {
-          const bills = await fetchAllPages(
+          const bills = iterateAllPages(
             (page, currentPageSize) =>
               fetchBills({ accountId, page, pageSize: currentPageSize }),
             pageSize
           )
 
-          for (const bill of bills) {
+          for await (const bill of bills) {
             counters.bills += await syncBillEntity(
               itemId,
               accountId,
@@ -713,7 +717,7 @@ export async function syncPluggyData(options: SyncOptions = {}) {
         }
 
         if (resources.includes("transactions")) {
-          const transactions = await fetchAllPages(
+          const transactions = iterateAllPages(
             (page, currentPageSize) =>
               fetchTransactions({
                 accountId,
@@ -723,7 +727,7 @@ export async function syncPluggyData(options: SyncOptions = {}) {
             pageSize
           )
 
-          for (const transaction of transactions) {
+          for await (const transaction of transactions) {
             const transactionResult = await syncTransactionEntity(
               itemId,
               accountId,
@@ -740,13 +744,13 @@ export async function syncPluggyData(options: SyncOptions = {}) {
       }
 
       if (resources.includes("investments")) {
-        const investments = await fetchAllPages(
+        const investments = iterateAllPages(
           (page, currentPageSize) =>
             fetchInvestments({ itemId, page, pageSize: currentPageSize }),
           pageSize
         )
 
-        for (const investment of investments) {
+        for await (const investment of investments) {
           counters.investments += await syncInvestmentEntity(
             itemId,
             investment as Record<string, unknown>
@@ -755,13 +759,13 @@ export async function syncPluggyData(options: SyncOptions = {}) {
       }
 
       if (resources.includes("loans")) {
-        const loans = await fetchAllPages(
+        const loans = iterateAllPages(
           (page, currentPageSize) =>
             fetchLoans({ itemId, page, pageSize: currentPageSize }),
           pageSize
         )
 
-        for (const loan of loans) {
+        for await (const loan of loans) {
           counters.loans += await syncLoanEntity(
             itemId,
             loan as Record<string, unknown>

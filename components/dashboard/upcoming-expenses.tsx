@@ -3,7 +3,8 @@
 import { Card, CardContent, CardHeader, CardTitle, CardAction, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { formatCurrency, daysUntilLabel } from "@/lib/format"
+import { daysUntilLabel } from "@/lib/format"
+import { useCurrency } from "@/lib/currency-context"
 import Link from "next/link"
 import { ArrowRight, Repeat } from "lucide-react"
 
@@ -31,13 +32,14 @@ const frequencyLabels: Record<string, string> = {
 }
 
 export function UpcomingExpenses({ rules, totalMonthly, loading }: UpcomingExpensesProps) {
+  const { format } = useCurrency()
   return (
     <Card className="col-span-full lg:col-span-1">
       <CardHeader>
         <CardTitle>Despesas Recorrentes</CardTitle>
         <CardDescription>
           {totalMonthly != null
-            ? `Total mensal: ${formatCurrency(totalMonthly)}`
+            ? `Total mensal: ${format(totalMonthly)}`
             : "Carregando..."}
         </CardDescription>
         <CardAction>
@@ -91,7 +93,7 @@ export function UpcomingExpenses({ rules, totalMonthly, loading }: UpcomingExpen
                     </div>
                   </div>
                   <span className="text-sm font-medium tabular-nums whitespace-nowrap text-red-500">
-                    {formatCurrency(expense.amount)}
+                    {format(expense.amount)}
                   </span>
                 </div>
               ))

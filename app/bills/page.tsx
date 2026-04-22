@@ -13,8 +13,8 @@ import {
   ArrowRight,
 } from "lucide-react"
 import { useApi } from "@/hooks/use-api"
+import { useCurrency } from "@/lib/currency-context"
 import {
-  formatCurrency,
   formatDate,
   daysUntil,
   daysUntilLabel,
@@ -27,6 +27,7 @@ import { PageError } from "@/components/page-error"
 
 interface Bill {
   id: string
+  accountId: string | null
   accountName: string
   dueDate: string
   totalAmount: number
@@ -126,6 +127,7 @@ const monthNames = [
 ]
 
 export default function BillsPage() {
+  const { format } = useCurrency()
   const now = new Date()
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth())
   const [selectedYear, setSelectedYear] = useState(now.getFullYear())
@@ -204,7 +206,7 @@ export default function BillsPage() {
     selectedMonth === now.getMonth() && selectedYear === now.getFullYear()
 
   return (
-    <div className="flex flex-col gap-8 p-6 lg:p-10 max-w-5xl mx-auto w-full">
+    <div className="flex flex-col gap-6 p-4 sm:p-6 lg:p-10 max-w-5xl mx-auto w-full">
       {/* Period Navigation */}
       <div className="flex items-center justify-between">
         <h1 className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
@@ -229,7 +231,7 @@ export default function BillsPage() {
           >
             <ChevronLeft className="size-3.5" />
           </Button>
-          <span className="min-w-[160px] text-center text-sm font-semibold capitalize">
+          <span className="min-w-[110px] sm:min-w-[160px] text-center text-sm font-semibold capitalize">
             {monthNames[selectedMonth]} De {selectedYear}
           </span>
           <Button
@@ -260,7 +262,7 @@ export default function BillsPage() {
             Total das Faturas
           </p>
           <p className="text-4xl font-bold tabular-nums tracking-tight text-pink-400">
-            {formatCurrency(totalAmount)}
+            {format(totalAmount)}
           </p>
 
           {/* Breakdown by status */}
@@ -270,7 +272,7 @@ export default function BillsPage() {
                 Abertas
               </p>
               <p className="text-sm font-semibold tabular-nums">
-                {formatCurrency(summary.totalOpen)}
+                {format(summary.totalOpen)}
               </p>
             </div>
             <div className="space-y-1">
@@ -278,7 +280,7 @@ export default function BillsPage() {
                 Vencidas
               </p>
               <p className="text-sm font-semibold tabular-nums text-red-400">
-                {formatCurrency(summary.totalOverdue)}
+                {format(summary.totalOverdue)}
               </p>
             </div>
             <div className="space-y-1">
@@ -286,7 +288,7 @@ export default function BillsPage() {
                 Pagas
               </p>
               <p className="text-sm font-semibold tabular-nums text-emerald-400">
-                {formatCurrency(summary.totalPaid)}
+                {format(summary.totalPaid)}
               </p>
             </div>
           </div>
@@ -346,7 +348,7 @@ export default function BillsPage() {
               {summary.counts.open}
             </p>
             <p className="text-xs tabular-nums text-muted-foreground">
-              {formatCurrency(summary.totalOpen)}
+              {format(summary.totalOpen)}
             </p>
           </div>
           <div className="rounded-xl border bg-card p-4 space-y-1">
@@ -357,7 +359,7 @@ export default function BillsPage() {
               {summary.counts.overdue}
             </p>
             <p className="text-xs tabular-nums text-muted-foreground">
-              {formatCurrency(summary.totalOverdue)}
+              {format(summary.totalOverdue)}
             </p>
           </div>
           <div className="rounded-xl border bg-card p-4 space-y-1">
@@ -368,7 +370,7 @@ export default function BillsPage() {
               {summary.counts.paid}
             </p>
             <p className="text-xs tabular-nums text-muted-foreground">
-              {formatCurrency(summary.totalPaid)}
+              {format(summary.totalPaid)}
             </p>
           </div>
         </div>
@@ -455,17 +457,17 @@ export default function BillsPage() {
                     {/* Amount + link */}
                     <div className="text-right shrink-0 space-y-0.5">
                       <p className="text-base font-bold tabular-nums text-pink-400">
-                        {formatCurrency(bill.totalAmount)}
+                        {format(bill.totalAmount)}
                       </p>
                       <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                         <span className="tabular-nums">
-                          Min: {formatCurrency(bill.minimumPayment)}
+                          Min: {format(bill.minimumPayment)}
                         </span>
                       </div>
                     </div>
 
                     <Link
-                      href={`/transactions?accountName=${encodeURIComponent(bill.accountName)}`}
+                      href={bill.accountId ? `/transactions?accountId=${bill.accountId}` : `/transactions?q=${encodeURIComponent(bill.accountName)}`}
                       className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
                     >
                       <ChevronRight className="size-4" />
@@ -521,7 +523,7 @@ export default function BillsPage() {
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-sm font-bold tabular-nums">
-                      {formatCurrency(bill.totalAmount)}
+                      {format(bill.totalAmount)}
                     </p>
                     <p
                       className={cn(

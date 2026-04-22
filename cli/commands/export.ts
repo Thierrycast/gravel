@@ -20,6 +20,8 @@ type Format = "json" | "jsonl"
 
 interface ExportOptions {
   period: string
+  from?: string
+  to?: string
   format: Format
   out?: string
   limit?: string
@@ -74,13 +76,18 @@ function writeOutput(rows: unknown[], format: Format, outPath: string) {
 function buildExportSubcommand(kind: EntityKind, defaultName: string) {
   return new Command(kind)
     .description(`Exporta ${kind} para JSON ou JSONL`)
-    .option("-p, --period <period>", "Periodo (mtd|30d|90d|180d|12m|ytd|all)", "all")
+    .option("-p, --period <period>", "Periodo (mtd|30d|90d|180d|12m|ytd|all|custom)", "all")
+    .option("--from <date>", "Data inicial (YYYY-MM-DD)")
+    .option("--to <date>", "Data final (YYYY-MM-DD)")
     .option("--format <fmt>", "Formato (json|jsonl)", "jsonl")
     .option("-o, --out <file>", "Caminho do arquivo de saida")
     .option("--limit <n>", "Limite (alias de pageSize)")
     .option("--page-size <n>", "Page size para paginacao", "1000")
     .action(async (options: ExportOptions) => {
       const params = new URLSearchParams({ period: options.period })
+      if (options.from) params.set("from", options.from)
+      if (options.to) params.set("to", options.to)
+      
       const pageSize = options.limit ?? options.pageSize ?? "1000"
       params.set("pageSize", pageSize)
 

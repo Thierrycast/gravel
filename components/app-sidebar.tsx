@@ -16,7 +16,8 @@ import {
   Store,
   Target,
   Landmark,
-  RefreshCw,
+  ArrowUpRight,
+  Activity,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -33,7 +34,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { ThemeToggle } from "@/components/theme-toggle"
 
 const mainNavItems = [
   {
@@ -54,7 +54,7 @@ const mainNavItems = [
   {
     title: "Receitas",
     href: "/recurring/income",
-    icon: Calendar,
+    icon: ArrowUpRight,
   },
   {
     title: "Fluxo de Caixa",
@@ -108,7 +108,7 @@ const planningNavItems = [
   {
     title: "Proje\u00e7\u00f5es",
     href: "/projection",
-    icon: TrendingUp,
+    icon: Activity,
   },
   {
     title: "Metas",
@@ -137,12 +137,12 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 text-white">
-                  <TrendingUp className="size-4" />
+                <div className="flex aspect-square size-8 shrink-0 items-center justify-center border border-primary/40 bg-background text-primary">
+                  <span className="text-[10px] font-bold tracking-widest font-mono">GRV</span>
                 </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-bold tracking-tight">Gravel</span>
-                  <span className="truncate text-xs text-muted-foreground">Finance</span>
+                <div className="grid flex-1 text-left leading-tight">
+                  <span className="truncate text-sm font-bold tracking-widest font-mono text-foreground">GRAVEL</span>
+                  <span className="truncate text-[10px] tracking-widest text-muted-foreground font-mono">FINANCE_v1</span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -225,8 +225,8 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
-        <div className="p-2">
-          <ThemeToggle />
+        <div className="px-3 py-2 text-[10px] font-mono text-muted-foreground tracking-wider border-t border-border">
+          SYS::OK
         </div>
       </SidebarFooter>
     </Sidebar>

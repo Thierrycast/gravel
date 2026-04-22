@@ -11,7 +11,7 @@ import {
 } from "recharts"
 import { Repeat, CreditCard, ChevronLeft, ChevronRight } from "lucide-react"
 import { useApi } from "@/hooks/use-api"
-import { formatCurrency } from "@/lib/format"
+import { useCurrency } from "@/lib/currency-context"
 import {
   Card,
   CardHeader,
@@ -64,6 +64,7 @@ const MONTH_FULL = [
 ]
 
 export default function RecurringPage() {
+  const { format } = useCurrency()
   const currentYear = new Date().getFullYear()
   const currentMonth = new Date().getMonth()
   const [year, setYear] = useState(currentYear)
@@ -154,9 +155,9 @@ export default function RecurringPage() {
           </div>
         </div>
 
-        <div className="flex gap-6">
-          <div className="flex-1">
-            <ChartContainer config={chartConfig} className="h-64 w-full">
+        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
+          <div className="flex-1 min-w-0">
+            <ChartContainer config={chartConfig} className="h-56 sm:h-64 w-full">
               <BarChart data={chartData} accessibilityLayer>
                 <CartesianGrid vertical={false} strokeOpacity={0.1} />
                 <XAxis
@@ -180,7 +181,7 @@ export default function RecurringPage() {
                       formatter={(value, name) => (
                         <span>
                           {chartConfig[name as keyof typeof chartConfig]?.label}:{" "}
-                          {formatCurrency(Number(value))}
+                          {format(Number(value))}
                         </span>
                       )}
                     />
@@ -239,18 +240,18 @@ export default function RecurringPage() {
                   <div className="size-2 rounded-full bg-amber-500" />
                   <span className="text-muted-foreground">Parcelas</span>
                 </div>
-                <span className="font-semibold tabular-nums">{formatCurrency(installmentMonthly)}</span>
+                <span className="font-semibold tabular-nums">{format(installmentMonthly)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <div className="size-2 rounded-full bg-blue-500" />
                   <span className="text-muted-foreground">Contas fixas</span>
                 </div>
-                <span className="font-semibold tabular-nums">{formatCurrency(fixedMonthly)}</span>
+                <span className="font-semibold tabular-nums">{format(fixedMonthly)}</span>
               </div>
               <div className="border-t pt-2 flex justify-between">
                 <span className="font-semibold">Total</span>
-                <span className="font-bold tabular-nums">{formatCurrency(totalMonthly)}</span>
+                <span className="font-bold tabular-nums">{format(totalMonthly)}</span>
               </div>
             </div>
           </div>
@@ -327,7 +328,7 @@ export default function RecurringPage() {
                     </div>
                   </div>
                   <span className="text-sm font-semibold tabular-nums text-pink-400 ml-3">
-                    {formatCurrency(Math.abs(rule.amount))}
+                    {format(Math.abs(rule.amount))}
                   </span>
                 </div>
               )
@@ -367,7 +368,7 @@ export default function RecurringPage() {
                   </div>
                 </div>
                 <span className="text-sm font-semibold tabular-nums text-pink-400 ml-3">
-                  {formatCurrency(Math.abs(rule.amount))}
+                  {format(Math.abs(rule.amount))}
                 </span>
               </div>
             ))}
