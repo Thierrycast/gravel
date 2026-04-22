@@ -33,12 +33,12 @@ interface Link {
 type SNode = SankeyNode<Node, Link>
 type SLink = SankeyLink<Node, Link>
 
-const MARGIN = { top: 16, right: 120, bottom: 16, left: 120 }
+const MARGIN = { top: 16, right: 140, bottom: 16, left: 140 }
 
 export function SankeyChart({
   data,
-  width = 700,
-  height = 380,
+  width = 1100,
+  height = 320,
 }: {
   data: SankeyData
   width?: number
@@ -47,9 +47,16 @@ export function SankeyChart({
   const { nodes, links } = useMemo(() => {
     if (!data || !data.categories.length) return { nodes: [], links: [] }
 
-    const categories = data.categories.filter((c) => c.total > 0)
+    const safeIncome = Number.isFinite(data.income) ? data.income : 0
+    const categories = data.categories.filter(
+      (c) => Number.isFinite(c.total) && c.total > 0
+    )
     const totalExpenses = categories.reduce((s, c) => s + c.total, 0)
-    const remaining = data.income - totalExpenses
+    const remaining = safeIncome - totalExpenses
+
+    if (totalExpenses <= 0 && remaining <= 0) {
+      return { nodes: [], links: [] }
+    }
 
     // Nodes: [0] = Receitas, [1] = Despesas, [2..n] = categories, [n+1?] = Saldo
     const nodeList: Node[] = [
@@ -68,12 +75,14 @@ export function SankeyChart({
     const linkList: Link[] = []
 
     // Receitas → Despesas
-    linkList.push({
-      source: 0,
-      target: 1,
-      value: totalExpenses,
-      color: "hsl(0, 84%, 60%)",
-    })
+    if (totalExpenses > 0) {
+      linkList.push({
+        source: 0,
+        target: 1,
+        value: totalExpenses,
+        color: "hsl(0, 84%, 60%)",
+      })
+    }
 
     // Receitas → Saldo
     if (remaining > 0) {
@@ -87,6 +96,7 @@ export function SankeyChart({
 
     // Despesas → each category
     categories.forEach((c, i) => {
+      if (c.total <= 0) return
       linkList.push({
         source: 1,
         target: i + 2,
@@ -106,8 +116,8 @@ export function SankeyChart({
 
     const generator = d3Sankey<Node, Link>()
       .nodeId((d) => d.index as unknown as string)
-      .nodeWidth(16)
-      .nodePadding(12)
+      .nodeWidth(20)
+      .nodePadding(16)
       .nodeSort(null)
       .extent([
         [MARGIN.left, MARGIN.top],
@@ -137,8 +147,9 @@ export function SankeyChart({
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="xMidYMid meet"
       className="w-full"
-      style={{ maxHeight: height }}
+      style={{ maxHeight: height, minWidth: 600 }}
     >
       {/* Links */}
       <g>
@@ -177,9 +188,10 @@ export function SankeyChart({
           const isRight = x0 > width * 0.6
 
           // Calculate total value through node
-          const nodeValue =
+          const nodeValueRaw =
             (node.sourceLinks ?? []).reduce((s, l) => s + (l as SLink).value, 0) ||
             (node.targetLinks ?? []).reduce((s, l) => s + (l as SLink).value, 0)
+          const nodeValue = Number.isFinite(nodeValueRaw) ? Math.max(0, nodeValueRaw) : 0
 
           return (
             <g key={i}>

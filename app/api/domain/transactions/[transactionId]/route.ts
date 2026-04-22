@@ -93,3 +93,58 @@ export async function PUT(
     return jsonError(error)
   }
 }
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ transactionId: string }> }
+) {
+  try {
+    const { transactionId } = await params
+
+    const existing = await prisma.domainTransaction.findUnique({
+      where: { id: transactionId },
+    })
+
+    if (!existing) {
+      return jsonError(new Error("Transação não encontrada"), 404)
+    }
+
+    if (existing.sourceProvider !== "MANUAL") {
+      return jsonError(
+        new Error(
+          "Apenas transações manuais podem ser excluídas por este endpoint. Transações sincronizadas de provedores externos devem ser mantidas."
+        ),
+        400
+      )
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Limpar tabelas associadas (se houver registros)
+      await tx.ignoredTransaction.deleteMany({
+        where: { domainTransactionId: transactionId },
+      })
+
+      await tx.domainTransactionSource.deleteMany({
+        where: { domainTransactionId: transactionId },
+      })
+
+      await tx.transactionTag.deleteMany({
+        where: { domainTransactionId: transactionId },
+      })
+
+      // Excluir a transação propriamente dita
+      await tx.domainTransaction.delete({
+        where: { id: transactionId },
+      })
+    })
+
+    return jsonOk({
+      results: {
+        id: transactionId,
+        message: "Transação excluída com sucesso",
+      },
+    })
+  } catch (error) {
+    return jsonError(error)
+  }
+}

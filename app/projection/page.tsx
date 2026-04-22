@@ -72,23 +72,23 @@ const horizons = [
 const chartConfig: ChartConfig = {
   income: {
     label: "Receitas",
-    color: "var(--chart-3)",
+    color: "#10b981",
   },
   recurringExpenses: {
-    label: "Recorrências",
-    color: "var(--chart-5)",
+    label: "Recorr\u00eancias",
+    color: "#f43f5e",
   },
   installments: {
     label: "Parcelas",
-    color: "var(--chart-2)",
+    color: "#f59e0b",
   },
   variableExpenses: {
-    label: "Variável",
-    color: "var(--chart-4)",
+    label: "Vari\u00e1vel",
+    color: "#6b7280",
   },
   balance: {
     label: "Saldo Projetado",
-    color: "var(--chart-1)",
+    color: "#3b82f6",
   },
 }
 
@@ -101,18 +101,20 @@ export default function ProjectionPage() {
   })
 
   const insights = useMemo(() => {
-    if (!data) return []
+    const monthsData = data?.months ?? []
+    const summary = data?.summary
+    if (monthsData.length === 0) return []
     const result: { title: string; variant: "default" | "destructive" | "secondary" }[] = []
 
-    const installmentMonths = data.months.filter((m) => m.installments > 0)
-    if (installmentMonths.length > 0 && installmentMonths.length < data.months.length) {
+    const installmentMonths = monthsData.filter((m) => m.installments > 0)
+    if (installmentMonths.length > 0 && installmentMonths.length < monthsData.length) {
       result.push({
         title: `Parcelamentos terminam em ${installmentMonths.length} meses`,
         variant: "secondary",
       })
     }
 
-    const overBudget = data.months.filter(
+    const overBudget = monthsData.filter(
       (m) =>
         m.recurringExpenses + m.installments + m.variableExpenses > m.income
     )
@@ -131,9 +133,9 @@ export default function ProjectionPage() {
       })
     }
 
-    if (data.summary.projectedSavings > 0) {
+    if ((summary?.projectedSavings ?? 0) > 0) {
       result.push({
-        title: `Economia projetada de ${formatCurrency(data.summary.projectedSavings)} no período`,
+        title: `Economia projetada de ${formatCurrency(summary?.projectedSavings ?? 0)} no período`,
         variant: "default",
       })
     }
@@ -160,24 +162,22 @@ export default function ProjectionPage() {
     <div className="flex flex-col gap-6 p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Projeção de Saldo
-          </h1>
-          <p className="text-muted-foreground">
-            Previsão de receitas, despesas e saldo futuro
-          </p>
-        </div>
-        <div className="flex items-center gap-1">
+        <h1 className="text-3xl font-bold tracking-tight">
+          Proje&ccedil;&atilde;o de Saldo
+        </h1>
+        <div className="flex gap-0.5">
           {horizons.map((h) => (
-            <Button
+            <button
               key={h.value}
-              variant={months === h.value ? "default" : "outline"}
-              size="sm"
               onClick={() => setMonths(h.value)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                months === h.value
+                  ? "bg-blue-500/20 text-blue-400"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               {h.label}
-            </Button>
+            </button>
           ))}
         </div>
       </div>
@@ -203,30 +203,30 @@ export default function ProjectionPage() {
 
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardDescription>Receita Média Mensal</CardDescription>
-            <CardTitle className="text-2xl text-emerald-600">
-              {formatCurrency(data?.summary.averageMonthlyIncome ?? 0)}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>Despesa Média Mensal</CardDescription>
-            <CardTitle className="text-2xl text-red-500">
-              {formatCurrency(data?.summary.averageMonthlyExpenses ?? 0)}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>Economia Projetada</CardDescription>
-            <CardTitle className="text-2xl">
-              {formatCurrency(data?.summary.projectedSavings ?? 0)}
-            </CardTitle>
-          </CardHeader>
-        </Card>
+        <div className="rounded-xl border bg-card p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-1">
+            Receita M&eacute;dia Mensal
+          </p>
+          <p className="text-2xl font-bold tabular-nums text-emerald-400">
+            {formatCurrency(data?.summary.averageMonthlyIncome ?? 0)}
+          </p>
+        </div>
+        <div className="rounded-xl border bg-card p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-1">
+            Despesa M&eacute;dia Mensal
+          </p>
+          <p className="text-2xl font-bold tabular-nums text-pink-400">
+            {formatCurrency(data?.summary.averageMonthlyExpenses ?? 0)}
+          </p>
+        </div>
+        <div className="rounded-xl border bg-card p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-1">
+            Economia Projetada
+          </p>
+          <p className="text-2xl font-bold tabular-nums text-blue-400">
+            {formatCurrency(data?.summary.projectedSavings ?? 0)}
+          </p>
+        </div>
       </div>
 
       {/* Main Chart */}
@@ -303,10 +303,10 @@ export default function ProjectionPage() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-2">
-            {data?.months.map((m, idx) => {
+            {(data?.months ?? []).map((m, idx) => {
               const isExpanded = expandedMonth === m.label
               const prevBalance =
-                idx > 0 ? data.months[idx - 1].balance : 0
+                idx > 0 ? (data?.months?.[idx - 1]?.balance ?? 0) : 0
               const totalExpenses =
                 m.recurringExpenses + m.installments + m.variableExpenses
               const result = m.income - totalExpenses
@@ -333,8 +333,8 @@ export default function ProjectionPage() {
                       <span
                         className={`text-sm font-semibold ${
                           m.balance >= 0
-                            ? "text-emerald-600"
-                            : "text-red-500"
+                            ? "text-emerald-400"
+                            : "text-red-400"
                         }`}
                       >
                         {formatCurrency(m.balance)}
@@ -393,8 +393,8 @@ export default function ProjectionPage() {
                             <TableCell
                               className={`text-right font-semibold ${
                                 result >= 0
-                                  ? "text-emerald-600"
-                                  : "text-red-500"
+                                  ? "text-emerald-400"
+                                  : "text-red-400"
                               }`}
                             >
                               {formatCurrency(result)}

@@ -177,11 +177,15 @@ async function fetchAllPages<T>(
   }>,
   pageSize: number
 ) {
+  console.log(`[fetchAllPages] Buscando página 1 com pageSize ${pageSize}`);
   const firstPage = await getPage(1, pageSize)
+  console.log(`[fetchAllPages] Página 1 retornada. totalPages: ${firstPage?.totalPages}, results length: ${firstPage?.results?.length}`);
+  
   const totalPages = Math.max(Number(firstPage?.totalPages ?? 1), 1)
   const results = Array.isArray(firstPage?.results) ? [...firstPage.results] : []
 
   for (let page = 2; page <= totalPages; page += 1) {
+    console.log(`[fetchAllPages] Buscando página ${page} de ${totalPages}`);
     const currentPage = await getPage(page, pageSize)
     if (Array.isArray(currentPage?.results)) {
       results.push(...currentPage.results)
@@ -281,32 +285,36 @@ async function syncAccountEntity(itemId: string, account: Record<string, unknown
     sourceUpdatedAt: toDate(account.updatedAt),
   })
 
-  inserted += await createIfMissing(
-    async () =>
-      Boolean(
-        await prisma.pluggyAccountRecord.findUnique({
-          where: { externalId },
-          select: { id: true },
-        })
-      ),
-    () =>
-      prisma.pluggyAccountRecord.create({
-        data: {
-          externalId,
-          itemExternalId: itemId,
-          type: toStringOrNull(account.type),
-          subtype: toStringOrNull(account.subtype),
-          name: toStringOrNull(account.name),
-          number: toStringOrNull(account.number),
-          owner: toStringOrNull(account.owner),
-          taxNumber: toStringOrNull(account.taxNumber),
-          currencyCode: toStringOrNull(account.currencyCode),
-          balance: toDecimal(account.balance) ?? undefined,
-          providerCreatedAt: toDate(account.createdAt) ?? undefined,
-          providerUpdatedAt: toDate(account.updatedAt) ?? undefined,
-        },
-      })
-  )
+  await prisma.pluggyAccountRecord.upsert({
+    where: { externalId },
+    update: {
+      itemExternalId: itemId,
+      type: toStringOrNull(account.type),
+      subtype: toStringOrNull(account.subtype),
+      name: toStringOrNull(account.name),
+      number: toStringOrNull(account.number),
+      owner: toStringOrNull(account.owner),
+      taxNumber: toStringOrNull(account.taxNumber),
+      currencyCode: toStringOrNull(account.currencyCode),
+      balance: toDecimal(account.balance) ?? undefined,
+      providerUpdatedAt: toDate(account.updatedAt) ?? undefined,
+    },
+    create: {
+      externalId,
+      itemExternalId: itemId,
+      type: toStringOrNull(account.type),
+      subtype: toStringOrNull(account.subtype),
+      name: toStringOrNull(account.name),
+      number: toStringOrNull(account.number),
+      owner: toStringOrNull(account.owner),
+      taxNumber: toStringOrNull(account.taxNumber),
+      currencyCode: toStringOrNull(account.currencyCode),
+      balance: toDecimal(account.balance) ?? undefined,
+      providerCreatedAt: toDate(account.createdAt) ?? undefined,
+      providerUpdatedAt: toDate(account.updatedAt) ?? undefined,
+    },
+  })
+  inserted += 1
 
   return {
     inserted,
@@ -380,34 +388,40 @@ async function syncBillEntity(
     sourceUpdatedAt: toDate(bill.updatedAt),
   })
 
-  inserted += await createIfMissing(
-    async () =>
-      Boolean(
-        await prisma.pluggyBillRecord.findUnique({
-          where: { externalId },
-          select: { id: true },
-        })
-      ),
-    () =>
-      prisma.pluggyBillRecord.create({
-        data: {
-          externalId,
-          itemExternalId: itemId,
-          accountExternalId: accountId,
-          dueDate: toDate(bill.dueDate) ?? undefined,
-          totalAmount: toDecimal(bill.totalAmount) ?? undefined,
-          totalAmountCurrencyCode: toStringOrNull(bill.totalAmountCurrencyCode),
-          minimumPaymentAmount:
-            toDecimal(bill.minimumPaymentAmount) ?? undefined,
-          allowsInstallments:
-            typeof bill.allowsInstallments === "boolean"
-              ? bill.allowsInstallments
-              : undefined,
-          providerCreatedAt: toDate(bill.createdAt) ?? undefined,
-          providerUpdatedAt: toDate(bill.updatedAt) ?? undefined,
-        },
-      })
-  )
+  await prisma.pluggyBillRecord.upsert({
+    where: { externalId },
+    update: {
+      itemExternalId: itemId,
+      accountExternalId: accountId,
+      dueDate: toDate(bill.dueDate) ?? undefined,
+      totalAmount: toDecimal(bill.totalAmount) ?? undefined,
+      totalAmountCurrencyCode: toStringOrNull(bill.totalAmountCurrencyCode),
+      minimumPaymentAmount:
+        toDecimal(bill.minimumPaymentAmount) ?? undefined,
+      allowsInstallments:
+        typeof bill.allowsInstallments === "boolean"
+          ? bill.allowsInstallments
+          : undefined,
+      providerUpdatedAt: toDate(bill.updatedAt) ?? undefined,
+    },
+    create: {
+      externalId,
+      itemExternalId: itemId,
+      accountExternalId: accountId,
+      dueDate: toDate(bill.dueDate) ?? undefined,
+      totalAmount: toDecimal(bill.totalAmount) ?? undefined,
+      totalAmountCurrencyCode: toStringOrNull(bill.totalAmountCurrencyCode),
+      minimumPaymentAmount:
+        toDecimal(bill.minimumPaymentAmount) ?? undefined,
+      allowsInstallments:
+        typeof bill.allowsInstallments === "boolean"
+          ? bill.allowsInstallments
+          : undefined,
+      providerCreatedAt: toDate(bill.createdAt) ?? undefined,
+      providerUpdatedAt: toDate(bill.updatedAt) ?? undefined,
+    },
+  })
+  inserted += 1
 
   return inserted
 }
@@ -441,38 +455,48 @@ async function syncTransactionEntity(
   const merchantName =
     toStringOrNull(merchant?.businessName) ?? toStringOrNull(merchant?.name)
 
-  inserted += await createIfMissing(
-    async () =>
-      Boolean(
-        await prisma.pluggyTransactionRecord.findUnique({
-          where: { externalId },
-          select: { id: true },
-        })
-      ),
-    () =>
-      prisma.pluggyTransactionRecord.create({
-        data: {
-          externalId,
-          itemExternalId: itemId,
-          accountExternalId: accountId,
-          description: toStringOrNull(transaction.description),
-          descriptionRaw: toStringOrNull(transaction.descriptionRaw),
-          currencyCode: toStringOrNull(transaction.currencyCode),
-          amount: toDecimal(transaction.amount) ?? undefined,
-          date: toDate(transaction.date) ?? undefined,
-          type: toStringOrNull(transaction.type),
-          status: toStringOrNull(transaction.status),
-          categoryId: toStringOrNull(transaction.categoryId),
-          category: toStringOrNull(transaction.category),
-          providerCode: toStringOrNull(transaction.providerCode),
-          providerId: toStringOrNull(transaction.providerId),
-          merchantCnpj,
-          merchantName,
-          providerCreatedAt: toDate(transaction.createdAt) ?? undefined,
-          providerUpdatedAt: toDate(transaction.updatedAt) ?? undefined,
-        },
-      })
-  )
+  await prisma.pluggyTransactionRecord.upsert({
+    where: { externalId },
+    update: {
+      itemExternalId: itemId,
+      accountExternalId: accountId,
+      description: toStringOrNull(transaction.description),
+      descriptionRaw: toStringOrNull(transaction.descriptionRaw),
+      currencyCode: toStringOrNull(transaction.currencyCode),
+      amount: toDecimal(transaction.amount) ?? undefined,
+      date: toDate(transaction.date) ?? undefined,
+      type: toStringOrNull(transaction.type),
+      status: toStringOrNull(transaction.status),
+      categoryId: toStringOrNull(transaction.categoryId),
+      category: toStringOrNull(transaction.category),
+      providerCode: toStringOrNull(transaction.providerCode),
+      providerId: toStringOrNull(transaction.providerId),
+      merchantCnpj,
+      merchantName,
+      providerUpdatedAt: toDate(transaction.updatedAt) ?? undefined,
+    },
+    create: {
+      externalId,
+      itemExternalId: itemId,
+      accountExternalId: accountId,
+      description: toStringOrNull(transaction.description),
+      descriptionRaw: toStringOrNull(transaction.descriptionRaw),
+      currencyCode: toStringOrNull(transaction.currencyCode),
+      amount: toDecimal(transaction.amount) ?? undefined,
+      date: toDate(transaction.date) ?? undefined,
+      type: toStringOrNull(transaction.type),
+      status: toStringOrNull(transaction.status),
+      categoryId: toStringOrNull(transaction.categoryId),
+      category: toStringOrNull(transaction.category),
+      providerCode: toStringOrNull(transaction.providerCode),
+      providerId: toStringOrNull(transaction.providerId),
+      merchantCnpj,
+      merchantName,
+      providerCreatedAt: toDate(transaction.createdAt) ?? undefined,
+      providerUpdatedAt: toDate(transaction.updatedAt) ?? undefined,
+    },
+  })
+  inserted += 1
 
   return {
     inserted,

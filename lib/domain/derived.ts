@@ -125,7 +125,7 @@ export async function refreshRecurringDerived(options?: {
     prisma.domainRecurringRule.findMany(),
   ])
 
-  const categoryMap = new Map(categories.map((category) => [category.id, category]))
+  const categoryMap = new Map<string, any>(categories.map((category) => [category.id, category]))
   const groups = new Map<string, typeof transactions>()
 
   for (const transaction of transactions) {
@@ -187,7 +187,14 @@ export async function refreshRecurringDerived(options?: {
       intervals.reduce((total, current) => total + current, 0) /
       Math.max(intervals.length, 1)
 
-    if (avgIntervalDays < 25 || avgIntervalDays > 35) continue
+    let detectedInterval: string | null = null
+    if (avgIntervalDays >= 5 && avgIntervalDays <= 9) detectedInterval = "WEEKLY"
+    else if (avgIntervalDays >= 12 && avgIntervalDays <= 16) detectedInterval = "BIWEEKLY"
+    else if (avgIntervalDays >= 25 && avgIntervalDays <= 35) detectedInterval = "MONTHLY"
+    else if (avgIntervalDays >= 80 && avgIntervalDays <= 100) detectedInterval = "QUARTERLY"
+    else if (avgIntervalDays >= 345 && avgIntervalDays <= 385) detectedInterval = "YEARLY"
+
+    if (!detectedInterval) continue
 
     const amounts = sorted.map((transaction) => Math.abs(safeNumber(transaction.amount)))
     const avgAmountNumber =
@@ -206,6 +213,13 @@ export async function refreshRecurringDerived(options?: {
       0.55 + Math.min(sorted.length, 6) * 0.06 + (1 - maxDeviation / Math.max(avgAmountNumber, 1)) * 0.1
     )
 
+    let nextDate = new Date(lastTransaction.occurredAt)
+    if (detectedInterval === "WEEKLY") nextDate.setUTCDate(nextDate.getUTCDate() + 7)
+    else if (detectedInterval === "BIWEEKLY") nextDate.setUTCDate(nextDate.getUTCDate() + 14)
+    else if (detectedInterval === "MONTHLY") nextDate = addMonths(nextDate, 1)
+    else if (detectedInterval === "QUARTERLY") nextDate = addMonths(nextDate, 3)
+    else if (detectedInterval === "YEARLY") nextDate.setUTCFullYear(nextDate.getUTCFullYear() + 1)
+
     detectedCandidates.push({
       name:
         lastTransaction.merchantName ??
@@ -218,8 +232,8 @@ export async function refreshRecurringDerived(options?: {
         normalizeText(lastTransaction.description) ??
         undefined,
       amount: new Prisma.Decimal(avgAmountNumber.toFixed(2)),
-      interval: "MONTHLY",
-      nextDate: addMonths(lastTransaction.occurredAt, 1),
+      interval: detectedInterval,
+      nextDate: nextDate,
       type:
         lastTransaction.direction === DomainTransactionDirection.INFLOW
           ? "INCOME"
@@ -307,6 +321,7 @@ export async function getRecurringPayload(type?: "INCOME" | "EXPENSE") {
         accountId: metadata.accountId ?? null,
         merchantId: rule.merchantId,
         categoryId: rule.categoryId,
+        descriptionPattern: rule.descriptionPattern,
         confidence: metadata.confidence ?? null,
         origin: metadata.origin ?? "manual",
         occurrences: metadata.occurrences ?? null,
@@ -320,41 +335,85 @@ export async function getRecurringPayload(type?: "INCOME" | "EXPENSE") {
 }
 
 export async function getProjectionPayload(searchParams?: URLSearchParams) {
-  const months = Math.min(
+  const horizonMonths = Math.min(
     Math.max(parseNumberParam(searchParams?.get("months") ?? null, 6) ?? 6, 1),
     24
   )
-  const [overview, recurringRules, bills] = await Promise.all([
+
+  const now = new Date()
+  const lookbackFrom = new Date(now.getTime() - 90 * MS_IN_DAY)
+
+  const [overview, recurringRules, bills, pastTransactions, categories] = await Promise.all([
     getOverviewMetrics(new URLSearchParams("period=all")),
     getRecurringPayload(),
     prisma.domainBill.findMany({
       where: {
         dueDate: {
-          gte: new Date(),
+          gte: now,
         },
       },
       orderBy: [{ dueDate: "asc" }],
     }),
+    prisma.domainTransaction.findMany({
+      where: {
+        ignored: false,
+        direction: DomainTransactionDirection.OUTFLOW,
+        occurredAt: { gte: lookbackFrom },
+      },
+    }),
+    prisma.domainCategory.findMany(),
   ])
 
-  const now = new Date()
-  let projectedBalance = overview.accountBalance
-  const points = [] as Array<{
-    date: Date
-    projectedBalance: Prisma.Decimal
-    inflow: Prisma.Decimal
-    outflow: Prisma.Decimal
-    recurringInflow: Prisma.Decimal
-    recurringOutflow: Prisma.Decimal
-    billsOutflow: Prisma.Decimal
+  // Variable (non-recurring) expenses: exclude internal transfers and known recurring rules
+  const categoryMap = new Map<string, any>(categories.map((c) => [c.id, c]))
+  const EXCLUDED_SPENDING_CATEGORIES = new Set([
+    "pagamento de cartão de crédito",
+    "transferência mesma titularidade",
+    "transferência entre contas",
+    "pagamento de fatura",
+  ])
+
+  const variableTransactions = pastTransactions.filter((tx) => {
+    const cat = tx.domainCategoryId ? categoryMap.get(tx.domainCategoryId) : null
+    if (cat?.kind === "TRANSFER") return false
+    if (cat?.name && EXCLUDED_SPENDING_CATEGORIES.has(cat.name.toLowerCase())) return false
+
+    const isRecurring = recurringRules.some((rule) => {
+      if (rule.type === "INCOME") return false
+      if (rule.merchantId && rule.merchantId === tx.domainMerchantId) return true
+      if (rule.descriptionPattern) {
+        const normalized = tx.normalizedDescription ?? normalizeText(tx.description)
+        if (normalized?.includes(rule.descriptionPattern.toLowerCase())) return true
+      }
+      return false
+    })
+
+    return !isRecurring
+  })
+
+  const totalVariableOutflow = sumDecimals(variableTransactions.map((tx) => tx.amount.abs()))
+  const avgVariableExpenses = safeNumber(totalVariableOutflow.div(3)) // 3-month average
+
+  let currentBalance = overview.accountBalance
+  const monthsData = [] as Array<{
+    month: number
+    year: number
+    label: string
+    income: number
+    recurringExpenses: number
+    installments: number
+    variableExpenses: number
+    projected: number
+    balance: number
   }>
 
-  for (let index = 1; index <= months; index += 1) {
+  for (let index = 1; index <= horizonMonths; index += 1) {
     const pointDate = startOfMonth(addMonths(now, index))
     const pointMonthEnd = endOfMonth(pointDate)
 
     let recurringInflow = ZERO
     let recurringOutflow = ZERO
+    let installmentsOutflow = ZERO
 
     for (const rule of recurringRules) {
       if (!rule.active) continue
@@ -365,8 +424,10 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
 
       if (rule.type === "INCOME") {
         recurringInflow = recurringInflow.plus(decimal(rule.amount))
+      } else if (rule.origin === "detected" || rule.interval === "MONTHLY") {
+        recurringOutflow = recurringOutflow.plus(decimal(rule.amount).abs())
       } else {
-        recurringOutflow = recurringOutflow.plus(decimal(rule.amount))
+        installmentsOutflow = installmentsOutflow.plus(decimal(rule.amount).abs())
       }
     }
 
@@ -374,30 +435,43 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
       bills
         .filter((bill) => bill.dueDate && bill.dueDate >= pointDate && bill.dueDate <= pointMonthEnd)
         .map((bill) => bill.totalAmount)
-    )
+    ).abs()
 
-    const inflow = recurringInflow
-    const outflow = recurringOutflow.plus(billsOutflow)
-    projectedBalance = projectedBalance.plus(inflow).minus(outflow)
+    const income = safeNumber(recurringInflow)
+    const recurringExpenses = safeNumber(recurringOutflow)
+    const installments = safeNumber(installmentsOutflow.plus(billsOutflow))
+    const variableExpenses = avgVariableExpenses
 
-    points.push({
-      date: pointDate,
-      projectedBalance,
-      inflow,
-      outflow,
-      recurringInflow,
-      recurringOutflow,
-      billsOutflow,
+    const totalOutflow = recurringExpenses + installments + variableExpenses
+    const monthlyNet = income - totalOutflow
+    currentBalance = currentBalance.plus(new Prisma.Decimal(monthlyNet.toFixed(2)))
+
+    monthsData.push({
+      month: pointDate.getUTCMonth() + 1,
+      year: pointDate.getUTCFullYear(),
+      label: monthKey(pointDate),
+      income,
+      recurringExpenses,
+      installments,
+      variableExpenses,
+      projected: monthlyNet,
+      balance: safeNumber(currentBalance),
     })
   }
 
+  const averageMonthlyIncome =
+    monthsData.reduce((sum, m) => sum + m.income, 0) / monthsData.length
+  const averageMonthlyExpenses =
+    monthsData.reduce((sum, m) => sum + m.recurringExpenses + m.installments + m.variableExpenses, 0) /
+    monthsData.length
+
   return {
     summary: {
-      startBalance: overview.accountBalance,
-      projectedFinalBalance: points.at(-1)?.projectedBalance ?? overview.accountBalance,
-      months,
+      averageMonthlyIncome,
+      averageMonthlyExpenses,
+      projectedSavings: safeNumber(currentBalance.minus(overview.accountBalance)),
     },
-    points,
+    months: monthsData,
   }
 }
 
@@ -493,11 +567,11 @@ export async function refreshDerivedCaches() {
     }
 
     await tx.balanceProjection.deleteMany()
-    if (projection.points.length > 0) {
+    if (projection.months.length > 0) {
       await tx.balanceProjection.createMany({
-        data: projection.points.map((point) => ({
-          date: point.date,
-          projectedBalance: point.projectedBalance,
+        data: projection.months.map((m) => ({
+          date: new Date(`${m.year}-${String(m.month).padStart(2, "0")}-01T00:00:00Z`),
+          projectedBalance: new Prisma.Decimal(m.balance.toFixed(2)),
         })),
       })
     }
@@ -506,6 +580,6 @@ export async function refreshDerivedCaches() {
   return {
     recurring: recurringSummary,
     portfolioSnapshots: portfolioHistory.length,
-    projections: projection.points.length,
+    projections: projection.months.length,
   }
 }

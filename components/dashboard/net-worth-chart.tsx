@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts"
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Line } from "recharts"
 import {
   ChartContainer,
   ChartTooltip,
@@ -11,14 +11,27 @@ import {
 import { formatCurrency, formatDate } from "@/lib/format"
 
 interface NetWorthChartProps {
-  history: Array<{ date: string; netWorth: number }>
+  history: Array<{
+    date: string
+    netWorth: number
+    assets?: number | null
+    liabilities?: number | null
+  }>
   period: string
 }
 
 const chartConfig = {
   netWorth: {
-    label: "Patrimônio",
-    color: "var(--chart-2)",
+    label: "Patrim\u00f4nio",
+    color: "#10b981",
+  },
+  assets: {
+    label: "Ativos",
+    color: "#38bdf8",
+  },
+  liabilities: {
+    label: "Passivos",
+    color: "#f43f5e",
   },
 } satisfies ChartConfig
 
@@ -39,6 +52,10 @@ export function NetWorthChart({ history, period }: NetWorthChartProps) {
 
     return history.filter((d) => new Date(d.date) >= cutoff)
   }, [history, period])
+
+  const hasAssetValuation = filteredData.some(
+    (point) => point.assets != null || point.liabilities != null
+  )
 
   return (
     <ChartContainer config={chartConfig} className="aspect-[2/1] w-full">
@@ -69,9 +86,11 @@ export function NetWorthChart({ history, period }: NetWorthChartProps) {
         <ChartTooltip
           content={
             <ChartTooltipContent
-              formatter={(value) => (
+              formatter={(value, name) => (
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-muted-foreground">Patrimônio</span>
+                  <span className="text-muted-foreground">
+                    {chartConfig[String(name) as keyof typeof chartConfig]?.label ?? name}
+                  </span>
                   <span className="font-mono font-medium tabular-nums">
                     {formatCurrency(value as number)}
                   </span>
@@ -88,6 +107,26 @@ export function NetWorthChart({ history, period }: NetWorthChartProps) {
           strokeWidth={2}
           fill="url(#netWorthGradient)"
         />
+        {hasAssetValuation && (
+          <>
+            <Line
+              type="monotone"
+              dataKey="assets"
+              stroke="var(--color-assets)"
+              strokeWidth={1.75}
+              dot={{ r: 3 }}
+              connectNulls
+            />
+            <Line
+              type="monotone"
+              dataKey="liabilities"
+              stroke="var(--color-liabilities)"
+              strokeWidth={1.75}
+              dot={{ r: 3 }}
+              connectNulls
+            />
+          </>
+        )}
       </AreaChart>
     </ChartContainer>
   )

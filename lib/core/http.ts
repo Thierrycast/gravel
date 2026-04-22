@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 
 function serializeValue(value: unknown): unknown {
   if (value instanceof Prisma.Decimal) {
-    return value.toString()
+    return value.toNumber()
   }
 
   if (value instanceof Date) {

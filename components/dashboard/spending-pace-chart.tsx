@@ -16,12 +16,12 @@ interface SpendingPaceChartProps {
 
 const chartConfig = {
   current: {
-    label: "Mês atual",
-    color: "var(--chart-1)",
+    label: "M\u00eas atual",
+    color: "#f43f5e",
   },
   previous: {
-    label: "Mês anterior",
-    color: "var(--chart-4)",
+    label: "M\u00eas anterior",
+    color: "#6b7280",
   },
 } satisfies ChartConfig
 

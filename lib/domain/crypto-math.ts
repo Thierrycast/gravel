@@ -117,14 +117,20 @@ export function computeCryptoPositionStates(
 
       const averageCost = current.quantity.greaterThan(0)
         ? current.totalCost.div(current.quantity)
-        : ZERO
-      const costRemoved = averageCost.mul(trade.quantity)
+        : trade.price // Fallback to trade price if no quantity is recorded
+
       const proceeds = trade.commissionAsset === trade.quoteAsset
         ? notional.minus(commission)
         : notional
       const quantityDelta = trade.commissionAsset === asset
         ? trade.quantity.plus(commission)
         : trade.quantity
+
+      // Handle missing buy snapshots: for quantity exceeding our records, 
+      // assume cost equals trade price (0 PnL for that part).
+      const quantityFromRecord = Prisma.Decimal.min(current.quantity, quantityDelta)
+      const quantityMissing = Prisma.Decimal.max(ZERO, quantityDelta.minus(quantityFromRecord))
+      const costRemoved = averageCost.mul(quantityFromRecord).plus(trade.price.mul(quantityMissing))
 
       current.quantity = Prisma.Decimal.max(ZERO, current.quantity.minus(quantityDelta))
       current.totalCost = Prisma.Decimal.max(ZERO, current.totalCost.minus(costRemoved))

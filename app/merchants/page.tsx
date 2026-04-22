@@ -4,7 +4,10 @@ import { useState, useMemo, Suspense } from "react"
 import Link from "next/link"
 import { Search, Store, Users, DollarSign } from "lucide-react"
 import { useApi } from "@/hooks/use-api"
+import { usePeriod } from "@/hooks/use-period"
 import { formatCurrency } from "@/lib/format"
+import { PageHeader } from "@/components/page-header"
+import { PeriodSwitcher } from "@/components/period-switcher"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -113,9 +116,10 @@ export default function MerchantsPage() {
 
 function MerchantsContent() {
   const [searchQuery, setSearchQuery] = useState("")
+  const period = usePeriod("mtd")
 
   const { data: spendingData, loading: spendingLoading } =
-    useApi<SpendingResponse>("/api/domain/metrics/spending/merchants")
+    useApi<SpendingResponse>("/api/domain/metrics/spending/merchants", period.params)
 
   const { data: merchantsData, loading: merchantsLoading } =
     useApi<MerchantsResponse>("/api/domain/merchants", { pageSize: "500" })
@@ -165,14 +169,13 @@ function MerchantsContent() {
   )
 
   return (
-    <div className="flex flex-col gap-6 p-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Comerciantes</h1>
-        <p className="text-muted-foreground">
-          Estabelecimentos e distribuicao de gastos
-        </p>
-      </div>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        eyebrow="Comerciantes"
+        title="Comerciantes e gastos"
+        description="Veja os estabelecimentos que mais concentram despesas e abra o drill-down já filtrado."
+        actions={<PeriodSwitcher state={period} />}
+      />
 
       {/* Summary */}
       {loading ? (
@@ -257,7 +260,7 @@ function MerchantsContent() {
                   <TableRow key={merchant.merchantId} className="cursor-pointer">
                     <TableCell>
                       <Link
-                        href={`/transactions?search=${encodeURIComponent(merchant.merchant)}`}
+                        href={`/transactions?merchantId=${encodeURIComponent(merchant.merchantId)}`}
                         className="font-medium hover:underline"
                       >
                         {merchant.displayName}
@@ -275,7 +278,7 @@ function MerchantsContent() {
                       {formatCurrency(merchant.total)}
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">
-                      {merchant.percentage.toFixed(1)}%
+                      {(Number.isFinite(merchant.percentage) ? merchant.percentage : 0).toFixed(1)}%
                     </TableCell>
                   </TableRow>
                 ))}

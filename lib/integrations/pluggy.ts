@@ -178,7 +178,14 @@ async function pluggyRequest(path: string, options: PluggyRequestOptions = {}) {
 
 async function handlePluggyResponse(response: Response) {
   if (response.ok) {
-    return response.json()
+    if (response.status === 204) return null
+    const text = await response.text()
+    if (!text) return null
+    try {
+      return JSON.parse(text)
+    } catch {
+      return text
+    }
   }
 
   const error = await response.json().catch(() => ({}))
@@ -206,6 +213,10 @@ async function handlePluggyResponse(response: Response) {
 
 export async function fetchItem(itemId: string) {
   return pluggyRequest(`/items/${itemId}`)
+}
+
+export async function deleteItem(itemId: string) {
+  return pluggyRequest(`/items/${itemId}`, { method: "DELETE" })
 }
 
 export async function fetchAccounts(params: {

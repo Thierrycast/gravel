@@ -6,14 +6,29 @@ export const dynamic = "force-dynamic"
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const summary = await getAccountAllocationMetrics(searchParams)
+    const metrics = await getAccountAllocationMetrics(searchParams)
+
+    // Transform byKind array into keyed object for the frontend
+    const byKindMap: Record<string, number> = {}
+    for (const entry of metrics.byKind) {
+      byKindMap[entry.kind] = Number(entry.balance)
+    }
 
     return jsonOk({
-      summary,
-      results: summary.byAccount,
+      summary: {
+        totalBalance: Number(metrics.total),
+        byKind: byKindMap,
+      },
+      results: metrics.byAccount.map((a) => ({
+        accountId: a.id,
+        name: a.name,
+        type: a.kind,
+        balance: Number(a.balance),
+        percentage: Number(a.sharePercent),
+      })),
       meta: {
-        counts: summary.counts,
-        byKind: summary.byKind,
+        counts: metrics.counts,
+        byKind: metrics.byKind,
       },
     })
   } catch (error) {

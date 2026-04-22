@@ -8,12 +8,22 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const payload = await getSpendingByMerchantMetrics(searchParams)
 
+    // Map field names to what the UI expects
+    const mapped = payload.results.map((item) => ({
+      merchant: item.name,
+      merchantId: item.merchantId,
+      total: item.amount,
+      percentage: item.sharePercent,
+      transactionCount: item.count,
+      cnpj: item.cnpj,
+    }))
+
     return jsonOk({
       summary: {
         total: payload.total,
         appliedFilters: payload.appliedFilters,
       },
-      results: payload.results,
+      results: mapped,
     })
   } catch (error) {
     return jsonError(error)

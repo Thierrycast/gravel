@@ -42,8 +42,8 @@ interface InvestmentsResponse {
 const TYPE_LABELS: Record<string, string> = {
   FIXED_INCOME: "Renda Fixa",
   MUTUAL_FUND: "Fundos",
-  SECURITY: "Renda Variavel",
-  EQUITY: "Renda Variavel",
+  SECURITY: "Renda Variável",
+  EQUITY: "Renda Variável",
   COE: "COE",
   ETF: "ETF",
   OTHER: "Outros",
@@ -63,6 +63,10 @@ function getStatusVariant(status: string | null): "default" | "secondary" | "out
   const s = status.toUpperCase()
   if (s === "ACTIVE" || s === "ATIVO") return "default"
   if (s === "INACTIVE" || s === "INATIVO") return "secondary"
+  if (s === "TOTAL_WITHDRAWAL") return "destructive"
+  if (s === "PARTIAL_WITHDRAWAL") return "outline"
+  if (s === "MATURE" || s === "MATURED") return "secondary"
+  if (s === "CANCELLED") return "destructive"
   return "outline"
 }
 
@@ -71,6 +75,10 @@ function getStatusLabel(status: string | null): string {
   const s = status.toUpperCase()
   if (s === "ACTIVE" || s === "ATIVO") return "Ativo"
   if (s === "INACTIVE" || s === "INATIVO") return "Inativo"
+  if (s === "TOTAL_WITHDRAWAL") return "Retirada Total"
+  if (s === "PARTIAL_WITHDRAWAL") return "Retirada Parcial"
+  if (s === "MATURE" || s === "MATURED") return "Vencido"
+  if (s === "CANCELLED") return "Cancelado"
   return status
 }
 
@@ -166,7 +174,7 @@ export default function InvestmentsPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Investimentos</h1>
         <p className="text-muted-foreground">
-          Visao geral dos seus investimentos e posicoes
+          Visão geral dos seus investimentos e posições
         </p>
       </div>
 
@@ -190,7 +198,7 @@ export default function InvestmentsPage() {
             <CardHeader>
               <CardDescription className="flex items-center gap-1.5">
                 <Layers className="size-3.5" />
-                Posicoes
+                Posições
               </CardDescription>
               <CardTitle className="text-2xl">{positionCount}</CardTitle>
             </CardHeader>
@@ -224,7 +232,7 @@ export default function InvestmentsPage() {
               Nenhum investimento encontrado
             </h3>
             <p className="text-sm text-muted-foreground">
-              Seus investimentos aparecerao aqui apos a sincronizacao com suas
+              Seus investimentos aparecerão aqui após a sincronização com suas
               contas.
             </p>
           </CardContent>

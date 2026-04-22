@@ -30,7 +30,7 @@ export function RecentTransactions({ transactions, loading }: RecentTransactions
     if (!transactions) return []
     const map = new Map<string, Transaction[]>()
     for (const tx of transactions) {
-      const dateKey = tx.date.split("T")[0]
+      const dateKey = tx.date ? tx.date.split("T")[0] : "sem-data"
       if (!map.has(dateKey)) map.set(dateKey, [])
       map.get(dateKey)!.push(tx)
     }
@@ -71,7 +71,7 @@ export function RecentTransactions({ transactions, loading }: RecentTransactions
             {grouped.map(([dateKey, txs]) => (
               <div key={dateKey}>
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                  {formatDate(dateKey)}
+                  {dateKey === "sem-data" ? "Sem data" : formatDate(dateKey)}
                 </p>
                 <div className="space-y-3">
                   {txs.map((tx) => (
@@ -84,9 +84,11 @@ export function RecentTransactions({ transactions, loading }: RecentTransactions
                           {tx.merchantName || tx.description}
                         </p>
                         <div className="flex items-center gap-2 mt-1.5">
-                          <Badge variant="secondary" className="text-[10px]">
-                            {tx.category}
-                          </Badge>
+                          {tx.category && (
+                            <Badge variant="secondary" className="text-[10px]">
+                              {tx.category}
+                            </Badge>
+                          )}
                           <span className="text-xs text-muted-foreground">
                             {tx.accountName}
                           </span>
@@ -94,13 +96,13 @@ export function RecentTransactions({ transactions, loading }: RecentTransactions
                       </div>
                       <span
                         className={`text-sm font-medium tabular-nums whitespace-nowrap ${
-                          tx.type === "CREDIT" || tx.amount > 0
-                            ? "text-green-500"
-                            : "text-red-500"
+                          tx.type === "INCOME" || tx.type === "CREDIT" || Number(tx.amount) > 0
+                            ? "text-emerald-400"
+                            : "text-pink-400"
                         }`}
                       >
-                        {tx.type === "CREDIT" || tx.amount > 0 ? "+" : ""}
-                        {formatCurrency(tx.amount)}
+                        {tx.type === "INCOME" ? "+" : tx.type === "EXPENSE" ? "-" : ""}
+                        {formatCurrency(Math.abs(Number(tx.amount)))}
                       </span>
                     </div>
                   ))}

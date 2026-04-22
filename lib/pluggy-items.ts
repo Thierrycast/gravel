@@ -45,6 +45,12 @@ export async function updateStoredPluggyItem(input: SavePluggyItemInput) {
   })
 }
 
+export async function deletePluggyItem(pluggyItemId: string) {
+  await prisma.pluggyItem.delete({
+    where: { pluggyItemId },
+  })
+}
+
 export async function resolveStoredPluggyItemIds(itemId?: string | null) {
   if (itemId) {
     return [itemId]

@@ -6,11 +6,12 @@ import {
   TrendingDown,
   ArrowDownRight,
   ArrowUpRight,
-  ChevronDown,
+  Minus,
+  Info,
 } from "lucide-react"
 import {
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   BarChart,
   Bar,
   XAxis,
@@ -21,18 +22,16 @@ import {
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Button } from "@/components/ui/button"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import {
   ChartContainer,
   ChartTooltip,
@@ -41,6 +40,8 @@ import {
 } from "@/components/ui/chart"
 import { useApi } from "@/hooks/use-api"
 import { formatCurrency, formatPercent } from "@/lib/format"
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 interface CashFlowItem {
   date: string
@@ -54,85 +55,115 @@ interface CashFlowResponse {
 }
 
 interface OverviewResponse {
-  totalBalance: number
-  monthlyIncome: number
-  monthlyExpenses: number
-  netIncome: number
-  incomeChange: number
-  expenseChange: number
-  netChange: number
+  summary: {
+    monthlyInflow: number
+    monthlyOutflow: number
+    monthlyNet: number
+    incomeChange: number | null
+    expenseChange: number | null
+    netChange: number | null
+  }
 }
 
+// ── Constants ────────────────────────────────────────────────────────────────
+
 const PERIOD_OPTIONS = [
-  { label: "Últimos 3 meses", months: "3" },
-  { label: "Últimos 6 meses", months: "6" },
-  { label: "Este ano", months: "12" },
-  { label: "Últimos 12 meses", months: "12" },
+  { label: "3M", months: "3" },
+  { label: "6M", months: "6" },
+  { label: "YTD", months: "12" },
+  { label: "12M", months: "12" },
 ] satisfies Array<{ label: string; months: string }>
 
 const netChartConfig: ChartConfig = {
   net: {
-    label: "Resultado Líquido",
-    color: "hsl(var(--chart-1))",
+    label: "Resultado Liquido",
+    color: "hsl(217 91% 60%)",
   },
 }
 
 const expenseChartConfig: ChartConfig = {
   expense: {
     label: "Despesas",
-    color: "hsl(var(--chart-4))",
+    color: "hsl(330 81% 60%)",
   },
 }
 
 const incomeChartConfig: ChartConfig = {
   income: {
     label: "Receitas",
-    color: "hsl(var(--chart-2))",
-  },
-  trend: {
-    label: "Tendência",
-    color: "hsl(var(--chart-1))",
+    color: "hsl(152 69% 53%)",
   },
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 function formatMonth(dateStr: string) {
   const date = new Date(dateStr + "T00:00:00")
+  if (Number.isNaN(date.getTime())) return "Sem data"
   return date.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" })
 }
+
+function compactValue(value: number) {
+  return new Intl.NumberFormat("pt-BR", {
+    notation: "compact",
+    compactDisplay: "short",
+  }).format(value)
+}
+
+// ── Change Badge ─────────────────────────────────────────────────────────────
+
+function ChangeBadge({
+  value,
+  invertColors = false,
+}: {
+  value: number | null | undefined
+  invertColors?: boolean
+}) {
+  if (value == null) return null
+
+  const isPositive = invertColors ? value <= 0 : value >= 0
+  const Icon = value > 0 ? ArrowUpRight : value < 0 ? ArrowDownRight : Minus
+
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-medium ${
+        isPositive
+          ? "bg-emerald-500/10 text-emerald-400"
+          : "bg-red-500/10 text-red-400"
+      }`}
+    >
+      <Icon className="size-3" />
+      {formatPercent(Math.abs(value))}
+    </span>
+  )
+}
+
+// ── Loading ──────────────────────────────────────────────────────────────────
 
 function LoadingSkeleton() {
   return (
     <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-4 w-64" />
-        </div>
-        <Skeleton className="h-8 w-40" />
+        <Skeleton className="h-7 w-40" />
+        <Skeleton className="h-8 w-48" />
       </div>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {[1, 2, 3].map((i) => (
-          <Card key={i}>
-            <CardHeader>
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-7 w-40" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-[200px] w-full" />
-            </CardContent>
-          </Card>
-        ))}
+      <Skeleton className="h-[160px] w-full rounded-xl" />
+      <div className="grid gap-4 md:grid-cols-2">
+        <Skeleton className="h-[320px] w-full rounded-xl" />
+        <Skeleton className="h-[320px] w-full rounded-xl" />
       </div>
     </div>
   )
 }
+
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CashFlowPage() {
   const [selectedPeriod, setSelectedPeriod] = useState(PERIOD_OPTIONS[1])
 
   const { data: cashFlow, loading: cashFlowLoading } =
     useApi<CashFlowResponse>("/api/domain/metrics/cash-flow", {
-      group: "month",
+      groupBy: "month",
       months: selectedPeriod.months,
     })
 
@@ -165,94 +196,150 @@ export default function CashFlowPage() {
   if (loading) return <LoadingSkeleton />
 
   return (
+    <TooltipProvider>
     <div className="flex flex-col gap-6 p-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Fluxo de Caixa
-          </h1>
-          <p className="text-muted-foreground">
-            Acompanhe suas receitas, despesas e resultado ao longo do tempo.
-          </p>
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              {selectedPeriod.label}
-              <ChevronDown className="ml-1" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {PERIOD_OPTIONS.map((option) => (
-              <DropdownMenuItem
-                key={option.months + option.label}
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-semibold tracking-tight">
+          Fluxo de Caixa
+        </h1>
+
+        {/* Period pills */}
+        <div className="flex items-center gap-1 rounded-lg border bg-muted/40 p-0.5">
+          {PERIOD_OPTIONS.map((option) => {
+            const active =
+              option.label === selectedPeriod.label
+            return (
+              <button
+                key={option.label}
                 onClick={() => setSelectedPeriod(option)}
+                className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                  active
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
               >
                 {option.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+              </button>
+            )
+          })}
+        </div>
       </div>
 
-      {/* Charts Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {/* Net Result Card */}
-        <Card>
-          <CardHeader>
-            <CardDescription>Resultado Líquido</CardDescription>
-            <CardTitle className="flex items-center gap-2 text-2xl">
-              <span
-                className={
-                  totals.totalNet >= 0 ? "text-emerald-600" : "text-red-500"
-                }
-              >
-                {formatCurrency(totals.totalNet)}
-              </span>
-              {overview?.netChange !== undefined && (
-                <span
-                  className={`flex items-center text-xs font-medium ${
-                    overview.netChange >= 0
-                      ? "text-emerald-600"
-                      : "text-red-500"
-                  }`}
-                >
-                  {overview.netChange >= 0 ? (
-                    <ArrowUpRight className="size-3" />
-                  ) : (
-                    <ArrowDownRight className="size-3" />
-                  )}
-                  {formatPercent(Math.abs(overview.netChange))}
-                </span>
+      {/* Hero: Resultado Liquido */}
+      <div className="rounded-xl border bg-card p-6">
+        <div className="flex items-center gap-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+            Resultado Liquido
+          </p>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Info className="size-3 text-muted-foreground/60 cursor-help" />
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Receitas menos despesas no período selecionado</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+        <div className="mt-2 flex items-baseline gap-3">
+          <span
+            className={`text-3xl font-bold tabular-nums ${
+              totals.totalNet >= 0 ? "text-blue-400" : "text-red-400"
+            }`}
+          >
+            {formatCurrency(totals.totalNet)}
+          </span>
+          <ChangeBadge value={overview?.summary?.netChange} />
+        </div>
+
+        {/* Summary row */}
+        <div className="mt-4 flex gap-6 border-t border-border/50 pt-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+              Receitas
+            </p>
+            <p className="mt-0.5 text-sm font-semibold tabular-nums text-emerald-400">
+              {formatCurrency(totals.totalIncome)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+              Despesas
+            </p>
+            <p className="mt-0.5 text-sm font-semibold tabular-nums text-pink-400">
+              {formatCurrency(totals.totalExpense)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+              Medio Mensal
+            </p>
+            <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">
+              {formatCurrency(
+                chartData.length > 0
+                  ? totals.totalNet / chartData.length
+                  : 0
               )}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Charts grid */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Receitas chart */}
+        <Card className="rounded-xl border bg-card">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                  Receitas
+                </p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="size-3 text-muted-foreground/60 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Evolução mensal das entradas de dinheiro</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <ChangeBadge value={overview?.summary?.incomeChange} />
+            </div>
+            <CardTitle className="text-xl font-bold tabular-nums text-emerald-400">
+              {formatCurrency(totals.totalIncome)}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={netChartConfig} className="h-[200px] w-full">
-              <LineChart data={chartData}>
+            <ChartContainer
+              config={incomeChartConfig}
+              className="h-[220px] w-full"
+            >
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(152 69% 53%)" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="hsl(152 69% 53%)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  className="stroke-muted"
+                  className="stroke-muted/30"
+                  vertical={false}
                 />
                 <XAxis
                   dataKey="label"
                   tickLine={false}
                   axisLine={false}
-                  className="text-xs"
+                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                 />
                 <YAxis
                   tickLine={false}
                   axisLine={false}
-                  className="text-xs"
-                  tickFormatter={(value) =>
-                    new Intl.NumberFormat("pt-BR", {
-                      notation: "compact",
-                      compactDisplay: "short",
-                    }).format(value)
-                  }
+                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  tickFormatter={compactValue}
+                  width={48}
                 />
-                <ReferenceLine y={0} stroke="hsl(var(--border))" />
                 <ChartTooltip
                   content={
                     <ChartTooltipContent
@@ -260,87 +347,67 @@ export default function CashFlowPage() {
                     />
                   }
                 />
-                <Line
+                <Area
                   type="monotone"
-                  dataKey="net"
-                  stroke="hsl(var(--chart-1))"
+                  dataKey="income"
+                  stroke="hsl(152 69% 53%)"
                   strokeWidth={2}
-                  dot={({ cx, cy, payload }) => {
-                    const isNegative = payload.net < 0
-                    return (
-                      <circle
-                        key={`dot-${cx}-${cy}`}
-                        cx={cx}
-                        cy={cy}
-                        r={4}
-                        fill={
-                          isNegative
-                            ? "hsl(var(--chart-4))"
-                            : "hsl(var(--chart-1))"
-                        }
-                        stroke="hsl(var(--background))"
-                        strokeWidth={2}
-                      />
-                    )
-                  }}
+                  fill="url(#incomeGrad)"
                 />
-              </LineChart>
+              </AreaChart>
             </ChartContainer>
           </CardContent>
         </Card>
 
-        {/* Expenses Card */}
-        <Card>
-          <CardHeader>
-            <CardDescription>Gastos</CardDescription>
-            <CardTitle className="flex items-center gap-2 text-2xl">
-              <span className="text-red-500">
-                {formatCurrency(totals.totalExpense)}
-              </span>
-              {overview?.expenseChange !== undefined && (
-                <span
-                  className={`flex items-center text-xs font-medium ${
-                    overview.expenseChange <= 0
-                      ? "text-emerald-600"
-                      : "text-red-500"
-                  }`}
-                >
-                  {overview.expenseChange <= 0 ? (
-                    <TrendingDown className="size-3" />
-                  ) : (
-                    <TrendingUp className="size-3" />
-                  )}
-                  {formatPercent(Math.abs(overview.expenseChange))}
-                </span>
-              )}
+        {/* Despesas chart */}
+        <Card className="rounded-xl border bg-card">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                  Despesas
+                </p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="size-3 text-muted-foreground/60 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Evolução mensal das saídas de dinheiro</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <ChangeBadge
+                value={overview?.summary?.expenseChange}
+                invertColors
+              />
+            </div>
+            <CardTitle className="text-xl font-bold tabular-nums text-pink-400">
+              {formatCurrency(totals.totalExpense)}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <ChartContainer
               config={expenseChartConfig}
-              className="h-[200px] w-full"
+              className="h-[220px] w-full"
             >
-              <BarChart data={chartData}>
+              <BarChart data={chartData} barCategoryGap="20%">
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  className="stroke-muted"
+                  className="stroke-muted/30"
+                  vertical={false}
                 />
                 <XAxis
                   dataKey="label"
                   tickLine={false}
                   axisLine={false}
-                  className="text-xs"
+                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                 />
                 <YAxis
                   tickLine={false}
                   axisLine={false}
-                  className="text-xs"
-                  tickFormatter={(value) =>
-                    new Intl.NumberFormat("pt-BR", {
-                      notation: "compact",
-                      compactDisplay: "short",
-                    }).format(value)
-                  }
+                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  tickFormatter={compactValue}
+                  width={48}
                 />
                 <ChartTooltip
                   content={
@@ -351,91 +418,131 @@ export default function CashFlowPage() {
                 />
                 <Bar
                   dataKey="expense"
-                  fill="hsl(var(--chart-4))"
-                  radius={[4, 4, 0, 0]}
-                />
-              </BarChart>
-            </ChartContainer>
-          </CardContent>
-        </Card>
-
-        {/* Income Card */}
-        <Card>
-          <CardHeader>
-            <CardDescription>Receitas</CardDescription>
-            <CardTitle className="flex items-center gap-2 text-2xl">
-              <span className="text-emerald-600">
-                {formatCurrency(totals.totalIncome)}
-              </span>
-              {overview?.incomeChange !== undefined && (
-                <span
-                  className={`flex items-center text-xs font-medium ${
-                    overview.incomeChange >= 0
-                      ? "text-emerald-600"
-                      : "text-red-500"
-                  }`}
-                >
-                  {overview.incomeChange >= 0 ? (
-                    <TrendingUp className="size-3" />
-                  ) : (
-                    <TrendingDown className="size-3" />
-                  )}
-                  {formatPercent(Math.abs(overview.incomeChange))}
-                </span>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer
-              config={incomeChartConfig}
-              className="h-[200px] w-full"
-            >
-              <BarChart data={chartData}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  className="stroke-muted"
-                />
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  className="text-xs"
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  className="text-xs"
-                  tickFormatter={(value) =>
-                    new Intl.NumberFormat("pt-BR", {
-                      notation: "compact",
-                      compactDisplay: "short",
-                    }).format(value)
-                  }
-                />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value) => formatCurrency(value as number)}
-                    />
-                  }
-                />
-                <Bar
-                  dataKey="income"
-                  fill="hsl(var(--chart-2))"
-                  radius={[4, 4, 0, 0]}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="income"
-                  stroke="hsl(var(--chart-1))"
-                  strokeWidth={2}
-                  dot={false}
+                  fill="hsl(330 81% 60%)"
+                  radius={[6, 6, 0, 0]}
                 />
               </BarChart>
             </ChartContainer>
           </CardContent>
         </Card>
       </div>
+
+      {/* Net Result over time */}
+      <Card className="rounded-xl border bg-card">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+              Resultado Mensal
+            </p>
+            <ChangeBadge value={overview?.summary?.netChange} />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer
+            config={netChartConfig}
+            className="h-[240px] w-full"
+          >
+            <BarChart data={chartData} barCategoryGap="20%">
+              <CartesianGrid
+                strokeDasharray="3 3"
+                className="stroke-muted/30"
+                vertical={false}
+              />
+              <XAxis
+                dataKey="label"
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+              />
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                tickFormatter={compactValue}
+                width={48}
+              />
+              <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="3 3" />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    formatter={(value) => formatCurrency(value as number)}
+                  />
+                }
+              />
+              <Bar
+                dataKey="net"
+                radius={[6, 6, 0, 0]}
+                fill="hsl(217 91% 60%)"
+                shape={(props: unknown) => {
+                  const { x, y, width, height, payload } = props as {
+                    x: number
+                    y: number
+                    width: number
+                    height: number
+                    payload: CashFlowItem
+                  }
+                  const isNeg = payload.net < 0
+                  return (
+                    <rect
+                      x={x}
+                      y={y}
+                      width={width}
+                      height={height}
+                      rx={6}
+                      fill={isNeg ? "hsl(0 72% 51%)" : "hsl(217 91% 60%)"}
+                    />
+                  )
+                }}
+              />
+            </BarChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
+
+      {/* Monthly breakdown table */}
+      {chartData.length > 0 && (
+        <div className="rounded-xl border bg-card">
+          <div className="px-6 pt-5 pb-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+              Detalhamento Mensal
+            </p>
+          </div>
+          <div className="px-2 pb-2">
+            {/* Table header */}
+            <div className="grid grid-cols-4 gap-4 px-4 pb-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+              <span>Mes</span>
+              <span className="text-right">Receitas</span>
+              <span className="text-right">Despesas</span>
+              <span className="text-right">Resultado</span>
+            </div>
+            {/* Rows */}
+            {[...chartData].reverse().map((item) => (
+              <div
+                key={item.date}
+                className="grid grid-cols-4 gap-4 rounded-lg px-4 py-2.5 transition-colors hover:bg-muted/30"
+              >
+                <span className="text-sm font-medium capitalize text-foreground">
+                  {item.label}
+                </span>
+                <span className="text-right text-sm tabular-nums text-emerald-400">
+                  {formatCurrency(item.income)}
+                </span>
+                <span className="text-right text-sm tabular-nums text-pink-400">
+                  {formatCurrency(item.expense)}
+                </span>
+                <span
+                  className={`text-right text-sm font-medium tabular-nums ${
+                    item.net >= 0 ? "text-blue-400" : "text-red-400"
+                  }`}
+                >
+                  {formatCurrency(item.net)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
+    </TooltipProvider>
   )
 }

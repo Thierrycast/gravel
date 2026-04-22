@@ -1,36 +1,73 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Gravel Finance
 
-## Getting Started
+Dashboard financeiro pessoal com agregacao de dados bancarios (Pluggy Open Finance) e crypto (Binance). Construido com Next.js, Prisma e SQLite.
 
-First, run the development server:
+## Stack
+
+- **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS v4, shadcn/ui, Recharts, d3-sankey
+- **Backend**: Next.js App Router (API Routes), Prisma ORM
+- **Banco**: SQLite (local)
+- **Integracoes**: Pluggy (Open Finance), Binance (Crypto)
+
+## Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+# Dependencias
+pnpm install
+
+# Banco
+cp .env.example .env   # configurar variaveis
+pnpm db:push
+
+# Dev
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Variaveis de Ambiente
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```env
+DATABASE_URL="file:./dev.db"
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# Pluggy
+PLUGGY_CLIENT_ID=
+PLUGGY_CLIENT_SECRET=
 
-## Learn More
+# Binance
+BINANCE_API_KEY=
+BINANCE_API_SECRET=
 
-To learn more about Next.js, take a look at the following resources:
+# Admin
+INTERNAL_API_KEY=
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Documentacao
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- [Funcionalidades](docs/features.md) - descricao completa de todas as funcionalidades
+- [Arquitetura](docs/architecture.md) - camadas, banco de dados e fluxo de dados
+- [API Reference](docs/api-reference.md) - todos os endpoints com exemplos
+- [Pluggy](docs/pluggy.md) - integracao Open Finance
+- [Binance](docs/binance.md) - integracao crypto
+- [CLI e IA](docs/ai-cli-plan.md) - documentacao da interface de linha de comando para agentes IA
 
-## Deploy on Vercel
+## Gravel CLI (IA / Agentes)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+O projeto possui uma CLI nativa desenhada para empacotar dados financeiros de forma estrita para consumo por Large Language Models (LLMs) ou aplicacoes RAG, garantindo seguranca e limites de token budget.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+# Snapshot completo com JSONLs detalhados
+npx tsx cli/index.ts snapshot finance --format all
+
+# Snapshot otimizado e ultracompacto para colar no chat de LLMs
+npx tsx cli/index.ts snapshot finance --for-llm
+```
+
+## Scripts
+
+| Comando | Descricao |
+|---------|-----------|
+| `pnpm dev` | Servidor de desenvolvimento |
+| `pnpm build` | Build de producao |
+| `pnpm start` | Servir build de producao |
+| `pnpm db:push` | Sincronizar schema com banco |
+| `pnpm db:migrate` | Criar migration |
+| `pnpm lint` | Rodar ESLint |
