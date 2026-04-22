@@ -14,7 +14,8 @@ import { PageHeader } from "@/components/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useApi } from "@/hooks/use-api"
-import { amountToneClass, formatCurrency } from "@/lib/format"
+import { amountToneClass } from "@/lib/format"
+import { useCurrency } from "@/lib/currency-context"
 import { cn } from "@/lib/utils"
 
 interface PortfolioItem {
@@ -143,6 +144,7 @@ function PortfolioColumn({
   total,
   items,
   stats,
+  format,
 }: {
   eyebrow: string
   title: string
@@ -150,6 +152,7 @@ function PortfolioColumn({
   total: number
   items: PortfolioItem[]
   stats: React.ReactNode
+  format: (val: number) => string
 }) {
   return (
     <section className="surface flex flex-col gap-5 p-5">
@@ -169,7 +172,7 @@ function PortfolioColumn({
           <div>
             <p className="section-eyebrow">Total</p>
             <p className="mt-1 text-[28px] font-semibold tracking-tight tabular-nums">
-              {formatCurrency(total)}
+              {format(total)}
             </p>
           </div>
           <div className="grid gap-2 text-sm text-muted-foreground">{stats}</div>
@@ -192,7 +195,7 @@ function PortfolioColumn({
                   </p>
                 </div>
                 <p className="shrink-0 text-sm font-semibold tabular-nums">
-                  {formatCurrency(item.value)}
+                  {format(item.value)}
                 </p>
               </div>
 
@@ -220,6 +223,7 @@ function getLiabilityLabel(type: string) {
 }
 
 export default function PortfolioPage() {
+  const { format } = useCurrency()
   const portfolio = useApi<PortfolioResponse>("/api/portfolio")
 
   if (portfolio.loading) {
@@ -255,7 +259,7 @@ export default function PortfolioPage() {
                 amountToneClass(netWorth, { neutralOnZero: true })
               )}
             >
-              {formatCurrency(netWorth)}
+              {format(netWorth)}
             </p>
             <p className="mt-2 max-w-xl text-sm text-muted-foreground">
               O topo já soma patrimônio fiat e cripto, mas a composição abaixo mantém os dois universos separados.
@@ -265,19 +269,19 @@ export default function PortfolioPage() {
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <SummaryStat
               label="Fiat total"
-              value={formatCurrency(breakdown.fiat.total)}
+              value={format(breakdown.fiat.total)}
               tone="info"
               icon={Landmark}
             />
             <SummaryStat
               label="Cripto total"
-              value={formatCurrency(breakdown.crypto.total)}
+              value={format(breakdown.crypto.total)}
               tone="neutral"
               icon={Bitcoin}
             />
             <SummaryStat
               label="Passivos"
-              value={formatCurrency(liabilities.total)}
+              value={format(liabilities.total)}
               tone="negative"
               icon={CreditCard}
             />
@@ -298,18 +302,19 @@ export default function PortfolioPage() {
           subtitle="Saldo bancário e aplicações tradicionais, sem misturar exposição cripto."
           total={breakdown.fiat.total}
           items={breakdown.fiat.items}
+          format={format}
           stats={
             <>
               <div className="flex items-center justify-between gap-4">
                 <span>Liquidez</span>
                 <span className="font-medium tabular-nums">
-                  {formatCurrency(breakdown.fiat.liquid)}
+                  {format(breakdown.fiat.liquid)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4">
                 <span>Investimentos</span>
                 <span className="font-medium tabular-nums">
-                  {formatCurrency(breakdown.fiat.investments)}
+                  {format(breakdown.fiat.investments)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4">
@@ -322,7 +327,7 @@ export default function PortfolioPage() {
                     })
                   )}
                 >
-                  {formatCurrency(breakdown.fiat.netWorth)}
+                  {format(breakdown.fiat.netWorth)}
                 </span>
               </div>
             </>
@@ -335,12 +340,13 @@ export default function PortfolioPage() {
           subtitle={`Valores convertidos para BRL com USD/BRL ${breakdown.crypto.usdBrlRate.toFixed(2)}.`}
           total={breakdown.crypto.total}
           items={breakdown.crypto.items}
+          format={format}
           stats={
             <>
               <div className="flex items-center justify-between gap-4">
                 <span>Exposição líquida</span>
                 <span className="font-medium tabular-nums">
-                  {formatCurrency(breakdown.crypto.netWorth)}
+                  {format(breakdown.crypto.netWorth)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4">
@@ -392,7 +398,7 @@ export default function PortfolioPage() {
                   <CreditCard className="size-4 shrink-0 text-muted-foreground" />
                 </div>
                 <p className="mt-3 text-lg font-semibold tabular-nums text-rose-500 dark:text-rose-400">
-                  {formatCurrency(item.value)}
+                  {format(item.value)}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {item.percentage.toFixed(1)}% do total de passivos

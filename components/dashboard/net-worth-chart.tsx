@@ -2,13 +2,9 @@
 
 import { useMemo } from "react"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Line } from "recharts"
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart"
-import { formatCurrency, formatDate } from "@/lib/format"
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
+import { useCurrency } from "@/lib/currency-context"
+import { formatDate } from "@/lib/format"
 
 interface NetWorthChartProps {
   history: Array<{
@@ -22,20 +18,21 @@ interface NetWorthChartProps {
 
 const chartConfig = {
   netWorth: {
-    label: "Patrim\u00f4nio",
-    color: "#10b981",
+    label: "Patrimônio",
+    color: "oklch(0.70 0.20 150)",
   },
   assets: {
     label: "Ativos",
-    color: "#38bdf8",
+    color: "oklch(0.85 0.15 200)",
   },
   liabilities: {
     label: "Passivos",
-    color: "#f43f5e",
+    color: "oklch(0.60 0.25 25)",
   },
 } satisfies ChartConfig
 
 export function NetWorthChart({ history, period }: NetWorthChartProps) {
+  const { format, formatCompact } = useCurrency()
   const filteredData = useMemo(() => {
     if (!history || history.length === 0) return []
     if (period === "ALL") return history
@@ -65,23 +62,25 @@ export function NetWorthChart({ history, period }: NetWorthChartProps) {
       >
         <defs>
           <linearGradient id="netWorthGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="var(--color-netWorth)" stopOpacity={0.3} />
+            <stop offset="5%" stopColor="var(--color-netWorth)" stopOpacity={0.15} />
             <stop offset="95%" stopColor="var(--color-netWorth)" stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+        <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="oklch(0.25 0 0)" />
         <XAxis
           dataKey="date"
           tickLine={false}
           axisLine={false}
+          tick={{ fontSize: 10, fontFamily: "monospace", fill: "oklch(0.55 0 0)" }}
           tickFormatter={(v) => formatDate(v)}
           interval="preserveStartEnd"
         />
         <YAxis
           tickLine={false}
           axisLine={false}
-          tickFormatter={(v) => formatCurrency(v)}
-          width={90}
+          tick={{ fontSize: 10, fontFamily: "monospace", fill: "oklch(0.55 0 0)" }}
+          tickFormatter={(v) => formatCompact(v)}
+          width={60}
         />
         <ChartTooltip
           content={
@@ -92,7 +91,7 @@ export function NetWorthChart({ history, period }: NetWorthChartProps) {
                     {chartConfig[String(name) as keyof typeof chartConfig]?.label ?? name}
                   </span>
                   <span className="font-mono font-medium tabular-nums">
-                    {formatCurrency(value as number)}
+                    {format(value as number)}
                   </span>
                 </div>
               )}

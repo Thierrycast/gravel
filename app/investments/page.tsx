@@ -3,7 +3,7 @@
 import { useMemo } from "react"
 import { Landmark, TrendingUp, BarChart3, Layers } from "lucide-react"
 import { useApi } from "@/hooks/use-api"
-import { formatCurrency } from "@/lib/format"
+import { useCurrency } from "@/lib/currency-context"
 import {
   Card,
   CardContent,
@@ -118,6 +118,7 @@ function TableSkeleton() {
 }
 
 export default function InvestmentsPage() {
+  const { format } = useCurrency()
   const { data, loading } = useApi<InvestmentsResponse>(
     "/api/domain/investments"
   )
@@ -169,7 +170,7 @@ export default function InvestmentsPage() {
   }, [investments])
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Investimentos</h1>
@@ -190,7 +191,7 @@ export default function InvestmentsPage() {
                 Total Investido
               </CardDescription>
               <CardTitle className="text-2xl">
-                {formatCurrency(totalBalance)}
+                {format(totalBalance)}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -253,7 +254,7 @@ export default function InvestmentsPage() {
                   <Badge variant="secondary">{items.length}</Badge>
                 </CardTitle>
                 <span className="text-sm font-semibold">
-                  {formatCurrency(total)}
+                  {format(total)}
                 </span>
               </div>
             </CardHeader>
@@ -271,7 +272,7 @@ export default function InvestmentsPage() {
                 <TableBody>
                   {items.map((inv) => (
                     <TableRow key={inv.id}>
-                      <TableCell className="font-medium max-w-[300px] truncate">
+                      <TableCell className="font-medium max-w-[140px] sm:max-w-[300px] truncate">
                         {inv.name}
                       </TableCell>
                       <TableCell>
@@ -283,7 +284,7 @@ export default function InvestmentsPage() {
                         {inv.subtype ?? "-"}
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        {formatCurrency(toNumber(inv.balance))}
+                        {format(toNumber(inv.balance))}
                       </TableCell>
                       <TableCell>
                         <Badge variant={getStatusVariant(inv.status)}>

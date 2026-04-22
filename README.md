@@ -47,19 +47,21 @@ INTERNAL_API_KEY=
 - [API Reference](docs/api-reference.md) - todos os endpoints com exemplos
 - [Pluggy](docs/pluggy.md) - integracao Open Finance
 - [Binance](docs/binance.md) - integracao crypto
-- [CLI e IA](docs/ai-cli-plan.md) - documentacao da interface de linha de comando para agentes IA
+- [CLI Reference](docs/cli.md) - guia completo de uso da linha de comando
 
 ## Gravel CLI (IA / Agentes)
 
-O projeto possui uma CLI nativa desenhada para empacotar dados financeiros de forma estrita para consumo por Large Language Models (LLMs) ou aplicacoes RAG, garantindo seguranca e limites de token budget.
+O projeto possui uma CLI nativa desenhada para diagnóstico e para empacotar dados financeiros de forma estrita para consumo por Large Language Models (LLMs).
 
 ```bash
-# Snapshot completo com JSONLs detalhados
-npx tsx cli/index.ts snapshot finance --format all
+# Diagnóstico de saúde do sistema
+npm run gravel -- doctor
 
-# Snapshot otimizado e ultracompacto para colar no chat de LLMs
-npx tsx cli/index.ts snapshot finance --for-llm
+# Snapshot otimizado para colar no chat de LLMs
+npm run gravel -- snapshot finance --for-llm
 ```
+
+Veja o [Guia da CLI](docs/cli.md) para todos os comandos.
 
 ## Scripts
 

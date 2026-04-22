@@ -33,13 +33,25 @@ export async function GET() {
     origin: r.origin as "detected" | "manual",
   }))
 
+  function normalizeMonthlyAmount(amount: number, interval: string): number {
+    const value = Math.abs(amount)
+    switch (interval.toUpperCase()) {
+      case "WEEKLY": return value * 4.333
+      case "BIWEEKLY": return value * 2.166
+      case "MONTHLY": return value
+      case "QUARTERLY": return value / 3
+      case "YEARLY": return value / 12
+      default: return value
+    }
+  }
+
   const summary = {
     totalMonthlyExpenses: rules
       .filter((r) => r.type === "EXPENSE")
-      .reduce((sum, r) => sum + Math.abs(Number(r.amount)), 0),
+      .reduce((sum, r) => sum + normalizeMonthlyAmount(Number(r.amount), r.interval), 0),
     totalMonthlyIncome: rules
       .filter((r) => r.type === "INCOME")
-      .reduce((sum, r) => sum + Math.abs(Number(r.amount)), 0),
+      .reduce((sum, r) => sum + normalizeMonthlyAmount(Number(r.amount), r.interval), 0),
     count: rules.length,
   }
 

@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import {
   BarChart,
   Bar,
@@ -8,9 +7,9 @@ import {
   YAxis,
   CartesianGrid,
 } from "recharts"
-import { ChevronLeft, ChevronRight } from "lucide-react"
 import { useApi } from "@/hooks/use-api"
-import { formatCurrency, formatDate, daysUntilLabel } from "@/lib/format"
+import { formatDate, daysUntilLabel } from "@/lib/format"
+import { useCurrency } from "@/lib/currency-context"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -70,8 +69,8 @@ const MONTH_FULL = [
 ]
 
 export default function RecurringIncomePage() {
+  const { format, formatCompact } = useCurrency()
   const currentMonth = new Date().getMonth()
-  const [selectedMonth, setSelectedMonth] = useState(currentMonth)
   const { data, loading } = useApi<RecurringIncomeData>("/api/recurring/income")
   const rules = data?.rules ?? []
   const monthlyTotal = rules.reduce((sum, r) => sum + Number(r.amount), 0)
@@ -99,9 +98,9 @@ export default function RecurringIncomePage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6">
       {/* Header */}
-      <h1 className="text-3xl font-bold tracking-tight">
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
         Receitas Recorrentes
       </h1>
 
@@ -117,24 +116,20 @@ export default function RecurringIncomePage() {
           </div>
         </div>
 
-        <div className="flex gap-6">
-          <div className="flex-1">
+        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
+          <div className="flex-1 min-w-0">
             <ChartContainer config={chartConfig} className="h-56 w-full">
               <BarChart data={chartData} accessibilityLayer>
                 <CartesianGrid vertical={false} strokeOpacity={0.1} />
                 <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} />
                 <YAxis
-                  tickFormatter={(v) => v >= 1000 ? `R$${(v / 1000).toFixed(0)}k` : `R$${v}`}
-                  tickLine={false}
-                  axisLine={false}
-                  tick={{ fontSize: 10 }}
-                  width={50}
+                  tickFormatter={(v) => formatCompact(v)}
                 />
                 <ChartTooltip
                   content={
                     <ChartTooltipContent
                       formatter={(value) => (
-                        <span>Receita: {formatCurrency(Number(value))}</span>
+                        <span>Receita: {format(Number(value))}</span>
                       )}
                     />
                   }
@@ -146,25 +141,11 @@ export default function RecurringIncomePage() {
 
           {/* Month summary */}
           <div className="w-44 rounded-lg border bg-popover p-4 shrink-0 hidden lg:block">
-            <div className="flex items-center justify-between mb-3">
-              <button
-                onClick={() => setSelectedMonth(selectedMonth === 0 ? 11 : selectedMonth - 1)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <ChevronLeft className="size-4" />
-              </button>
-              <span className="text-sm font-semibold">{MONTH_FULL[selectedMonth]}</span>
-              <button
-                onClick={() => setSelectedMonth(selectedMonth === 11 ? 0 : selectedMonth + 1)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <ChevronRight className="size-4" />
-              </button>
-            </div>
+            <div className="text-sm font-semibold mb-2">{MONTH_FULL[currentMonth]}</div>
             <div className="border-t pt-2 flex justify-between">
               <span className="text-sm font-semibold">Total</span>
               <span className="text-sm font-bold tabular-nums text-emerald-400">
-                {formatCurrency(monthlyTotal)}
+                {format(monthlyTotal)}
               </span>
             </div>
           </div>
@@ -173,27 +154,10 @@ export default function RecurringIncomePage() {
 
       {/* Income list */}
       <div>
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4">
           <h3 className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
             Receitas Recorrentes
           </h3>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setSelectedMonth(selectedMonth === 0 ? 11 : selectedMonth - 1)}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <ChevronLeft className="size-4" />
-            </button>
-            <span className="text-sm font-medium">
-              {MONTH_FULL[selectedMonth]} de {new Date().getFullYear()}
-            </span>
-            <button
-              onClick={() => setSelectedMonth(selectedMonth === 11 ? 0 : selectedMonth + 1)}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <ChevronRight className="size-4" />
-            </button>
-          </div>
         </div>
 
         {rules.length === 0 ? (
@@ -227,7 +191,7 @@ export default function RecurringIncomePage() {
                 </div>
                 <div className="text-right ml-3">
                   <p className="text-sm font-bold tabular-nums text-emerald-400">
-                    {formatCurrency(rule.amount)}
+                    {format(rule.amount)}
                   </p>
                   {rule.nextDate && (
                     <p className="text-[10px] text-muted-foreground">

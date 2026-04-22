@@ -11,7 +11,7 @@ import {
 } from "recharts"
 import { Lightbulb, ChevronDown, ChevronUp } from "lucide-react"
 import { useApi } from "@/hooks/use-api"
-import { formatCurrency } from "@/lib/format"
+import { useCurrency } from "@/lib/currency-context"
 import {
   Card,
   CardHeader,
@@ -93,6 +93,7 @@ const chartConfig: ChartConfig = {
 }
 
 export default function ProjectionPage() {
+  const { format } = useCurrency()
   const [months, setMonths] = useState("6")
   const [expandedMonth, setExpandedMonth] = useState<string | null>(null)
 
@@ -135,7 +136,7 @@ export default function ProjectionPage() {
 
     if ((summary?.projectedSavings ?? 0) > 0) {
       result.push({
-        title: `Economia projetada de ${formatCurrency(summary?.projectedSavings ?? 0)} no período`,
+        title: `Economia projetada de ${format(summary?.projectedSavings ?? 0)} no período`,
         variant: "default",
       })
     }
@@ -145,7 +146,7 @@ export default function ProjectionPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col gap-6 p-6">
+      <div className="flex flex-col gap-6">
         <Skeleton className="h-8 w-64" />
         <div className="grid gap-4 md:grid-cols-3">
           <Skeleton className="h-20" />
@@ -159,10 +160,10 @@ export default function ProjectionPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
           Proje&ccedil;&atilde;o de Saldo
         </h1>
         <div className="flex gap-0.5">
@@ -208,7 +209,7 @@ export default function ProjectionPage() {
             Receita M&eacute;dia Mensal
           </p>
           <p className="text-2xl font-bold tabular-nums text-emerald-400">
-            {formatCurrency(data?.summary.averageMonthlyIncome ?? 0)}
+            {format(data?.summary.averageMonthlyIncome ?? 0)}
           </p>
         </div>
         <div className="rounded-xl border bg-card p-4">
@@ -216,7 +217,7 @@ export default function ProjectionPage() {
             Despesa M&eacute;dia Mensal
           </p>
           <p className="text-2xl font-bold tabular-nums text-pink-400">
-            {formatCurrency(data?.summary.averageMonthlyExpenses ?? 0)}
+            {format(data?.summary.averageMonthlyExpenses ?? 0)}
           </p>
         </div>
         <div className="rounded-xl border bg-card p-4">
@@ -224,7 +225,7 @@ export default function ProjectionPage() {
             Economia Projetada
           </p>
           <p className="text-2xl font-bold tabular-nums text-blue-400">
-            {formatCurrency(data?.summary.projectedSavings ?? 0)}
+            {format(data?.summary.projectedSavings ?? 0)}
           </p>
         </div>
       </div>
@@ -253,7 +254,7 @@ export default function ProjectionPage() {
                     formatter={(value, name) => (
                       <span>
                         {chartConfig[name as keyof typeof chartConfig]?.label}:{" "}
-                        {formatCurrency(Number(value))}
+                        {format(Number(value))}
                       </span>
                     )}
                   />
@@ -337,7 +338,7 @@ export default function ProjectionPage() {
                             : "text-red-400"
                         }`}
                       >
-                        {formatCurrency(m.balance)}
+                        {format(m.balance)}
                       </span>
                       {isExpanded ? (
                         <ChevronUp className="size-4 text-muted-foreground" />
@@ -359,31 +360,31 @@ export default function ProjectionPage() {
                           <TableRow>
                             <TableCell>Saldo Inicial</TableCell>
                             <TableCell className="text-right font-medium">
-                              {formatCurrency(prevBalance)}
+                              {format(prevBalance)}
                             </TableCell>
                           </TableRow>
                           <TableRow>
                             <TableCell>Receitas</TableCell>
                             <TableCell className="text-right font-medium text-emerald-600">
-                              {formatCurrency(m.income)}
+                              {format(m.income)}
                             </TableCell>
                           </TableRow>
                           <TableRow>
                             <TableCell>Recorrências</TableCell>
                             <TableCell className="text-right font-medium text-red-500">
-                              {formatCurrency(-m.recurringExpenses)}
+                              {format(-m.recurringExpenses)}
                             </TableCell>
                           </TableRow>
                           <TableRow>
                             <TableCell>Parcelas</TableCell>
                             <TableCell className="text-right font-medium text-red-500">
-                              {formatCurrency(-m.installments)}
+                              {format(-m.installments)}
                             </TableCell>
                           </TableRow>
                           <TableRow>
                             <TableCell>Variável</TableCell>
                             <TableCell className="text-right font-medium text-red-500">
-                              {formatCurrency(-m.variableExpenses)}
+                              {format(-m.variableExpenses)}
                             </TableCell>
                           </TableRow>
                           <TableRow>
@@ -397,7 +398,7 @@ export default function ProjectionPage() {
                                   : "text-red-400"
                               }`}
                             >
-                              {formatCurrency(result)}
+                              {format(result)}
                             </TableCell>
                           </TableRow>
                         </TableBody>

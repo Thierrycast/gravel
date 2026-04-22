@@ -628,7 +628,7 @@ model OpsSyncFailure {
   message   String
   metaJson  String?
   createdAt DateTime       @default(now())
-  run       OpsSyncRun?    @relation(fields: [runId], references: [id])
+  run       OpsSyncRun?    @relation(fields: [runId], references: [id], onDelete: Cascade)
 
   @@index([scopeId])
   @@index([provider, resource, createdAt])

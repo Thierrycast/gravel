@@ -1,11 +1,13 @@
 "use client"
 
-import type { ComponentType } from "react"
+import { useState, type ComponentType } from "react"
+import Link from "next/link"
 import { AlertTriangle, Bitcoin, Coins, DollarSign, Wallet } from "lucide-react"
 
 import { PageError } from "@/components/page-error"
 import { PageHeader } from "@/components/page-header"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
@@ -15,14 +17,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { useApi } from "@/hooks/use-api"
 import {
   amountToneClass,
-  formatCurrency,
   formatNumber,
-  formatSignedCurrency,
   formatSignedPercent,
 } from "@/lib/format"
+import { useCurrency } from "@/lib/currency-context"
 import { cn } from "@/lib/utils"
 
 interface CryptoResponse {
@@ -57,18 +66,9 @@ interface CryptoResponse {
   }>
 }
 
-const usdFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-})
-
 const quantityFormatter = new Intl.NumberFormat("pt-BR", {
   maximumFractionDigits: 8,
 })
-
-function formatUsd(value: number | null | undefined) {
-  return usdFormatter.format(value ?? 0)
-}
 
 function formatQuantity(value: number | null | undefined) {
   return quantityFormatter.format(value ?? 0)
@@ -135,7 +135,11 @@ function MetricCard({
 }
 
 export default function CryptoPage() {
+  const { format, currency } = useCurrency()
   const crypto = useApi<CryptoResponse>("/api/crypto")
+  const [editingAsset, setEditingAsset] = useState<{ asset: string, currentCost: number } | null>(null)
+  const [newCost, setNewCost] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
 
   if (crypto.loading) {
     return <LoadingState />
@@ -149,6 +153,29 @@ export default function CryptoPage() {
   const pnlValue = summary.totalUnrealizedPnlBrl
   const pnlTone =
     pnlValue > 0 ? "positive" : pnlValue < 0 ? "negative" : "neutral"
+
+  async function handleSaveCost() {
+    if (!editingAsset || !newCost) return
+    setIsSaving(true)
+    try {
+      const res = await fetch("/api/crypto/cost-basis", {
+        method: "POST",
+        body: JSON.stringify({
+          asset: editingAsset.asset,
+          averageCost: parseFloat(newCost),
+        }),
+      })
+      if (res.ok) {
+        crypto.refetch()
+        setEditingAsset(null)
+        setNewCost("")
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -165,21 +192,21 @@ export default function CryptoPage() {
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          label="Valor total (BRL)"
-          value={formatCurrency(summary.totalValueBrl)}
-          hint="Carteira convertida para reais"
+          label={`Valor total (${currency})`}
+          value={format(summary.totalValueBrl)}
+          hint={currency === "BRL" ? "Carteira convertida para reais" : "Carteira convertida para dólares"}
           icon={Wallet}
           tone="info"
         />
         <MetricCard
-          label="Valor total (USD)"
-          value={formatUsd(summary.totalValueUsd)}
-          hint="Base original de cotação"
+          label={`Investimento (${currency})`}
+          value={format((summary.totalValueBrl || 0) - (summary.totalUnrealizedPnlBrl || 0))}
+          hint="Custo total de aquisição"
           icon={DollarSign}
         />
         <MetricCard
           label="PnL não realizado"
-          value={formatSignedCurrency(summary.totalUnrealizedPnlBrl, "always")}
+          value={format(summary.totalUnrealizedPnlBrl)}
           hint={
             summary.costBasisMissing
               ? "Parcial: parte da carteira está sem custo de aquisição."
@@ -238,7 +265,7 @@ export default function CryptoPage() {
                   <TableHead className="text-right">Quantidade</TableHead>
                   <TableHead className="text-right">Preço médio</TableHead>
                   <TableHead className="text-right">Preço atual</TableHead>
-                  <TableHead className="text-right">Valor (BRL)</TableHead>
+                  <TableHead className="text-right">Valor ({currency})</TableHead>
                   <TableHead className="text-right">% do portfólio</TableHead>
                   <TableHead className="text-right">Variação 24h</TableHead>
                 </TableRow>
@@ -248,11 +275,19 @@ export default function CryptoPage() {
                   <TableRow key={asset.asset}>
                     <TableCell>
                       <div className="flex flex-col gap-0.5">
-                        <span className="font-medium">{asset.asset}</span>
+                        <Link href={`/crypto/${asset.asset.toLowerCase()}`} className="font-medium hover:underline text-primary">
+                          {asset.asset}
+                        </Link>
                         {asset.costBasisMissing ? (
-                          <span className="text-xs text-amber-600 dark:text-amber-400">
-                            custo incompleto
-                          </span>
+                          <button 
+                            onClick={() => {
+                              setEditingAsset({ asset: asset.asset, currentCost: asset.averagePriceBrl || 0 })
+                              setNewCost(asset.averagePriceBrl?.toString() || "")
+                            }}
+                            className="w-fit text-xs text-amber-600 underline-offset-4 hover:underline dark:text-amber-400"
+                          >
+                            definir custo
+                          </button>
                         ) : (
                           <span className="text-xs text-muted-foreground">
                             {asset.tradeCount} {asset.tradeCount === 1 ? "trade" : "trades"}
@@ -266,15 +301,15 @@ export default function CryptoPage() {
                     <TableCell className="text-right tabular-nums text-muted-foreground">
                       {asset.costBasisMissing || asset.averagePriceBrl == null
                         ? "—"
-                        : formatCurrency(asset.averagePriceBrl)}
+                        : format(asset.averagePriceBrl)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {asset.currentPriceBrl == null
                         ? "—"
-                        : formatCurrency(asset.currentPriceBrl)}
+                        : format(asset.currentPriceBrl)}
                     </TableCell>
                     <TableCell className="text-right font-medium tabular-nums">
-                      {asset.valueBrl == null ? "—" : formatCurrency(asset.valueBrl)}
+                      {asset.valueBrl == null ? "—" : format(asset.valueBrl)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-muted-foreground">
                       {asset.valueBrl == null
@@ -298,6 +333,40 @@ export default function CryptoPage() {
           </div>
         )}
       </section>
+      <Dialog open={!!editingAsset} onOpenChange={(open) => !open && setEditingAsset(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Ajustar preço médio — {editingAsset?.asset}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label htmlFor="cost" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                Preço médio de aquisição (em BRL)
+              </label>
+              <Input
+                id="cost"
+                type="number"
+                step="0.00000001"
+                value={newCost}
+                onChange={(e) => setNewCost(e.target.value)}
+                placeholder="Ex: 50000.00"
+                className="font-mono"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Informe o valor médio pago por cada unidade do ativo para que o PnL seja calculado corretamente.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingAsset(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveCost} disabled={isSaving || !newCost}>
+              {isSaving ? "Salvando..." : "Salvar ajuste"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

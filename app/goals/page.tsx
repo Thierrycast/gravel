@@ -37,7 +37,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useApi } from "@/hooks/use-api"
-import { formatCurrency, formatDateFull, daysUntilLabel } from "@/lib/format"
+import { useCurrency } from "@/lib/currency-context"
+import { formatDateFull, daysUntilLabel } from "@/lib/format"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -110,6 +111,7 @@ function estimatedCompletion(
 // ---------------------------------------------------------------------------
 
 export default function GoalsPage() {
+  const { format } = useCurrency()
   const { data, loading, refetch } = useApi<GoalsResponse>("/api/goals")
 
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -290,7 +292,7 @@ export default function GoalsPage() {
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">
-                {formatCurrency(summary.totalSaved)}
+                {format(summary.totalSaved)}
               </p>
             </CardContent>
           </Card>
@@ -303,7 +305,7 @@ export default function GoalsPage() {
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">
-                {formatCurrency(summary.totalTarget)}
+                {format(summary.totalTarget)}
               </p>
             </CardContent>
           </Card>
@@ -339,9 +341,9 @@ export default function GoalsPage() {
           return (
             <Card key={goal.id} className="relative">
               <CardHeader className="flex flex-row items-start justify-between pb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">{goal.emoji}</span>
-                  <CardTitle className="text-base">{goal.name}</CardTitle>
+                <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+                  <span className="text-2xl shrink-0">{goal.emoji}</span>
+                  <CardTitle className="text-base truncate">{goal.name}</CardTitle>
                 </div>
 
                 <DropdownMenu>
@@ -371,7 +373,7 @@ export default function GoalsPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">
-                      {formatCurrency(current)} de {formatCurrency(target)}
+                      {format(current)} de {format(target)}
                     </span>
                     <Badge
                       variant={
@@ -402,7 +404,7 @@ export default function GoalsPage() {
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <TrendingUp className="size-4" />
                       <span>
-                        {formatCurrency(monthly)}/mes
+                        {format(monthly)}/mes
                       </span>
                     </div>
                   )}

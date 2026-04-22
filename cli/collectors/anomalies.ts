@@ -47,8 +47,8 @@ export async function collectAnomalies(params: URLSearchParams): Promise<Anomaly
   const now = new Date().getTime()
   const staleAccounts = accounts.results.filter((acc) => {
     // If not manual, and last sync was more than 3 days ago
-    if (!acc.isManual && acc.lastSyncAt) {
-      const daysSinceSync = (now - new Date(acc.lastSyncAt).getTime()) / (1000 * 60 * 60 * 24)
+    if (acc.sourceProvider !== "MANUAL" && acc.updatedAt) {
+      const daysSinceSync = (now - new Date(acc.updatedAt).getTime()) / (1000 * 60 * 60 * 24)
       return daysSinceSync > 3
     }
     return false

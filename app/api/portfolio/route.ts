@@ -47,10 +47,13 @@ export async function GET() {
     sharePercent: number
   }> = []
 
+  // CARD/CREDIT accounts in Pluggy hold the outstanding bill as a POSITIVE amount
+  // (i.e. money YOU OWE). They are liabilities and must NOT appear as assets.
+  const creditKinds = new Set(["CARD", "CREDIT"])
+
   for (const account of payload.accounts) {
+    if (creditKinds.has(account.kind)) continue // skip — these are debts
     const balance = Number(account.balance?.toString() ?? "0")
-    // Include any account with positive balance as an asset, including CARD
-    // accounts (digital wallets like Mercado Pago, Nubank) that have money in them
     if (balance > 0) {
       fiatItems.push({
         name: account.name,

@@ -12,6 +12,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  CalendarClock,
   ChevronLeft,
   ChevronRight,
   Receipt,
@@ -49,8 +50,8 @@ import {
   amountToneClass,
   formatDate,
   formatDateFull,
-  formatSignedCurrency,
 } from "@/lib/format"
+import { useCurrency } from "@/lib/currency-context"
 import { cn } from "@/lib/utils"
 
 import {
@@ -143,10 +144,10 @@ function FilterPill({ chip }: { chip: FilterChip }) {
     <button
       type="button"
       onClick={chip.onRemove}
-      className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+      className="inline-flex items-center gap-1.5 border border-border bg-background px-2.5 py-1 text-xs font-mono text-foreground transition-colors hover:border-primary hover:text-primary"
     >
       <span>{chip.label}</span>
-      <X className="size-3 text-muted-foreground" />
+      <X className="size-2.5 text-muted-foreground" />
     </button>
   )
 }
@@ -160,6 +161,7 @@ export default function TransactionsPage() {
 }
 
 function TransactionsContent() {
+  const { format, formatSigned } = useCurrency()
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -459,10 +461,10 @@ function TransactionsContent() {
         title="Todas as movimentações"
         description={
           transactions.loading
-            ? "Carregando transações do período."
+            ? `Carregando transações (${period.label.toLowerCase()}).`
             : total === 1
-              ? "1 transação encontrada para os filtros atuais."
-              : `${total} transações encontradas para os filtros atuais.`
+              ? `1 transação encontrada (${period.label.toLowerCase()}) para os filtros atuais.`
+              : `${total} transações encontradas (${period.label.toLowerCase()}) para os filtros atuais.`
         }
         actions={<PeriodSwitcher state={period} />}
       />
@@ -482,23 +484,26 @@ function TransactionsContent() {
           <Button
             variant={direction == null ? "secondary" : "outline"}
             size="sm"
+            className="font-mono text-xs"
             onClick={() => setDirection(undefined)}
           >
-            Todas
+            ALL
           </Button>
           <Button
             variant={direction === "OUTFLOW" ? "secondary" : "outline"}
             size="sm"
+            className="font-mono text-xs"
             onClick={() => setDirection("OUTFLOW")}
           >
-            Saídas
+            OUT
           </Button>
           <Button
             variant={direction === "INFLOW" ? "secondary" : "outline"}
             size="sm"
+            className="font-mono text-xs"
             onClick={() => setDirection("INFLOW")}
           >
-            Entradas
+            IN
           </Button>
         </div>
       </section>
@@ -556,12 +561,12 @@ function TransactionsContent() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead className="hidden md:table-cell">Conta</TableHead>
-                  <TableHead className="hidden sm:table-cell">Categoria</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
+                <TableRow className="border-border">
+                  <TableHead className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase whitespace-nowrap">Data</TableHead>
+                  <TableHead className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">Descrição</TableHead>
+                  <TableHead className="hidden md:table-cell font-mono text-[10px] tracking-widest text-muted-foreground uppercase">Conta</TableHead>
+                  <TableHead className="hidden sm:table-cell font-mono text-[10px] tracking-widest text-muted-foreground uppercase">Categoria</TableHead>
+                  <TableHead className="text-right font-mono text-[10px] tracking-widest text-muted-foreground uppercase">Valor</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -574,31 +579,38 @@ function TransactionsContent() {
                   return (
                     <TableRow
                       key={transaction.id}
-                      className="cursor-pointer"
+                      className="cursor-pointer border-border hover:bg-muted/40"
                       onClick={() => openTransaction(transaction)}
                     >
-                      <TableCell className="whitespace-nowrap text-muted-foreground">
+                      <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground py-2">
                         {formatDate(transaction.date)}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex min-w-0 items-start gap-2.5">
-                          <div
+                      <TableCell className="py-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span
                             className={cn(
-                              "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg",
+                              "shrink-0 font-mono text-xs font-bold",
                               transaction.direction === "INFLOW"
-                                ? "bg-emerald-500/10 text-emerald-500"
-                                : "bg-rose-500/10 text-rose-500"
+                                ? "text-emerald-400"
+                                : "text-rose-500"
                             )}
                           >
-                            {transaction.direction === "INFLOW" ? (
-                              <ArrowUpRight className="size-3.5" />
-                            ) : (
-                              <ArrowDownLeft className="size-3.5" />
-                            )}
-                          </div>
+                            {transaction.direction === "INFLOW" ? "+" : "−"}
+                          </span>
                           <div className="min-w-0">
-                            <p className="truncate font-medium">
+                            <p className="truncate text-sm flex items-center gap-2">
                               {transaction.description}
+                              {(() => {
+                                const match = transaction.description?.match(/(\d+)\/(\d+)/)
+                                if (match) {
+                                  return (
+                                    <Badge variant="outline" className="h-4 px-1 text-[9px] font-mono border-muted-foreground/30 text-muted-foreground">
+                                      {match[0]}
+                                    </Badge>
+                                  )
+                                }
+                                return null
+                              })()}
                             </p>
                             {transaction.merchantName &&
                             transaction.merchantName !== transaction.description ? (
@@ -609,24 +621,24 @@ function TransactionsContent() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="hidden md:table-cell text-muted-foreground">
-                        {transaction.accountName || "Sem conta"}
+                      <TableCell className="hidden md:table-cell text-xs text-muted-foreground font-mono py-2">
+                        {transaction.accountName || "—"}
                       </TableCell>
-                      <TableCell className="hidden sm:table-cell">
-                        <Badge variant="secondary" className="gap-1 rounded-full">
+                      <TableCell className="hidden sm:table-cell py-2">
+                        <Badge variant="outline" className="gap-1 font-mono text-[10px] border-border text-muted-foreground">
                           <span aria-hidden>{getCategoryEmoji(transaction.categoryName)}</span>
-                          <span className="max-w-[160px] truncate">
+                          <span className="max-w-[140px] truncate">
                             {transaction.categoryName}
                           </span>
                         </Badge>
                       </TableCell>
                       <TableCell
                         className={cn(
-                          "text-right font-medium tabular-nums",
+                          "text-right font-mono text-sm tabular-nums py-2",
                           amountToneClass(signedAmount)
                         )}
                       >
-                        {formatSignedCurrency(signedAmount, "always")}
+                        {format(signedAmount)}
                       </TableCell>
                     </TableRow>
                   )
@@ -683,7 +695,7 @@ function TransactionsContent() {
                   )
                 )}
               >
-                {formatSignedCurrency(
+                {formatSigned(
                   selectedTransaction.direction === "INFLOW"
                     ? Math.abs(selectedTransaction.amount)
                     : -Math.abs(selectedTransaction.amount),
@@ -731,6 +743,59 @@ function TransactionsContent() {
                     </span>
                   </div>
                 ) : null}
+              </div>
+              <div className="mt-6 flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  className="justify-start gap-2"
+                  onClick={async () => {
+                    if (!selectedTransaction) return
+                    const currentDate = new Date(selectedTransaction.date)
+                    const nextMonth = new Date(currentDate)
+                    nextMonth.setMonth(currentDate.getMonth() + 1)
+
+                    try {
+                      const res = await fetch(`/api/domain/transactions/${selectedTransaction.id}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ occurredAt: nextMonth.toISOString() }),
+                      })
+                      if (res.ok) {
+                        setSheetOpen(false)
+                        transactions.refetch()
+                      }
+                    } catch (error) {
+                      console.error("Failed to update date", error)
+                    }
+                  }}
+                >
+                  <CalendarClock className="size-4" />
+                  Adiar para o próximo mês
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  className="justify-start gap-2 text-muted-foreground hover:text-destructive"
+                  onClick={async () => {
+                    if (!selectedTransaction) return
+                    try {
+                      const res = await fetch(`/api/domain/transactions/${selectedTransaction.id}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ ignored: !selectedTransaction.ignored }),
+                      })
+                      if (res.ok) {
+                        setSheetOpen(false)
+                        transactions.refetch()
+                      }
+                    } catch (error) {
+                      console.error("Failed to toggle ignored", error)
+                    }
+                  }}
+                >
+                  <X className="size-4" />
+                  {selectedTransaction.ignored ? "Remover de ignorados" : "Ignorar transação"}
+                </Button>
               </div>
             </div>
           ) : null}

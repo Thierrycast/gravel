@@ -6,7 +6,7 @@ import { log } from "../core/logger.js"
 import { DEFAULT_OUTPUT_DIR } from "../core/paths.js"
 import { serializeDecimal } from "../core/serialize.js"
 
-type PeriodKey = "mtd" | "30d" | "90d" | "180d" | "12m" | "ytd" | "all"
+type PeriodKey = "mtd" | "30d" | "90d" | "180d" | "12m" | "ytd" | "all" | "custom"
 
 function buildSearchParams(period: PeriodKey): URLSearchParams {
   return new URLSearchParams({ period })
@@ -18,8 +18,9 @@ export const snapshotCommand = new Command("snapshot")
 snapshotCommand
   .command("finance")
   .description("Snapshot financeiro completo")
-  .option("-p, --period <period>", "Periodo (mtd|30d|90d|180d|12m|ytd|all)", "90d")
-  .option("-o, --out <dir>", "Diretorio de saida")
+  .option("-p, --period <period>", "Periodo (mtd|30d|90d|180d|12m|ytd|all|custom)", "90d")
+  .option("--from <date>", "Data inicial (YYYY-MM-DD)")
+  .option("--to <date>", "Data final (YYYY-MM-DD)")
   .option("--format <fmt>", "Formato (bundle|json|md|all)", "all")
   .option("--limit-transactions <n>", "Limite de transacoes", "500")
   .option("--top <n>", "Top N categorias/merchants", "20")
@@ -42,6 +43,9 @@ snapshotCommand
     console.log()
 
     const params = buildSearchParams(period)
+    if (options.from) params.set("from", options.from)
+    if (options.to) params.set("to", options.to)
+    
     const paramsWithTop = new URLSearchParams(params)
     paramsWithTop.set("limit", String(topN))
 
@@ -92,6 +96,15 @@ snapshotCommand
     txParams.set("pageSize", String(txLimit))
     const transactions = serializeDecimal(await getDomainTransactions(txParams))
 
+    log.info("Coletando metadados e regras do sistema (Goals, Tags, Rules, Loans, Investments, SyncState)...")
+    const rawGoals = serializeDecimal(await prisma.goal.findMany())
+    const rawTags = serializeDecimal(await prisma.tag.findMany())
+    const rawInvestments = serializeDecimal(await prisma.domainInvestment.findMany())
+    const rawLoans = serializeDecimal(await prisma.pluggyLoanRecord.findMany())
+    const rawMerchantRules = serializeDecimal(await prisma.merchantAliasRule.findMany())
+    const rawCategoryRules = serializeDecimal(await prisma.categoryRule.findMany())
+    const rawSyncState = serializeDecimal(await prisma.domainSyncState.findMany())
+
     log.info("Analisando anomalias...")
     const anomalies = serializeDecimal(await collectAnomalies(params))
 
@@ -102,21 +115,25 @@ snapshotCommand
         project: "gravel",
         version: "0.1.0",
         filters: { period },
-        optimizedForLLM: isForLLM
+        optimizedForLLM: isForLLM,
+        syncState: rawSyncState,
       },
       financial: {
         overview,
         cashFlow,
-        categories: isForLLM ? (categories as any).results.slice(0, 10) : categories,
-        merchants: isForLLM ? (merchants as any).results.slice(0, 10) : merchants,
+        categories: isForLLM ? (categories as { results: unknown[] }).results.slice(0, 10) : categories,
+        merchants: isForLLM ? (merchants as { results: unknown[] }).results.slice(0, 10) : merchants,
         bills: billsSummary,
         recurring,
         portfolio: isForLLM ? undefined : portfolio,
         crypto,
         projection: isForLLM ? undefined : projection,
+        goals: rawGoals,
+        investments: isForLLM ? undefined : rawInvestments,
+        loans: isForLLM ? undefined : rawLoans,
       },
       evidence: {
-        transactionCount: (transactions as any)?.total ?? 0,
+        transactionCount: (transactions as { total: number })?.total ?? 0,
         anomalies,
       },
     }
@@ -133,19 +150,27 @@ snapshotCommand
     // Write JSONL entities
     if (fmt === "all" && !isForLLM) {
       const writers = [
-        { name: "transactions", data: (transactions as any)?.results ?? [] },
-        { name: "categories", data: (rawCategories as any)?.results ?? [] },
-        { name: "merchants", data: (rawMerchants as any)?.results ?? [] },
-        { name: "bills", data: (rawBills as any)?.results ?? [] },
-        { name: "accounts", data: (rawAccounts as any)?.results ?? [] },
+        { name: "transactions", data: (transactions as { results: unknown[] })?.results ?? [] },
+        { name: "categories", data: (rawCategories as { results: unknown[] })?.results ?? [] },
+        { name: "merchants", data: (rawMerchants as { results: unknown[] })?.results ?? [] },
+        { name: "bills", data: (rawBills as { results: unknown[] })?.results ?? [] },
+        { name: "accounts", data: (rawAccounts as { results: unknown[] })?.results ?? [] },
         { name: "recurring", data: recurring ?? [] },
-        { name: "crypto-assets", data: (rawCrypto as any)?.results ?? [] },
+        { name: "crypto-assets", data: (rawCrypto as { results: unknown[] })?.results ?? [] },
+        { name: "goals", data: rawGoals ?? [] },
+        { name: "tags", data: rawTags ?? [] },
+        { name: "investments", data: rawInvestments ?? [] },
+        { name: "loans", data: rawLoans ?? [] },
+        { name: "rules-merchants", data: rawMerchantRules ?? [] },
+        { name: "rules-categories", data: rawCategoryRules ?? [] },
+        { name: "sync-state", data: rawSyncState ?? [] },
       ]
 
       for (const w of writers) {
-        if (!w.data || w.data.length === 0) continue
+        const wdata = w.data as unknown[]
+        if (!wdata || wdata.length === 0) continue
         const filepath = path.join(outDir, `entities/${w.name}.jsonl`)
-        writeFileSync(filepath, w.data.map((item: any) => JSON.stringify(item)).join("\n"))
+        writeFileSync(filepath, wdata.map((item: any) => JSON.stringify(item)).join("\n"))
       }
       log.success(`Entities: Gerados ${writers.length} arquivos JSONL`)
     }
@@ -173,13 +198,13 @@ snapshotCommand
         `- **Resultado Liquido:** R$ ${(o?.periodNet ?? 0).toFixed(2)}`,
         "",
         "## Anomalias e Alertas Detectados",
-        anomalies.length === 0 
+        (anomalies as unknown[]).length === 0 
           ? "Nenhuma anomalia grave detectada."
-          : (anomalies as any[]).map(a => `- **[${a.severity.toUpperCase()}] ${a.type}:** ${a.description}`).join("\n"),
+          : (anomalies as { type: string, severity: string, description: string }[]).map(a => `- **[${a.severity.toUpperCase()}] ${a.type}:** ${a.description}`).join("\n"),
         "",
         "## Resumo de Categorias (Top 10)",
-        ...((categories as any)?.results?.slice(0, 10) ?? []).map(
-          (c: any, i: number) =>
+        ...(((categories as { results: unknown[] })?.results?.slice(0, 10) ?? []) as { name: string, amount: number, sharePercent: number }[]).map(
+          (c, i: number) =>
             `${i + 1}. **${c.name}** - R$ ${(c.amount ?? 0).toFixed(2)} (${(c.sharePercent ?? 0).toFixed(1)}%)`
         ),
         "",

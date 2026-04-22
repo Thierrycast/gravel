@@ -42,7 +42,7 @@ export async function PUT(
       return jsonError(new Error("Transação não encontrada"), 404)
     }
 
-    const allowedFields = ["domainCategoryId", "description", "ignored"] as const
+    const allowedFields = ["domainCategoryId", "description", "ignored", "occurredAt"] as const
     const updateData: Record<string, unknown> = {}
 
     for (const field of allowedFields) {
@@ -53,12 +53,24 @@ export async function PUT(
 
     if (Object.keys(updateData).length === 0) {
       return jsonError(
-        new Error("Nenhum campo válido para atualização. Campos permitidos: domainCategoryId, description, ignored"),
+        new Error("Nenhum campo válido para atualização. Campos permitidos: domainCategoryId, description, ignored, occurredAt"),
         400
       )
     }
 
     const transaction = await prisma.$transaction(async (tx) => {
+      // If occurredAt is being updated, we mark it as a manual override in metadata
+      if ("occurredAt" in updateData) {
+        const currentMetadata = existing.metadataJson ? JSON.parse(existing.metadataJson) : {}
+        updateData.metadataJson = JSON.stringify({
+          ...currentMetadata,
+          overrides: {
+            ...currentMetadata.overrides,
+            occurredAt: updateData.occurredAt,
+          },
+        })
+      }
+
       const updated = await tx.domainTransaction.update({
         where: { id: transactionId },
         data: updateData,

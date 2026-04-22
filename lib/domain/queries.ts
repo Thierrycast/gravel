@@ -9,14 +9,38 @@ import {
 } from "@/lib/core/filters"
 import { prisma } from "@/lib/prisma"
 
+/** Resolves a period shorthand into a start Date. Must stay in sync with analytics.ts resolvePeriodStart. */
+function resolvePeriodFrom(period: string | null, to: Date): Date | undefined {
+  switch (period) {
+    case "7d": return new Date(to.getTime() - 7 * 24 * 60 * 60 * 1000)
+    case "30d": return new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000)
+    case "90d": return new Date(to.getTime() - 90 * 24 * 60 * 60 * 1000)
+    case "180d": return new Date(to.getTime() - 180 * 24 * 60 * 60 * 1000)
+    case "365d":
+    case "12m": return new Date(to.getTime() - 365 * 24 * 60 * 60 * 1000)
+    case "mtd":
+    case "month": {
+      const d = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1))
+      return d
+    }
+    case "ytd": return new Date(Date.UTC(to.getUTCFullYear(), 0, 1))
+    case "all":
+    default: return undefined
+  }
+}
+
 export function parseDomainQuery(searchParams: URLSearchParams) {
   const directionParam = searchParams.get("direction")?.trim().toUpperCase()
+  const to = parseDateParam(searchParams.get("to")) ?? new Date()
+  const period = searchParams.get("period") ?? undefined
+  const from = parseDateParam(searchParams.get("from")) ?? resolvePeriodFrom(period ?? null, to)
 
   return {
     page: parseNumberParam(searchParams.get("page"), 1) ?? 1,
     pageSize: parseNumberParam(searchParams.get("pageSize"), 50) ?? 50,
-    from: parseDateParam(searchParams.get("from")),
-    to: parseDateParam(searchParams.get("to")),
+    from,
+    to,
+    period,
     accountId: searchParams.get("accountId") ?? undefined,
     categoryId: searchParams.get("categoryId") ?? undefined,
     merchantId: searchParams.get("merchantId") ?? undefined,
