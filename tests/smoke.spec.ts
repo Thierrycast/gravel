@@ -1,16 +1,36 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from "@playwright/test"
 
-test('has title and dashboard cards', async ({ page }) => {
-  await page.goto('/');
+test("dashboard loads with main sections visible", async ({ page }) => {
+  await page.goto("/")
 
-  // Expect a title "to contain" a substring.
-  await expect(page).toHaveTitle(/Gravel/);
+  await expect(page).toHaveTitle(/Gravel/)
 
-  // Check if main dashboard header is present
-  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+  // Main title from the PageHeader
+  await expect(
+    page.getByRole("heading", { name: "Painel financeiro" })
+  ).toBeVisible()
 
-  // Check for main cards
-  await expect(page.getByText('Ritmo de Gastos')).toBeVisible();
-  await expect(page.getByText('Patrimônio Líquido')).toBeVisible();
-  await expect(page.getByText('Resultado Mensal')).toBeVisible();
-});
+  // Key section eyebrows rendered on the dashboard
+  await expect(page.getByText("Resultado do período")).toBeVisible()
+  await expect(page.getByText("Patrimônio ao longo do tempo")).toBeVisible()
+  await expect(page.getByText("Movimentações recentes")).toBeVisible()
+})
+
+test("transactions page renders header and filters", async ({ page }) => {
+  await page.goto("/transactions")
+
+  await expect(
+    page.getByRole("heading", { name: "Todas as movimentações" })
+  ).toBeVisible()
+
+  // Direction toggle buttons
+  await expect(page.getByRole("button", { name: "ALL" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "OUT" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "IN" })).toBeVisible()
+})
+
+test("bills page shows totals card", async ({ page }) => {
+  await page.goto("/bills")
+
+  await expect(page.getByText("Total das Faturas")).toBeVisible()
+})
