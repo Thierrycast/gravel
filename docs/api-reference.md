@@ -138,6 +138,8 @@ Ativos crypto com PnL (formato simplificado).
 | Metodo | Rota | Descricao |
 |--------|------|-----------|
 | GET | `/api/sync/status` | Status consolidado dos providers |
+| GET | `/api/sync/trigger` | Retorna info da ultima execucao (`lastSyncAt`, `syncStatus`) — usado pelo botao de sync na UI |
+| POST | `/api/sync/trigger` | Dispara sync Pluggy fire-and-forget (UI de uso pessoal; sem API key) |
 
 ---
 
