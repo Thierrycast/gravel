@@ -41,7 +41,7 @@ function formatRelativeTime(date: Date | null): string {
 export function SyncButton() {
   const [status, setStatus] = useState<SyncStatus>("idle")
   const [lastSyncAt, setLastSyncAtState] = useState<Date | null>(null)
-  const [relativeTime, setRelativeTime] = useState("")
+  const [clockTick, setClockTick] = useState(0)
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pollCountRef = useRef(0)
   const autoSyncFiredRef = useRef(false)
@@ -68,23 +68,37 @@ export function SyncButton() {
       .catch(() => {})
   }, [])
 
-  // Update relative-time string every minute
+  // Tick every minute so relativeTime re-derives without setState-in-effect
   useEffect(() => {
-    setRelativeTime(formatRelativeTime(lastSyncAt))
-    const interval = setInterval(() => {
-      setRelativeTime(formatRelativeTime(lastSyncAt))
-    }, 60_000)
+    const interval = setInterval(() => setClockTick((t) => t + 1), 60_000)
     return () => clearInterval(interval)
-  }, [lastSyncAt])
+  }, [])
+
+  // clockTick intentionally triggers re-render; formatRelativeTime reads Date.now()
+  void clockTick
+  const relativeTime = formatRelativeTime(lastSyncAt)
 
   const triggerSync = useCallback(async () => {
     if (status === "syncing") return
     setStatus("syncing")
 
+    const finishPolling = (nextStatus: Exclude<SyncStatus, "syncing">) => {
+      if (pollTimerRef.current) {
+        clearTimeout(pollTimerRef.current)
+        pollTimerRef.current = null
+      }
+      setStatus(nextStatus)
+      setTimeout(() => setStatus("idle"), 3_000)
+    }
+
     try {
-      await fetch("/api/sync/trigger", { method: "POST" })
+      const res = await fetch("/api/sync/trigger", { method: "POST" })
+      if (!res.ok) {
+        finishPolling("error")
+        return
+      }
     } catch {
-      setStatus("error")
+      finishPolling("error")
       return
     }
 
@@ -92,8 +106,7 @@ export function SyncButton() {
     pollCountRef.current = 0
     const poll = () => {
       if (pollCountRef.current >= MAX_POLLS) {
-        setStatus("error")
-        setTimeout(() => setStatus("idle"), 3_000)
+        finishPolling("error")
         return
       }
       pollTimerRef.current = setTimeout(async () => {
@@ -101,8 +114,7 @@ export function SyncButton() {
         try {
           const res = await fetch("/api/sync/trigger")
           if (!res.ok) {
-            setStatus("error")
-            setTimeout(() => setStatus("idle"), 3_000)
+            finishPolling("error")
             return
           }
           const data = await res.json()
@@ -112,8 +124,7 @@ export function SyncButton() {
             const syncedAt = new Date()
             setLastSyncAtState(syncedAt)
             setLastSyncAt(syncedAt)
-            setStatus(serverStatus === "SUCCESS" ? "done" : "error")
-            setTimeout(() => setStatus("idle"), 3_000)
+            finishPolling(serverStatus === "SUCCESS" ? "done" : "error")
           } else {
             poll()
           }

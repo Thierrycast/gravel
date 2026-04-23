@@ -2,8 +2,6 @@
 
 import { useState, useMemo } from "react"
 import {
-  TrendingUp,
-  TrendingDown,
   ArrowDownRight,
   ArrowUpRight,
   Minus,

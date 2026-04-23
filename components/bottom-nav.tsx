@@ -22,14 +22,18 @@ const tabs = [
 export function BottomNav() {
   const pathname = usePathname()
   const { toggleSidebar } = useSidebar()
+  const activeHref = tabs
+    .filter(({ href }) =>
+      href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`)
+    )
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-stretch border-t border-border bg-background/95 backdrop-blur-md md:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       {tabs.map(({ href, icon: Icon, label }) => {
-        const isActive =
-          href === "/" ? pathname === "/" : pathname.startsWith(href)
+        const isActive = activeHref === href
         return (
           <Link
             key={href}

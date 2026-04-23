@@ -21,8 +21,6 @@ import {
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
 import {
   Table,
   TableHeader,
@@ -39,6 +37,7 @@ import {
   ChartLegendContent,
   type ChartConfig,
 } from "@/components/ui/chart"
+import { PageError } from "@/components/page-error"
 
 interface ProjectionMonth {
   month: number
@@ -97,7 +96,7 @@ export default function ProjectionPage() {
   const [months, setMonths] = useState("6")
   const [expandedMonth, setExpandedMonth] = useState<string | null>(null)
 
-  const { data, loading } = useApi<ProjectionData>("/api/projection", {
+  const { data, loading, error, refetch } = useApi<ProjectionData>("/api/projection", {
     months,
   })
 
@@ -142,7 +141,11 @@ export default function ProjectionPage() {
     }
 
     return result.slice(0, 3)
-  }, [data])
+  }, [data, format])
+
+  if (error) {
+    return <PageError message="Erro ao carregar projeções" refetch={refetch} />
+  }
 
   if (loading) {
     return (

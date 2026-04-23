@@ -170,14 +170,14 @@ snapshotCommand
         const wdata = w.data as unknown[]
         if (!wdata || wdata.length === 0) continue
         const filepath = path.join(outDir, `entities/${w.name}.jsonl`)
-        writeFileSync(filepath, wdata.map((item: any) => JSON.stringify(item)).join("\n"))
+        writeFileSync(filepath, wdata.map((item) => JSON.stringify(item)).join("\n"))
       }
       log.success(`Entities: Gerados ${writers.length} arquivos JSONL`)
     }
 
     // Write prompt-context.md for LLM
     if (isForLLM || fmt === "all") {
-      const o = overview as any
+      const o = overview as Record<string, number | undefined>
       const md = [
         "# Gravel Finance - Contexto para Analise de IA",
         "",

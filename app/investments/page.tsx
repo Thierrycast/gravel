@@ -4,6 +4,9 @@ import { useMemo } from "react"
 import { Landmark, TrendingUp, BarChart3, Layers } from "lucide-react"
 import { useApi } from "@/hooks/use-api"
 import { useCurrency } from "@/lib/currency-context"
+import { PageError } from "@/components/page-error"
+import { cn } from "@/lib/utils"
+import { amountToneClass } from "@/lib/format"
 import {
   Card,
   CardContent,
@@ -30,6 +33,7 @@ interface Investment {
   balance: string | number | null
   currencyCode: string | null
   status: string | null
+  metadataJson: string | null
 }
 
 interface InvestmentsResponse {
@@ -119,11 +123,9 @@ function TableSkeleton() {
 
 export default function InvestmentsPage() {
   const { format } = useCurrency()
-  const { data, loading } = useApi<InvestmentsResponse>(
-    "/api/domain/investments"
-  )
+  const { data, loading, error, refetch } = useApi<InvestmentsResponse>("/api/domain/investments")
 
-  const investments = data?.results ?? []
+  const investments = useMemo(() => data?.results ?? [], [data])
 
   const { totalBalance, positionCount, byType } = useMemo(() => {
     let total = 0
@@ -168,6 +170,10 @@ export default function InvestmentsPage() {
       }))
       .sort((a, b) => b.total - a.total)
   }, [investments])
+
+  if (error) {
+    return <PageError message="Erro ao carregar investimentos" refetch={refetch} />
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -265,7 +271,9 @@ export default function InvestmentsPage() {
                     <TableHead>Nome</TableHead>
                     <TableHead>Tipo</TableHead>
                     <TableHead>Subtipo</TableHead>
+                    <TableHead className="text-right">Custo</TableHead>
                     <TableHead className="text-right">Saldo</TableHead>
+                    <TableHead className="text-right">Lucro/Prejuízo</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -283,8 +291,32 @@ export default function InvestmentsPage() {
                       <TableCell className="text-muted-foreground text-sm">
                         {inv.subtype ?? "-"}
                       </TableCell>
+                      <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                        {(() => {
+                          try {
+                            const meta = JSON.parse(inv.metadataJson || "{}")
+                            return meta.amountOriginal ? format(meta.amountOriginal) : "—"
+                          } catch { return "—" }
+                        })()}
+                      </TableCell>
                       <TableCell className="text-right font-medium">
                         {format(toNumber(inv.balance))}
+                      </TableCell>
+                      <TableCell className={cn(
+                        "text-right font-medium",
+                        (() => {
+                          try {
+                            const meta = JSON.parse(inv.metadataJson || "{}")
+                            return amountToneClass(meta.amountProfit)
+                          } catch { return "" }
+                        })()
+                      )}>
+                        {(() => {
+                          try {
+                            const meta = JSON.parse(inv.metadataJson || "{}")
+                            return meta.amountProfit ? format(meta.amountProfit) : "—"
+                          } catch { return "—" }
+                        })()}
                       </TableCell>
                       <TableCell>
                         <Badge variant={getStatusVariant(inv.status)}>

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Plus, Building2, CreditCard, Landmark, Wallet } from "lucide-react"
+import { Plus, Building2, CreditCard } from "lucide-react"
 import { useApi } from "@/hooks/use-api"
 import { formatPercent } from "@/lib/format"
 import { useCurrency } from "@/lib/currency-context"
@@ -32,7 +32,6 @@ import {
   type Account,
   type AccountsResponse,
   type AllocationResponse,
-  type AllocationResult,
 } from "@/lib/types/api"
 
 function getInitials(name: string): string {
@@ -54,12 +53,6 @@ function getTypeLabel(kind: string): string {
     INVESTMENT: "Investimento",
   }
   return labels[kind] || kind
-}
-
-function getTypeIcon(kind: string) {
-  if (kind === "CARD" || kind === "CREDIT") return CreditCard
-  if (kind === "SAVINGS") return Landmark
-  return Wallet
 }
 
 function AccountCardSkeleton() {
@@ -167,7 +160,7 @@ export default function AccountsPage() {
           <Card>
             <CardHeader>
               <CardDescription>Dívida em Cartões</CardDescription>
-              <CardTitle className={`text-2xl font-mono ${totalCredit < 0 ? "text-destructive" : ""}`}>
+              <CardTitle className={`text-2xl font-mono ${totalCredit > 0 ? "text-destructive" : "text-emerald-400"}`}>
                 {format(totalCredit)}
               </CardTitle>
             </CardHeader>
@@ -263,7 +256,7 @@ export default function AccountsPage() {
 
           {!loading && creditAccounts.length > 0 && (
             <div className="mt-3 text-right text-sm text-muted-foreground">
-              Total: <span className="font-medium text-destructive">{format(totalCredit)}</span>
+              Total: <span className={`font-medium ${totalCredit > 0 ? "text-destructive" : "text-emerald-400"}`}>{format(totalCredit)}</span>
             </div>
           )}
         </div>

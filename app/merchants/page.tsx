@@ -8,6 +8,7 @@ import { usePeriod } from "@/hooks/use-period"
 import { useCurrency } from "@/lib/currency-context"
 import { PageHeader } from "@/components/page-header"
 import { PeriodSwitcher } from "@/components/period-switcher"
+import { PageError } from "@/components/page-error"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -119,13 +120,13 @@ function MerchantsContent() {
   const [searchQuery, setSearchQuery] = useState("")
   const period = usePeriod("mtd")
 
-  const { data: spendingData, loading: spendingLoading } =
+  const { data: spendingData, loading: spendingLoading, error: spendingError, refetch: refetchSpending } =
     useApi<SpendingResponse>("/api/domain/metrics/spending/merchants", period.params)
-
-  const { data: merchantsData, loading: merchantsLoading } =
-    useApi<MerchantsResponse>("/api/domain/merchants", { pageSize: "500" })
+  const { data: merchantsData, loading: merchantsLoading, error: merchantsError, refetch: refetchMerchants } =
+    useApi<MerchantsResponse>("/api/domain/merchants")
 
   const loading = spendingLoading || merchantsLoading
+  const error = spendingError || merchantsError
 
   const merchantsMap = useMemo(() => {
     const map = new Map<string, Merchant>()
@@ -168,6 +169,18 @@ function MerchantsContent() {
     (sum, m) => sum + m.transactionCount,
     0
   )
+
+  if (error) {
+    return (
+      <PageError
+        message="Erro ao carregar estabelecimentos"
+        refetch={() => {
+          refetchSpending()
+          refetchMerchants()
+        }}
+      />
+    )
+  }
 
   return (
     <div className="flex flex-col gap-6">

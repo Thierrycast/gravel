@@ -15,9 +15,6 @@ import { PieChart, Pie, Cell } from "recharts"
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
@@ -144,22 +141,6 @@ const MATCH_TYPE_LABELS: Record<string, string> = {
   CONTAINS: "Contém",
   PREFIX: "Prefixo",
   REGEX: "Regex",
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function getMonthRange(date: Date): { from: string; to: string } {
-  const year = date.getFullYear()
-  const month = date.getMonth()
-  const from = new Date(year, month, 1).toISOString().split("T")[0]
-  const to = new Date(year, month + 1, 0).toISOString().split("T")[0]
-  return { from, to }
-}
-
-function formatMonthLabel(date: Date): string {
-  return date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
 }
 
 // ---------------------------------------------------------------------------
