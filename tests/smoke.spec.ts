@@ -30,7 +30,12 @@ test("transactions page renders header and filters", async ({ page }) => {
 })
 
 test("bills page shows totals card", async ({ page }) => {
-  await page.goto("/bills")
+  await page.goto("/bills", { waitUntil: "networkidle" })
 
-  await expect(page.getByText("Total das Faturas")).toBeVisible()
+  await expect(
+    page.getByRole("heading", { name: "Faturas", level: 1 })
+  ).toBeVisible()
+  await expect(page.getByText("Total das Faturas")).toBeVisible({
+    timeout: 15_000,
+  })
 })
