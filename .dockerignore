@@ -1,10 +1,43 @@
+.git
+.github
+.gitignore
+
+# Build artefacts
 node_modules
 .next
-.git
+out
+dist
+
+# Environment (provide via docker run / compose)
 .env
+.env.*
+!.env.example
+
+# Local databases / data volumes
 *.db
 *.db-journal
-README.md
-docs
-artifacts
+*.db-wal
+*.db-shm
+data/
+
+# Editor / OS
+.DS_Store
+.vscode
+.idea
+*.log
+
+# Agents / internal tooling (not needed at runtime)
 .agents
+.ai
+.codex
+skills-lock.json
+
+# Tests / docs (kept out of the runtime image)
+tests
+playwright-report
+artifacts
+docs
+README.md
+
+# TypeScript incremental cache
+tsconfig.tsbuildinfo
