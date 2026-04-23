@@ -62,6 +62,8 @@ export async function GET(request: Request) {
         const currentPriceUsd = toUsd(asset.currentPrice, asset.quoteAsset, rate)
         const unrealizedPnlBrl = toBrl(asset.unrealizedPnl, asset.quoteAsset, rate)
         const unrealizedPnlUsd = toUsd(asset.unrealizedPnl, asset.quoteAsset, rate)
+        const realizedPnlBrl = toBrl(asset.realizedPnl, asset.quoteAsset, rate)
+        const realizedPnlUsd = toUsd(asset.realizedPnl, asset.quoteAsset, rate)
 
         return {
           asset: asset.asset,
@@ -74,6 +76,8 @@ export async function GET(request: Request) {
           valueUsd,
           unrealizedPnlBrl,
           unrealizedPnlUsd,
+          realizedPnlBrl,
+          realizedPnlUsd,
           change24hPercent: asset.change24hPercent,
           tradeCount: asset.tradeCount,
           costBasisMissing: asset.costBasisMissing,
@@ -92,6 +96,12 @@ export async function GET(request: Request) {
     const totalUnrealizedPnlUsd = sumDecimalNumbers(
       positions.map((asset) => asset.unrealizedPnlUsd?.toNumber())
     )
+    const totalRealizedPnlBrl = sumDecimalNumbers(
+      positions.map((asset) => asset.realizedPnlBrl?.toNumber())
+    )
+    const totalRealizedPnlUsd = sumDecimalNumbers(
+      positions.map((asset) => asset.realizedPnlUsd?.toNumber())
+    )
 
     const results = positions.map((asset) => ({
       ...asset,
@@ -105,6 +115,8 @@ export async function GET(request: Request) {
         totalValueUsd,
         totalUnrealizedPnlBrl,
         totalUnrealizedPnlUsd,
+        totalRealizedPnlBrl,
+        totalRealizedPnlUsd,
         assetCount: results.length,
         usdBrlRate: usdBrl,
         costBasisMissing: results.some((asset) => asset.costBasisMissing),

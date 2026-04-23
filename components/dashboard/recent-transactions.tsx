@@ -2,7 +2,6 @@
 
 import { useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardAction } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatDate } from "@/lib/format"
 import { useCurrency } from "@/lib/currency-context"
@@ -116,7 +115,7 @@ export function RecentTransactions({ transactions, loading }: RecentTransactions
             ))}
             {(!transactions || transactions.length === 0) && (
               <p className="text-xs text-muted-foreground font-mono text-center py-4">
-                // nenhuma_transação
+                {"// nenhuma_transação"}
               </p>
             )}
           </div>

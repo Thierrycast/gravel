@@ -29,6 +29,13 @@ export async function GET() {
   // Crypto values come from Binance in USD. All bank/investment values are
   // already in BRL. We must convert crypto to BRL before mixing, otherwise
   // the totals silently combine two currencies.
+  if (!Number.isFinite(usdBrl) || usdBrl <= 0) {
+    return NextResponse.json(
+      { error: { message: "Cotacao USD/BRL indisponivel para calcular portfolio" } },
+      { status: 502 }
+    )
+  }
+
   const cryptoTotalBrl = Number(payload.summary.crypto.toString()) * usdBrl
   const fiatLiquidNum = Number(payload.summary.liquidAssets.toString())
   const fiatInvestmentsNum = Number(payload.summary.investments.toString())

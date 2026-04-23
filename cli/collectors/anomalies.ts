@@ -5,7 +5,7 @@ export interface Anomaly {
   type: string
   severity: "low" | "medium" | "high"
   description: string
-  metadata?: any
+  metadata?: Record<string, unknown>
 }
 
 export async function collectAnomalies(params: URLSearchParams): Promise<Anomaly[]> {

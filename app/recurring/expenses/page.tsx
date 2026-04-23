@@ -8,7 +8,7 @@ import {
   CartesianGrid,
 } from "recharts"
 import { useApi } from "@/hooks/use-api"
-import { formatDate, daysUntilLabel } from "@/lib/format"
+import { daysUntilLabel } from "@/lib/format"
 import { useCurrency } from "@/lib/currency-context"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -18,6 +18,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
+import { PageError } from "@/components/page-error"
 
 interface RecurringExpenseRule {
   id: string
@@ -71,7 +72,11 @@ const MONTH_FULL = [
 export default function RecurringExpensesPage() {
   const { format, formatCompact } = useCurrency()
   const currentMonth = new Date().getMonth()
-  const { data, loading } = useApi<RecurringExpenseData>("/api/recurring/expenses")
+  const { data, loading, error, refetch } = useApi<RecurringExpenseData>("/api/recurring/expenses")
+  
+  if (error) {
+    return <PageError message="Erro ao carregar despesas recorrentes" refetch={refetch} />
+  }
   const rules = data?.rules ?? []
   const monthlyTotal = rules.reduce(
     (sum, r) => sum + Math.abs(Number(r.amount)),

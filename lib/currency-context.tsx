@@ -47,16 +47,19 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   const [isPrivate, setIsPrivateState] = useState(false)
   const [usdBrlRate, setUsdBrlRate] = useState(FALLBACK_RATE)
 
-  // Load preference from localStorage
+  // Load preference from localStorage on mount (client-only; SSR-safe default above).
+  // The setState calls are deliberate one-shot hydration from a platform API.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     try {
       const storedCurrency = localStorage.getItem(STORAGE_KEY) as Currency | null
       if (storedCurrency === "BRL" || storedCurrency === "USD") setCurrencyState(storedCurrency)
-      
+
       const storedPrivacy = localStorage.getItem(PRIVACY_KEY)
       if (storedPrivacy === "true") setIsPrivateState(true)
     } catch {}
   }, [])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Fetch live USD/BRL rate from a lightweight public endpoint
   useEffect(() => {

@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server"
 import { jsonOk, jsonError } from "@/lib/core/http"
 import { prisma } from "@/lib/prisma"
 import { runPluggySync } from "@/lib/ingestion/provider-sync"

@@ -6,8 +6,6 @@ import Link from "next/link"
 import {
   TrendingUp,
   TrendingDown,
-  ArrowUpRight,
-  ArrowDownRight,
   ExternalLink,
   BarChart3,
 } from "lucide-react"
@@ -34,6 +32,7 @@ import { SankeyChart } from "@/components/charts/sankey-chart"
 import { usePeriod } from "@/hooks/use-period"
 import { PeriodSwitcher } from "@/components/period-switcher"
 import { PageHeader } from "@/components/page-header"
+import { PageError } from "@/components/page-error"
 
 interface OverviewResponse {
   summary: {
@@ -73,6 +72,40 @@ const CATEGORY_COLORS = [
   "oklch(0.75 0.15 30)",   // Orange
   "oklch(0.55 0.20 310)",  // Violet
 ]
+
+const DAY_MS = 86_400_000
+
+function parsePeriodDate(value?: string) {
+  if (!value) return undefined
+  const date = new Date(value)
+  return Number.isFinite(date.getTime()) ? date : undefined
+}
+
+function resolvePeriodRange(period: ReturnType<typeof usePeriod>) {
+  const to = parsePeriodDate(period.to) ?? new Date()
+  const fromParam = parsePeriodDate(period.from)
+
+  if (fromParam) return { from: fromParam, to }
+
+  switch (period.period) {
+    case "30d":
+      return { from: new Date(to.getTime() - 30 * DAY_MS), to }
+    case "90d":
+      return { from: new Date(to.getTime() - 90 * DAY_MS), to }
+    case "180d":
+      return { from: new Date(to.getTime() - 180 * DAY_MS), to }
+    case "12m":
+      return { from: new Date(to.getTime() - 365 * DAY_MS), to }
+    case "ytd":
+      return { from: new Date(Date.UTC(to.getUTCFullYear(), 0, 1)), to }
+    case "mtd":
+    default:
+      return {
+        from: new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1)),
+        to,
+      }
+  }
+}
 
 function StatCard({
   label,
@@ -127,13 +160,14 @@ export default function ReportsPage() {
 
   const apiParams = period.params
 
-  const { data: overview, loading: overviewLoading } =
+  const { data: overview, loading: overviewLoading, error: overviewError, refetch: refetchOverview } =
     useApi<OverviewResponse>("/api/domain/metrics/overview", apiParams)
 
-  const { data: spending, loading: spendingLoading } =
+  const { data: spending, loading: spendingLoading, error: spendingError, refetch: refetchSpending } =
     useApi<SpendingResponse>("/api/domain/metrics/spending/categories", apiParams)
 
   const loading = overviewLoading || spendingLoading
+  const error = overviewError || spendingError
 
   const sortedCategories = useMemo(() => {
     if (!spending?.results) return []
@@ -159,6 +193,18 @@ export default function ReportsPage() {
     }))
   }, [sortedCategories])
 
+  if (error) {
+    return (
+      <PageError
+        message="Erro ao carregar relatórios"
+        refetch={() => {
+          refetchOverview()
+          refetchSpending()
+        }}
+      />
+    )
+  }
+
   const monthlyIncome = overview?.summary?.monthlyInflow ?? 0
   const monthlyExpenses = Math.abs(overview?.summary?.monthlyOutflow ?? 0)
   const netResult = overview?.summary?.monthlyNet ?? 0
@@ -168,14 +214,10 @@ export default function ReportsPage() {
 
   // Derived stats
   const savingsRate = monthlyIncome > 0 ? (netResult / monthlyIncome) * 100 : 0
-  const yearStart = new Date(new Date().getFullYear(), 0, 1)
-  const daysInYear = Math.ceil((Date.now() - yearStart.getTime()) / 86_400_000)
-  const daysInPeriod = period.period === "mtd"
-    ? new Date().getDate()
-    : period.period === "30d" ? 30
-    : period.period === "90d" ? 90
-    : period.period === "ytd" || period.period === "12m" ? daysInYear
-    : 30 // fallback
+  const { from: periodStart, to: periodEnd } = resolvePeriodRange(period)
+  const daysInPeriod = Math.ceil(
+    Math.max(periodEnd.getTime() - periodStart.getTime(), DAY_MS) / DAY_MS
+  )
   
   const dailyAvgSpend = monthlyExpenses / Math.max(daysInPeriod, 1)
 

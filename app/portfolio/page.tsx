@@ -5,7 +5,6 @@ import {
   Bitcoin,
   CreditCard,
   Landmark,
-  PiggyBank,
   Wallet,
 } from "lucide-react"
 

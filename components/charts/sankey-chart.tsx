@@ -4,7 +4,6 @@ import { useMemo, useCallback, useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import {
   sankey as d3Sankey,
-  sankeyLinkHorizontal,
   type SankeyNode,
   type SankeyLink,
 } from "d3-sankey"
@@ -56,6 +55,7 @@ export function SankeyChart({
   const [nodePadding, setNodePadding] = useState(14)
   const [nodeWidth, setNodeWidth] = useState(16)
   const [showLabels, setShowLabels] = useState(true)
+  const [curvature, setCurvature] = useState(0.5)
 
   // Handle Resize
   useEffect(() => {
@@ -73,8 +73,8 @@ export function SankeyChart({
   const width = dimensions.width
   const height = userHeight
 
-  const { nodes, links, categoryIndexMap } = useMemo(() => {
-    if (!data || !data.categories.length) return { nodes: [], links: [], categoryIndexMap: new Map() }
+  const { nodes, links } = useMemo(() => {
+    if (!data || !data.categories.length) return { nodes: [], links: [] }
 
     const safeIncome = Number.isFinite(data.income) ? data.income : 0
     const categories = data.categories.filter(
@@ -83,8 +83,8 @@ export function SankeyChart({
     const totalExpenses = categories.reduce((s, c) => s + c.total, 0)
     const remaining = safeIncome - totalExpenses
 
-    if (totalExpenses <= 0 && remaining <= 0) {
-      return { nodes: [], links: [], categoryIndexMap: new Map() }
+    if (totalExpenses <= 0 && safeIncome <= 0) {
+      return { nodes: [], links: [] }
     }
 
     const nodeList: Node[] = [
@@ -92,9 +92,7 @@ export function SankeyChart({
       { name: "Despesas", color: "oklch(0.60 0.25 25)" },
     ]
 
-    const catIndexMap = new Map<string, number>()
-    categories.forEach((c, i) => {
-      catIndexMap.set(c.name, i + 2)
+    categories.forEach((c) => {
       nodeList.push({ name: c.name, color: c.color, categoryId: c.categoryId, isCategory: true })
     })
 
@@ -117,7 +115,7 @@ export function SankeyChart({
       linkList.push({ source: 1, target: i + 2, value: c.total, color: c.color })
     })
 
-    return { nodes: nodeList, links: linkList, categoryIndexMap: catIndexMap }
+    return { nodes: nodeList, links: linkList }
   }, [data])
 
   const margin = useMemo(
@@ -169,15 +167,28 @@ export function SankeyChart({
     router.push(`/transactions?${params.toString()}`)
   }, [router, data.periodParam])
 
+  const linkPath = useMemo(() => {
+    return (d: SLink) => {
+      const source = d.source as SNode
+      const target = d.target as SNode
+      const x0 = source.x1 ?? 0
+      const x1 = target.x0 ?? 0
+      const xi = (t: number) => x0 * (1 - t) + x1 * t
+      const x2 = xi(curvature)
+      const x3 = xi(1 - curvature)
+      const y0 = d.y0 ?? 0
+      const y1 = d.y1 ?? 0
+      return `M${x0},${y0}C${x2},${y0} ${x3},${y1} ${x1},${y1}`
+    }
+  }, [curvature])
+
   if (!sankeyData) {
     return (
       <div className="flex h-[300px] items-center justify-center font-mono text-xs text-muted-foreground">
-        // dados_insuficientes
+        {"// dados_insuficientes"}
       </div>
     )
   }
-
-  const linkPath = sankeyLinkHorizontal()
 
   return (
     <div className="space-y-6" ref={containerRef}>
@@ -224,6 +235,20 @@ export function SankeyChart({
               />
             </div>
             <span className="font-mono text-[10px] text-muted-foreground min-w-[32px]">{nodeWidth}px</span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Curvatura</span>
+            <div className="w-24">
+              <Slider
+                value={[curvature * 100]}
+                min={10}
+                max={100}
+                step={5}
+                onValueChange={(val: number[]) => setCurvature(val[0] / 100)}
+              />
+            </div>
+            <span className="font-mono text-[10px] text-muted-foreground min-w-[32px]">{Math.round(curvature * 100)}%</span>
           </div>
 
           <button
@@ -292,7 +317,7 @@ export function SankeyChart({
         {/* Links */}
         <g>
           {sankeyData.links.map((link, i) => {
-            const path = linkPath(link as never)
+            const path = linkPath(link as SLink)
             if (!path) return null
             const target = link.target as SNode
             const isClickable = target.isCategory && target.categoryId
@@ -307,7 +332,7 @@ export function SankeyChart({
                   onClick={() => handleLinkClick(link as SLink)}
                 />
                 <title>
-                  {`${(link.source as SNode).name} → ${(link.target as SNode).name}: ${format(link.value)}`}
+                  {`${(link.source as SNode).name} → ${(link.target as SNode).name}: ${isPrivate ? "••••" : format(link.value)}`}
                 </title>
               </g>
             )
@@ -323,10 +348,10 @@ export function SankeyChart({
             const rightNodes = sankeyData.nodes
               .filter((n) => (n.x1 ?? 0) > (width * 2) / 3)
               .sort((a, b) => (a.y0 ?? 0) - (b.y0 ?? 0))
+            
+            const labelH = 20
 
-            const labelH = 24
-
-            const solve = (nodes: typeof leftNodes, isRight: boolean) => {
+            const solve = (nodes: typeof leftNodes) => {
               const labels = nodes.map((n) => ({
                 node: n,
                 y: ((n.y0 ?? 0) + (n.y1 ?? 0)) / 2,
@@ -349,8 +374,8 @@ export function SankeyChart({
               return labels
             }
 
-            const leftLabels = solve(leftNodes, false)
-            const rightLabels = solve(rightNodes, true)
+            const leftLabels = solve(leftNodes)
+            const rightLabels = solve(rightNodes)
             const allLabels = [...leftLabels, ...rightLabels]
 
             return sankeyData.nodes.map((node, i) => {
@@ -440,13 +465,13 @@ export function SankeyChart({
                           fontFamily="monospace"
                           className="pointer-events-none select-none"
                         >
-                          {format(nodeValue)}
+                          {isPrivate ? "••••" : format(nodeValue)}
                         </text>
                       )}
                     </g>
                   )}
                   
-                  <title>{`${node.name}: ${format(nodeValue)}${isClickable ? " — clique para ver transações" : ""}`}</title>
+                  <title>{`${node.name}: ${isPrivate ? "••••" : format(nodeValue)}${isClickable ? " — clique para ver transações" : ""}`}</title>
                 </g>
               )
             })

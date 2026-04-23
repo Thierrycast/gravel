@@ -10,11 +10,10 @@ import {
 } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
-  ArrowDownLeft,
-  ArrowUpRight,
   CalendarClock,
   ChevronLeft,
   ChevronRight,
+  Download,
   Receipt,
   Search,
   X,
@@ -237,6 +236,11 @@ function TransactionsContent() {
     shouldWaitForLegacyAccount ? null : "/api/domain/transactions",
     transactionParams
   )
+
+  function handleExport() {
+    const params = new URLSearchParams(transactionParams)
+    window.location.href = `/api/domain/transactions/export?${params.toString()}`
+  }
 
   useEffect(() => {
     setSearchInput(query)
@@ -466,7 +470,22 @@ function TransactionsContent() {
               ? `1 transação encontrada (${period.label.toLowerCase()}) para os filtros atuais.`
               : `${total} transações encontradas (${period.label.toLowerCase()}) para os filtros atuais.`
         }
-        actions={<PeriodSwitcher state={period} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <PeriodSwitcher state={period} />
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={handleExport}
+              disabled={transactions.loading || total === 0}
+              title="Exportar transações do período (CSV)"
+            >
+              <Download className="size-4" />
+              <span className="hidden sm:inline">Exportar</span>
+            </Button>
+          </div>
+        }
       />
 
       <section className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">

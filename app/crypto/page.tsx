@@ -40,6 +40,8 @@ interface CryptoResponse {
     totalValueUsd: number
     totalUnrealizedPnlBrl: number
     totalUnrealizedPnlUsd: number
+    totalRealizedPnlBrl: number
+    totalRealizedPnlUsd: number
     assetCount: number
     usdBrlRate: number
     costBasisMissing: boolean
@@ -56,6 +58,8 @@ interface CryptoResponse {
     valueUsd: number | null
     unrealizedPnlBrl: number | null
     unrealizedPnlUsd: number | null
+    realizedPnlBrl: number | null
+    realizedPnlUsd: number | null
     portfolioSharePercent: number
     change24hPercent: number | null
     tradeCount: number
@@ -267,6 +271,7 @@ export default function CryptoPage() {
                   <TableHead className="text-right">Preço atual</TableHead>
                   <TableHead className="text-right">Valor ({currency})</TableHead>
                   <TableHead className="text-right">% do portfólio</TableHead>
+                  <TableHead className="text-right">PnL Realizado</TableHead>
                   <TableHead className="text-right">Variação 24h</TableHead>
                 </TableRow>
               </TableHeader>
@@ -315,6 +320,14 @@ export default function CryptoPage() {
                       {asset.valueBrl == null
                         ? "—"
                         : formatSignedPercent(asset.portfolioSharePercent).replace("+", "")}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right font-medium tabular-nums",
+                        amountToneClass(asset.realizedPnlBrl)
+                      )}
+                    >
+                      {asset.realizedPnlBrl == null ? "—" : format(asset.realizedPnlBrl)}
                     </TableCell>
                     <TableCell
                       className={cn(

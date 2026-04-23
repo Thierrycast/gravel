@@ -28,8 +28,9 @@ export async function POST(request: Request) {
     // but the next sync/projection will do it anyway.
     
     return NextResponse.json({ success: true, asset: updated.asset })
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error updating cost basis:", error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    const err = error as Error
+    return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }

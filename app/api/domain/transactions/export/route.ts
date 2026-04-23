@@ -1,111 +1,59 @@
+import { getDomainTransactions } from "@/lib/domain/queries"
 import { prisma } from "@/lib/prisma"
-import { parseDomainQuery } from "@/lib/domain/queries"
-import { Prisma } from "@prisma/client"
 
 export const dynamic = "force-dynamic"
-
-function escapeCsvField(value: string): string {
-  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
-    return `"${value.replace(/"/g, '""')}"`
-  }
-  return value
-}
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const filters = parseDomainQuery(searchParams)
-
-    // Override pageSize to export up to 10000 rows
-    searchParams.set("pageSize", "10000")
+    // Always export everything matching the current filters (up to 10000 for safety)
     searchParams.set("page", "1")
+    searchParams.set("pageSize", "10000")
+    
+    const payload = await getDomainTransactions(searchParams)
 
-    const where: Prisma.DomainTransactionWhereInput = {
-      occurredAt: {
-        gte: filters.from,
-        lte: filters.to,
-      },
-      domainAccountId: filters.accountId,
-      domainCategoryId: filters.categoryId,
-      domainMerchantId: filters.merchantId,
-      sourceProvider: filters.provider
-        ? (filters.provider as never)
-        : undefined,
-      ...(searchParams.get("ignored") === "true" ? {} : { ignored: false }),
-    }
+    // Lookup data for labels
+    const categoryIds = Array.from(new Set(payload.results.map(tx => tx.domainCategoryId).filter(Boolean)))
+    const accountIds = Array.from(new Set(payload.results.map(tx => tx.domainAccountId).filter(Boolean)))
+    const merchantIds = Array.from(new Set(payload.results.map(tx => tx.domainMerchantId).filter(Boolean)))
 
-    const transactions = await prisma.domainTransaction.findMany({
-      where,
-      orderBy: [
-        { occurredAt: filters.sortOrder },
-        { createdAt: "desc" },
-      ],
-      take: 10000,
-    })
-
-    // Collect IDs for related data
-    const categoryIds = [
-      ...new Set(
-        transactions
-          .map((t) => t.domainCategoryId)
-          .filter((id): id is string => id !== null)
-      ),
-    ]
-    const accountIds = [
-      ...new Set(
-        transactions
-          .map((t) => t.domainAccountId)
-          .filter((id): id is string => id !== null)
-      ),
-    ]
-
-    const [categories, accounts] = await Promise.all([
-      categoryIds.length
-        ? prisma.domainCategory.findMany({
-            where: { id: { in: categoryIds } },
-          })
-        : [],
-      accountIds.length
-        ? prisma.domainAccount.findMany({
-            where: { id: { in: accountIds } },
-          })
-        : [],
+    const [categories, accounts, merchants] = await Promise.all([
+      prisma.domainCategory.findMany({ where: { id: { in: categoryIds as string[] } } }),
+      prisma.domainAccount.findMany({ where: { id: { in: accountIds as string[] } } }),
+      prisma.domainMerchant.findMany({ where: { id: { in: merchantIds as string[] } } }),
     ])
 
-    const categoryMap = new Map(categories.map((c) => [c.id, c.name]))
-    const accountMap = new Map(accounts.map((a) => [a.id, a.name]))
+    const catMap = new Map(categories.map(c => [c.id, c.name]))
+    const accMap = new Map(accounts.map(a => [a.id, a.name]))
+    const merMap = new Map(merchants.map(m => [m.id, m.displayName]))
 
-    const header = "Data,Descri\u00e7\u00e3o,Valor,Tipo,Categoria,Conta,Comerciante"
-
-    const rows = transactions.map((t) => {
-      const date = new Date(t.occurredAt).toLocaleDateString("pt-BR")
-      const description = t.description ?? ""
-      const amount = t.amount.toString()
-      const direction = t.direction === "INFLOW" ? "Entrada" : "Sa\u00edda"
-      const category = t.domainCategoryId
-        ? categoryMap.get(t.domainCategoryId) ?? ""
-        : ""
-      const account = t.domainAccountId
-        ? accountMap.get(t.domainAccountId) ?? ""
-        : ""
-      const merchant = t.merchantName ?? ""
-
-      return [date, description, amount, direction, category, account, merchant]
-        .map(escapeCsvField)
-        .join(",")
+    // CSV Header
+    const headers = ["Data", "Descrição", "Valor", "Direção", "Conta", "Categoria", "Comerciante"]
+    const rows = payload.results.map(tx => {
+      const amount = Number(tx.amount)
+      const signedAmount = tx.direction === "INFLOW" ? Math.abs(amount) : -Math.abs(amount)
+      
+      return [
+        tx.occurredAt.toISOString().split("T")[0],
+        `"${(tx.description || "").replace(/"/g, '""')}"`,
+        signedAmount.toFixed(2),
+        tx.direction,
+        `"${(tx.domainAccountId ? accMap.get(tx.domainAccountId) || "" : "").replace(/"/g, '""')}"`,
+        `"${(tx.domainCategoryId ? catMap.get(tx.domainCategoryId) || "" : "").replace(/"/g, '""')}"`,
+        `"${(tx.domainMerchantId ? merMap.get(tx.domainMerchantId) || tx.merchantName || "" : tx.merchantName || "").replace(/"/g, '""')}"`,
+      ].join(",")
     })
 
-    const csv = [header, ...rows].join("\n")
+    const csv = [headers.join(","), ...rows].join("\n")
 
     return new Response(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": "attachment; filename=transacoes.csv",
+        "Content-Disposition": `attachment; filename="gravel-transactions-${new Date().toISOString().split("T")[0]}.csv"`,
       },
     })
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Erro desconhecido"
-    return new Response(message, { status: 500 })
+    console.error("Export error", error)
+    return new Response("Export failed", { status: 500 })
   }
 }

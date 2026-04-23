@@ -26,7 +26,6 @@ export async function GET(request: Request) {
     const openAmount = summary.totalAmount.minus(summary.overdueAmount)
     const paidBills = summary.upcoming.filter((b) => b.status === "PAID" || b.status === "CLOSED")
     const openBills = summary.upcoming.filter((b) => b.status !== "PAID" && b.status !== "CLOSED" && b.dueDate && b.dueDate >= now)
-    const overdueBills = summary.upcoming.filter((b) => b.status !== "PAID" && b.status !== "CLOSED" && b.dueDate && b.dueDate < now)
 
     // Map upcoming bills with account names
     const mappedUpcoming = summary.upcoming.map((bill) => ({

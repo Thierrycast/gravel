@@ -18,6 +18,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
+import { PageError } from "@/components/page-error"
 
 interface RecurringIncomeRule {
   id: string
@@ -71,7 +72,11 @@ const MONTH_FULL = [
 export default function RecurringIncomePage() {
   const { format, formatCompact } = useCurrency()
   const currentMonth = new Date().getMonth()
-  const { data, loading } = useApi<RecurringIncomeData>("/api/recurring/income")
+  const { data, loading, error, refetch } = useApi<RecurringIncomeData>("/api/recurring/income")
+  
+  if (error) {
+    return <PageError message="Erro ao carregar receitas recorrentes" refetch={refetch} />
+  }
   const rules = data?.rules ?? []
   const monthlyTotal = rules.reduce((sum, r) => sum + Number(r.amount), 0)
 

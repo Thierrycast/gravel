@@ -12,15 +12,8 @@ import {
 import { Repeat, CreditCard, ChevronLeft, ChevronRight } from "lucide-react"
 import { useApi } from "@/hooks/use-api"
 import { useCurrency } from "@/lib/currency-context"
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Progress } from "@/components/ui/progress"
 import {
   ChartContainer,
   ChartTooltip,
@@ -29,8 +22,6 @@ import {
 } from "@/components/ui/chart"
 
 import {
-  type RecurringRule,
-  type RecurringSummary,
   type RecurringData,
 } from "@/lib/types/api"
 
@@ -146,11 +137,11 @@ export default function RecurringPage() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <div className="size-2.5 rounded-full bg-amber-500" />
-              <span className="text-xs text-muted-foreground">Parcelas</span>
+              <span className="text-xs text-muted-foreground">Contas fixas</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="size-2.5 rounded-full bg-blue-500" />
-              <span className="text-xs text-muted-foreground">Contas fixas</span>
+              <span className="text-xs text-muted-foreground">Parcelas</span>
             </div>
           </div>
         </div>

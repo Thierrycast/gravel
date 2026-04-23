@@ -120,8 +120,8 @@ function diffCrypto(before: AnalysisBundle, after: AnalysisBundle) {
   const b = before.financial?.crypto ?? {}
   const a = after.financial?.crypto ?? {}
   log.heading("Crypto")
-  console.log(`  ${chalk.dim("Valor total".padEnd(22))} ${fmtDelta((b as any).totalValue, (a as any).totalValue)}`)
-  console.log(`  ${chalk.dim("PnL nao realizado".padEnd(22))} ${fmtDelta((b as any).totalUnrealizedPnl, (a as any).totalUnrealizedPnl)}`)
+  console.log(`  ${chalk.dim("Valor total".padEnd(22))} ${fmtDelta(b.totalValue, a.totalValue)}`)
+  console.log(`  ${chalk.dim("PnL nao realizado".padEnd(22))} ${fmtDelta(b.totalUnrealizedPnl, a.totalUnrealizedPnl)}`)
 }
 
 export const diffCommand = new Command("diff")

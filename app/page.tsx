@@ -243,7 +243,7 @@ export default function OverviewPage() {
 }
 
 function OverviewPageContent() {
-  const { format, formatSigned, formatCompact } = useCurrency()
+  const { format, formatSigned } = useCurrency()
   const period = usePeriod("mtd")
 
   const overview = useApi<OverviewData>("/api/domain/metrics/overview", period.params)
@@ -371,6 +371,7 @@ function OverviewPageContent() {
     net,
     expenseChange,
     nextBillDueDate,
+    format,
   ])
 
   const hasError =

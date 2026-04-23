@@ -10,7 +10,6 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
-  ArrowRight,
 } from "lucide-react"
 import { useApi } from "@/hooks/use-api"
 import { useCurrency } from "@/lib/currency-context"
@@ -144,18 +143,6 @@ export default function BillsPage() {
 
   const loading = billsLoading || summaryLoading
 
-  if (billsError || summaryError) {
-    return (
-      <PageError
-        message="Erro ao carregar faturas"
-        refetch={() => {
-          refetchBills()
-          refetchSummary()
-        }}
-      />
-    )
-  }
-
   const bills = billsData?.results
   const summary = summaryData?.summary
 
@@ -174,6 +161,18 @@ export default function BillsPage() {
       return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
     })
   }, [bills])
+
+  if (billsError || summaryError) {
+    return (
+      <PageError
+        message="Erro ao carregar faturas"
+        refetch={() => {
+          refetchBills()
+          refetchSummary()
+        }}
+      />
+    )
+  }
 
   const totalAmount = summary
     ? summary.totalOpen + summary.totalOverdue + summary.totalPaid
@@ -467,7 +466,7 @@ export default function BillsPage() {
                     </div>
 
                     <Link
-                      href={bill.accountId ? `/transactions?accountId=${bill.accountId}` : `/transactions?q=${encodeURIComponent(bill.accountName)}`}
+                      href={bill.accountId ? `/transactions?accountId=${bill.accountId}` : "/transactions"}
                       className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
                     >
                       <ChevronRight className="size-4" />
