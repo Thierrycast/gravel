@@ -20,9 +20,10 @@ Orquestracao de sync: adquire locks, chama integracoes, persiste snapshots e rec
 
 ### 3. Dominio (`lib/domain/`)
 - `queries.ts` - consultas aos read models com paginacao e filtros
-- `analytics.ts` - calculos de metricas (overview, cash-flow, net-worth, spending, crypto)
+- `analytics.ts` - calculos de metricas (overview, cash-flow, net-worth, spending, crypto, scenarios)
 - `derived.ts` - deteccao de recorrencias, projecao de saldo, portfolio consolidado
-- `projectors.ts` - transforma provider records em domain read models
+- `ai-engine.ts` - insights comportamentais e custo de oportunidade
+- `forensics.ts` - analise estatistica (Benford's Law) e deteccao de assinaturas ocultas
 - `crypto-math.ts` - custo medio movel e PnL de cripto
 
 ### 4. Admin (`lib/admin/`)
@@ -50,6 +51,8 @@ Dados normalizados do provedor. Insert-only (nao sobrescreve enriquecimentos int
 ### Domain Read Models
 Dados projetados e enriquecidos para consumo da aplicacao. Upsert controlado.
 - `DomainAccount`, `DomainTransaction`, `DomainBill`, `DomainInvestment`, `DomainCryptoAsset`, `DomainCategory`, `DomainMerchant`, `DomainRecurringRule`
+- `DomainLend` - registro de dívidas de terceiros/amigos
+- `DomainScenarioEvent` - eventos hipotéticos para simulações
 
 ### Dados da Aplicacao
 Criados diretamente pela UI, sem dependencia de provedores.
@@ -58,10 +61,19 @@ Criados diretamente pela UI, sem dependencia de provedores.
 - `CategoryRule` - regras de categorizacao automatica
 - `MerchantAliasRule` - regras de alias de comerciante
 - `IgnoredTransaction` - transacoes excluidas de relatorios
+- `UserSetting` - configurações de preferências, salário e segurança
 
 ### Operacional
 - `OpsSyncRun`, `OpsSyncFailure`, `OpsSyncCheckpoint`, `OpsSyncLock`, `DomainSyncState`
 - `PluggyItem`, `PluggySyncRun`, `BinanceSyncRun`
+
+## Segurança & Vault
+
+A aplicação implementa uma camada de proteção local (`VaultProvider`) para garantir a privacidade dos dados em ambientes compartilhados.
+- **Master Password**: Senha mestre protegida por hash no banco de dados.
+- **VaultProvider**: Context Provider que envolve a aplicação e intercepta a renderização caso o cofre esteja bloqueado.
+- **Panic Mechanism**: Listener global para a tecla `Escape` que aciona o bloqueio imediato.
+- **Auto-Lock**: Timer de inatividade monitorado via eventos de mouse/teclado.
 
 ## Fluxo de Sync
 
@@ -98,9 +110,10 @@ Exigem header `X-INTERNAL-API-KEY`:
 ## Frontend
 
 - Next.js App Router com paginas client-side ("use client")
+- `VaultProvider` para controle de acesso e privacidade
 - `useApi` hook customizado para data fetching com loading/error/refetch
 - shadcn/ui para componentes base
-- Recharts para graficos (line, area, bar, pie, composed)
+- Recharts para graficos (line, area, bar, pie, composed, scatter)
 - d3-sankey para diagrama de fluxo financeiro
-- Tema light/dark com CSS variables (OKLch)
-- Sidebar responsiva com modo colapsado
+- Temas Premium: Cyberpunk e Emerald (OKLch CSS Variables)
+- Sidebar responsiva com logo premium em SVG

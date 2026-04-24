@@ -268,31 +268,37 @@ Monitoramento e controle dos provedores de dados.
 
 ---
 
-## 18. Conexoes
+## 19. Security Vault (Cofre de Seguran\u00e7a)
 
-Integracao com instituicoes financeiras via Pluggy Connect.
-
-**Widget Pluggy**: abre o fluxo de conexao com bancos brasileiros via Open Finance. Apos sucesso, salva o item conectado localmente.
-
-**Lista de Itens**: exibe contas bancarias conectadas com nome do conector, status (UPDATED, UPDATING, OUTDATED, LOGIN_ERROR) e botao de atualizar.
-
-**Polling**: verifica status dos itens a cada 10 segundos enquanto ha itens em processamento.
+Prote\u00e7\u00e3o da interface contra acesso n\u00e3o autorizado localmente.
+- **Lockscreen**: Bloqueio global da interface exigindo a senha mestre para desbloqueio.
+- **Panic Key**: Atalho instant\u00e2neo (tecla `ESC`) que trava o sistema e oculta dados imediatamente.
+- **Auto-Lock**: Bloqueio autom\u00e1tico por inatividade, configur\u00e1vel nas configura\u00e7\u00f5es.
+- **Persist\u00eancia**: A senha mestre \u00e9 armazenada de forma segura e criptografada no banco de dados.
 
 ---
 
-## Funcionalidades Transversais
+## 20. AI Insights & Forensics
 
-### Tema Light/Dark
-Suporte a tema claro, escuro e automatico (segue o sistema). Toggle no rodape da sidebar. Persistido em localStorage.
+An\u00e1lises inteligentes e detec\u00e7\u00e3o de anomalias estat\u00edsticas.
+- **Behavioral Nudges**: Alertas no Dashboard sobre ritmo de gastos e custo de oportunidade (ex: "Taxas banc\u00e1rias vs BTC").
+- **Lei de Benford**: Gr\u00e1fico de distribui\u00e7\u00e3o de d\u00edgitos para identificar anomalias ou manipula\u00e7\u00e3o de dados financeiros.
+- **Detector de Assinaturas**: Identifica servi\u00e7os recorrentes ocultos que possuem varia\u00e7\u00e3o de valor (ex: assinaturas com taxas vari\u00e1veis).
 
-### Sidebar Responsiva
-Navegacao lateral colapsavel com modo icone. Comportamento adaptativo: drawer no mobile, fixa no desktop. Atalho Ctrl/Cmd+B para toggle.
+---
 
-### Formatacao
-Todos os valores monetarios em BRL (R$) com formatacao pt-BR. Datas em formato brasileiro. Percentuais com uma casa decimal.
+## 21. Scenario Engine (Motor de Cen\u00e1rios)
 
-### Loading States
-Todas as paginas usam Skeleton durante o carregamento de dados. Feedback visual imediato antes dos dados chegarem.
+Simula\u00e7\u00e3o de impactos financeiros futuros e gest\u00e3o de d\u00edvidas informais.
+- **Proje\u00e7\u00f5es de Cen\u00e1rio**: Linha pontilhada no gr\u00e1fico de patrim\u00f4nio que simula eventos hipot\u00e9ticos (ex: "Se eu comprar um carro em Junho").
+- **Cofre de Amigos (Lends)**: Registro e controle de dinheiro emprestado ou a receber de terceiros.
+- **Integra\u00e7\u00e3o de Sal\u00e1rio**: Proje\u00e7\u00e3o de saldo considerando receitas fixas futuras configuradas pelo usu\u00e1rio.
 
-### Cross-page Navigation
-Transacoes podem ser filtradas a partir de outras paginas via URL params (ex: clicar em uma conta filtra transacoes daquela conta, clicar em uma categoria filtra por categoria).
+---
+
+## 22. Themes & Customization
+
+Personaliza\u00e7\u00e3o profunda da experi\u00eancia visual.
+- **Temas Premium**: Suporte a temas como Cyberpunk (Neon), Emerald (Verde Premium) e Dark Mode absoluto.
+- **Configura\u00e7\u00f5es Core**: Controle centralizado de sal\u00e1rio mensal, visibilidade de widgets e prefer\u00eancias de sincroniza\u00e7\u00e3o.
+- **Identidade Visual**: Logo premium din\u00e2mico em SVG e interface otimizada para legibilidade.
