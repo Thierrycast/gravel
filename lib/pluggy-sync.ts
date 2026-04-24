@@ -822,6 +822,14 @@ export async function syncPluggyData(options: SyncOptions = {}) {
   }
 }
 
+/**
+ * Triggers an incremental sync for a single Pluggy item.
+ * Used by the webhook handler to process per-item events.
+ */
+export async function syncPluggyItem(itemId: string) {
+  return syncPluggyData({ itemId })
+}
+
 export async function getPluggyPersistenceSummary() {
   const [
     items,
