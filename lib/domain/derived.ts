@@ -618,7 +618,12 @@ export async function refreshDerivedCaches() {
 export async function getDashboardRecurring() {
   const rules = await getRecurringPayload("EXPENSE")
   const categories = await prisma.domainCategory.findMany()
-  const categoryMap = new Map(categories.map((c) => [c.id, c.name]))
+  const merchantIds = rules.map((r) => r.merchantId).filter(Boolean) as string[]
+  const merchants = await prisma.domainMerchant.findMany({
+    where: { id: { in: merchantIds } },
+    select: { id: true, displayName: true },
+  })
+  const merchantMap = new Map(merchants.map((m) => [m.id, m.displayName]))
 
   const mapped = rules.map((r) => ({
     id: r.id,
@@ -634,6 +639,7 @@ export async function getDashboardRecurring() {
     confidence: r.confidence ?? 0,
     isManual: r.origin === "manual",
     origin: r.origin,
+    merchantName: r.merchantId ? merchantMap.get(r.merchantId) : null,
   }))
 
   const total = rules.reduce((sum, r) => sum + Math.abs(Number(r.amount)), 0)

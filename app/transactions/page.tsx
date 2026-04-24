@@ -581,11 +581,11 @@ function TransactionsContent() {
             <Table>
               <TableHeader>
                 <TableRow className="border-border">
-                  <TableHead className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase whitespace-nowrap">Data</TableHead>
-                  <TableHead className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">Descrição</TableHead>
-                  <TableHead className="hidden md:table-cell font-mono text-[10px] tracking-widest text-muted-foreground uppercase">Conta</TableHead>
-                  <TableHead className="hidden sm:table-cell font-mono text-[10px] tracking-widest text-muted-foreground uppercase">Categoria</TableHead>
-                  <TableHead className="text-right font-mono text-[10px] tracking-widest text-muted-foreground uppercase">Valor</TableHead>
+                  <TableHead className="font-mono text-xs tracking-widest text-muted-foreground uppercase whitespace-nowrap">Data</TableHead>
+                  <TableHead className="font-mono text-xs tracking-widest text-muted-foreground uppercase">Descrição</TableHead>
+                  <TableHead className="hidden md:table-cell font-mono text-xs tracking-widest text-muted-foreground uppercase">Conta</TableHead>
+                  <TableHead className="hidden sm:table-cell font-mono text-xs tracking-widest text-muted-foreground uppercase">Categoria</TableHead>
+                  <TableHead className="text-right font-mono text-xs tracking-widest text-muted-foreground uppercase">Valor</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -601,7 +601,7 @@ function TransactionsContent() {
                       className="cursor-pointer border-border hover:bg-muted/40"
                       onClick={() => openTransaction(transaction)}
                     >
-                      <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground py-2">
+                      <TableCell className="whitespace-nowrap font-mono text-sm text-muted-foreground py-2">
                         {formatDate(transaction.date)}
                       </TableCell>
                       <TableCell className="py-2">
@@ -623,7 +623,7 @@ function TransactionsContent() {
                                 const match = transaction.description?.match(/(\d+)\/(\d+)/)
                                 if (match) {
                                   return (
-                                    <Badge variant="outline" className="h-4 px-1 text-[9px] font-mono border-muted-foreground/30 text-muted-foreground">
+                                    <Badge variant="outline" className="h-4 px-1 text-xs font-mono border-muted-foreground/30 text-muted-foreground">
                                       {match[0]}
                                     </Badge>
                                   )
@@ -633,18 +633,31 @@ function TransactionsContent() {
                             </p>
                             {transaction.merchantName &&
                             transaction.merchantName !== transaction.description ? (
-                              <p className="truncate text-xs text-muted-foreground">
+                              <p className="truncate text-sm text-muted-foreground">
                                 {transaction.merchantName}
                               </p>
                             ) : null}
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="hidden md:table-cell text-xs text-muted-foreground font-mono py-2">
-                        {transaction.accountName || "—"}
+                      <TableCell className="hidden md:table-cell py-2">
+                        <div className="flex items-center gap-2">
+                          {transaction.accountImageUrl ? (
+                            <div className="shrink-0 size-6 rounded-md border border-border/40 bg-muted/30 p-0.5 flex items-center justify-center overflow-hidden">
+                              <img src={transaction.accountImageUrl} alt={transaction.accountName} className="size-full object-contain" />
+                            </div>
+                          ) : (
+                            <div className="shrink-0 size-6 rounded-md border border-border/40 bg-muted/50 flex items-center justify-center">
+                              <span className="text-[8px] font-mono text-muted-foreground uppercase">{transaction.accountName.slice(0, 2)}</span>
+                            </div>
+                          )}
+                          <span className="text-sm text-muted-foreground font-mono truncate max-w-[120px]">
+                            {transaction.accountName || "—"}
+                          </span>
+                        </div>
                       </TableCell>
                       <TableCell className="hidden sm:table-cell py-2">
-                        <Badge variant="outline" className="gap-1 font-mono text-[10px] border-border text-muted-foreground">
+                        <Badge variant="outline" className="gap-1 font-mono text-xs border-border text-muted-foreground">
                           <span aria-hidden>{getCategoryEmoji(transaction.categoryName)}</span>
                           <span className="max-w-[140px] truncate">
                             {transaction.categoryName}

@@ -1,5 +1,6 @@
 import { DomainTransaction, DomainTransactionDirection, Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { getCryptoLogo } from "@/lib/domain/utils"
 
 const ZERO = new Prisma.Decimal(0)
 const MAX_CAS_RETRIES = 5
@@ -116,6 +117,7 @@ async function tryApplyDelta(
           quantity: newQuantity,
           costBasis: newCostBasis,
           averagePrice: newAveragePrice,
+          imageUrl: getCryptoLogo(asset),
         },
       })
       return true
@@ -199,6 +201,7 @@ export async function rebuildAllCryptoPositions() {
           quantity: pos.quantity,
           costBasis: pos.costBasis,
           averagePrice: pos.averagePrice,
+          imageUrl: getCryptoLogo(asset),
         },
       }),
     ),

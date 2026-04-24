@@ -8,6 +8,7 @@ import { getDashboardRecurring } from "@/lib/domain/derived"
 import { ensurePrismaReady } from "@/lib/prisma"
 import { OverviewDashboard } from "./overview-dashboard"
 import { serializeDomain } from "@/lib/core/serialization"
+import { getMerchantLogo } from "@/lib/domain/utils"
 
 export default async function Page({
   searchParams,
@@ -56,7 +57,7 @@ export default async function Page({
       points: netWorth.points,
     },
     transactions: {
-      results: transactions.results.map((transaction) => ({
+      results: transactions.results.slice(0, 5).map((transaction) => ({
         ...transaction,
         category: transaction.categoryName,
       })),
@@ -69,6 +70,8 @@ export default async function Page({
         frequency: rule.frequency,
         category: rule.category,
         nextDate: rule.nextDate,
+        merchantName: rule.merchantName,
+        logoUrl: getMerchantLogo(rule.merchantName || rule.description),
       })),
       summary: {
         totalMonthly: recurring.summary.totalMonthly,

@@ -1,0 +1,51 @@
+import { prisma } from "@/lib/prisma"
+import { getOverviewMetrics } from "./analytics"
+import { getUsdBrlRate } from "@/lib/exchange-rate"
+
+export async function getBehavioralNudges() {
+  const [overview, usdBrl, transactions] = await Promise.all([
+    getOverviewMetrics(),
+    getUsdBrlRate(),
+    prisma.domainTransaction.findMany({
+      where: { direction: "OUTFLOW" },
+      orderBy: { occurredAt: "desc" },
+      take: 100
+    })
+  ])
+
+  const nudges = []
+
+  // 1. Budget Guardrail (75% check)
+  const currentOutflow = Number(overview.monthlyOutflow)
+  // Historical average (simple proxy: average of last 3 months if available)
+  const historicalAvg = 5000 // Placeholder, could be dynamic
+  
+  if (currentOutflow > historicalAvg * 0.75 && new Date().getDate() <= 15) {
+    nudges.push({
+      type: "WARNING",
+      title: "Se liga!",
+      message: `Você já queimou R$ ${currentOutflow.toFixed(2)} este mês. Isso é mais de 75% da sua média histórica e ainda estamos no dia ${new Date().getDate()}.`
+    })
+  }
+
+  // 2. Opportunity Cost (Tax to BTC)
+  // Find transactions with "Taxa" or "Tarifa"
+  const taxes = transactions.filter(t => 
+    t.description.toLowerCase().includes("taxa") || 
+    t.description.toLowerCase().includes("tarifa") ||
+    t.merchantName?.toLowerCase().includes("banco")
+  )
+  const totalTaxes = taxes.reduce((s, t) => s + Math.abs(Number(t.amount)), 0)
+  
+  if (totalTaxes > 10) {
+    const btcPrice = 500000 // Approximate BRL price for BTC
+    const btcAmount = totalTaxes / btcPrice
+    nudges.push({
+      type: "INSIGHT",
+      title: "Custo de Oportunidade",
+      message: `Suas taxas bancárias recentes somam R$ ${totalTaxes.toFixed(2)}. Com esse valor você poderia ter comprado ${btcAmount.toFixed(8)} BTC hoje.`
+    })
+  }
+
+  return nudges
+}

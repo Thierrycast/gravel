@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { getRecurringPayload, refreshRecurringDerived } from "@/lib/domain/derived"
 import { serializeForJson } from "@/lib/core/http"
 import { prisma } from "@/lib/prisma"
+import { getMerchantLogo } from "@/lib/domain/utils"
 
 export const dynamic = "force-dynamic"
 
@@ -16,22 +17,34 @@ export async function GET() {
   const categories = await prisma.domainCategory.findMany()
   const categoryMap = new Map(categories.map((c) => [c.id, c.name]))
 
+  const merchantIds = rules.map((r) => r.merchantId).filter(Boolean) as string[]
+  const merchants = await prisma.domainMerchant.findMany({
+    where: { id: { in: merchantIds } },
+    select: { id: true, displayName: true },
+  })
+  const merchantMap = new Map(merchants.map((m) => [m.id, m.displayName]))
+
   // Map to UI-expected field names
-  const mapped: import("@/lib/types/api").RecurringRule[] = rules.map((r) => ({
-    id: r.id,
-    description: r.title,
-    amount: Number(r.amount),
-    frequency: r.interval,
-    category: r.categoryId ? categoryMap.get(r.categoryId) ?? "Sem categoria" : "Sem categoria",
-    categoryId: r.categoryId,
-    nextDate: r.nextDate.toISOString(),
-    type: r.type,
-    occurrences: r.occurrences ?? 0,
-    lastDate: r.lastOccurrenceAt?.toISOString() ?? null,
-    confidence: r.confidence ?? 0,
-    isManual: r.origin === "manual",
-    origin: r.origin as "detected" | "manual",
-  }))
+  const mapped: import("@/lib/types/api").RecurringRule[] = rules.map((r) => {
+    const merchantName = r.merchantId ? merchantMap.get(r.merchantId) : null
+    return {
+      id: r.id,
+      description: r.title,
+      amount: Number(r.amount),
+      frequency: r.interval,
+      category: r.categoryId ? categoryMap.get(r.categoryId) ?? "Sem categoria" : "Sem categoria",
+      categoryId: r.categoryId,
+      nextDate: r.nextDate.toISOString(),
+      type: r.type,
+      occurrences: r.occurrences ?? 0,
+      lastDate: r.lastOccurrenceAt?.toISOString() ?? null,
+      confidence: r.confidence ?? 0,
+      isManual: r.origin === "manual",
+      origin: r.origin as "detected" | "manual",
+      merchantName: merchantName ?? null,
+      logoUrl: getMerchantLogo(merchantName || r.title),
+    }
+  })
 
   function normalizeMonthlyAmount(amount: number, interval: string): number {
     const value = Math.abs(amount)

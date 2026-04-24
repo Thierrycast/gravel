@@ -127,7 +127,7 @@ function StatCard({
 
   return (
     <div className="border border-border p-4 flex flex-col gap-1">
-      <p className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">{label}</p>
+      <p className="font-mono text-xs tracking-widest text-muted-foreground uppercase">{label}</p>
       <p className={`font-mono text-xl tabular-nums font-semibold ${toneClass}`}>{value}</p>
       {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
     </div>
@@ -280,10 +280,10 @@ export default function ReportsPage() {
         <Card className="lg:col-span-3 rounded-none border-border">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
+              <CardTitle className="font-mono text-xs tracking-widest text-muted-foreground uppercase">
                 Gastos por Categoria
               </CardTitle>
-              <Badge variant="outline" className="font-mono text-[10px]">
+              <Badge variant="outline" className="font-mono text-xs">
                 {sortedCategories.length} cats
               </Badge>
             </div>
@@ -355,7 +355,7 @@ export default function ReportsPage() {
                   </button>
                 ))}
                 {sortedCategories.length > 8 && (
-                  <p className="text-[10px] font-mono text-muted-foreground pl-4">
+                  <p className="text-xs font-mono text-muted-foreground pl-4">
                     +{sortedCategories.length - 8} outras categorias
                   </p>
                 )}
@@ -368,12 +368,12 @@ export default function ReportsPage() {
         <Card className="lg:col-span-2 rounded-none border-border">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
+              <CardTitle className="font-mono text-xs tracking-widest text-muted-foreground uppercase">
                 Resultado
               </CardTitle>
               <Link
                 href="/cash-flow"
-                className="font-mono text-[10px] text-primary hover:text-primary/80 inline-flex items-center gap-1"
+                className="font-mono text-xs text-primary hover:text-primary/80 inline-flex items-center gap-1"
               >
                 fluxo_caixa
                 <ExternalLink className="size-2.5" />
@@ -398,7 +398,7 @@ export default function ReportsPage() {
                     {netChange >= 0 ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
                     {netChange >= 0 ? "+" : ""}{formatPercent(Math.abs(netChange))}
                   </span>
-                  <span className="font-mono text-[10px] text-muted-foreground">vs período anterior</span>
+                  <span className="font-mono text-xs text-muted-foreground">vs período anterior</span>
                 </div>
               )}
             </div>
@@ -412,21 +412,21 @@ export default function ReportsPage() {
             {/* Breakdown */}
             <div className="grid grid-cols-2 gap-3">
               <div className="border border-border p-3">
-                <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Receita</p>
+                <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-1">Receita</p>
                 <p className="font-mono text-sm font-bold tabular-nums text-emerald-400">{format(monthlyIncome)}</p>
               </div>
               <div className="border border-border p-3">
-                <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Gasto</p>
+                <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-1">Gasto</p>
                 <p className="font-mono text-sm font-bold tabular-nums text-rose-500">{format(monthlyExpenses)}</p>
               </div>
               <div className="border border-border p-3">
-                <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Poupança</p>
+                <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-1">Poupança</p>
                 <p className={`font-mono text-sm font-bold tabular-nums ${savingsRate >= 0 ? "text-emerald-400" : "text-rose-500"}`}>
                   {savingsRate.toFixed(1)}%
                 </p>
               </div>
               <div className="border border-border p-3">
-                <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Média/dia</p>
+                <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-1">Média/dia</p>
                 <p className="font-mono text-sm font-bold tabular-nums">{format(dailyAvgSpend)}</p>
               </div>
             </div>
@@ -438,7 +438,7 @@ export default function ReportsPage() {
       <Card className="rounded-none border-border">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase flex items-center gap-2">
+            <CardTitle className="font-mono text-xs tracking-widest text-muted-foreground uppercase flex items-center gap-2">
               <BarChart3 className="size-3" />
               Fluxo de Caixa
             </CardTitle>
@@ -448,7 +448,7 @@ export default function ReportsPage() {
           </div>
         </CardHeader>
         <CardContent className="pt-0">
-          <p className="font-mono text-[10px] text-muted-foreground mb-3">
+          <p className="font-mono text-xs text-muted-foreground mb-3">
             Clique em uma categoria para ver as transações correspondentes
           </p>
           <SankeyChart

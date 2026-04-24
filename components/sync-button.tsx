@@ -160,7 +160,7 @@ export function SyncButton() {
   return (
     <div className="flex items-center gap-2">
       {lastSyncAt && (
-        <span className="hidden sm:block font-mono text-[10px] text-muted-foreground tracking-wider">
+        <span className="hidden sm:block font-mono text-xs text-muted-foreground tracking-wider">
           sync: {relativeTime}
         </span>
       )}

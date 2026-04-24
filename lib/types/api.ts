@@ -19,6 +19,7 @@ export interface Transaction {
   categoryId: string | null
   accountId: string | null
   accountName: string
+  accountImageUrl?: string | null
   merchantId: string | null
   merchantName: string | null
   currencyCode: string | null
@@ -63,6 +64,7 @@ export interface Account {
   institution: string
   number: string
   providerAccountId: string
+  imageUrl?: string | null
 }
 
 export interface AccountsResponse {
@@ -132,6 +134,8 @@ export interface RecurringRule {
   frequency: string
   category: string
   categoryId: string | null
+  logoUrl?: string | null
+  merchantName?: string | null
   nextDate: string
   type: string
   occurrences: number

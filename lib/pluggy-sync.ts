@@ -254,6 +254,7 @@ async function syncItem(itemId: string) {
     itemId,
     connectorId: item?.connector?.id,
     connectorName: item?.connector?.name,
+    imageUrl: item?.connector?.imageUrl,
     status: item?.status,
   })
 

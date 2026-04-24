@@ -208,7 +208,7 @@ export default function ProjectionPage() {
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-xl border bg-card p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-1">
             Receita M&eacute;dia Mensal
           </p>
           <p className="text-2xl font-bold tabular-nums text-emerald-400">
@@ -216,7 +216,7 @@ export default function ProjectionPage() {
           </p>
         </div>
         <div className="rounded-xl border bg-card p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-1">
             Despesa M&eacute;dia Mensal
           </p>
           <p className="text-2xl font-bold tabular-nums text-pink-400">
@@ -224,7 +224,7 @@ export default function ProjectionPage() {
           </p>
         </div>
         <div className="rounded-xl border bg-card p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-1">
             Economia Projetada
           </p>
           <p className="text-2xl font-bold tabular-nums text-blue-400">

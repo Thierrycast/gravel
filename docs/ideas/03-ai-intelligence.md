@@ -2,9 +2,7 @@
 
 Utilizar a infraestrutura de dados do Gravel para gerar insights automáticos.
 
-## 1. AI Analytics & Context
-- **Briefing Automático:** Gerar um resumo em texto sobre a saúde financeira do período usando o motor de `analytics.ts`.
-- **Interface para Prompt-Packs:** O Gravel já possui comandos CLI para extrair dados para IAs. Esta ideia propõe levar isso para a UI, permitindo "Conversar com seus Dados" (via OpenAI/Anthropic ou Ollama local).
+
 
 ## 3. Behavioral Nudges (O "Se liga!")
 Transformar dados frios em provocações comportamentais para o usuário.
