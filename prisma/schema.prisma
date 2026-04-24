@@ -127,9 +127,10 @@ model DomainTransaction {
   @@index([domainMerchantId, occurredAt])
   @@index([domainCategoryId, occurredAt])
   @@index([domainAccountId, occurredAt])
-  @@index([occurredAt, ignored, createdAt])
+  @@index([ignored, occurredAt, createdAt])
   @@index([direction, ignored, occurredAt, amount])
   @@index([direction, ignored, occurredAt, domainCategoryId, amount])
+  @@index([direction, ignored, domainCategoryId, occurredAt, amount])
   @@index([occurredAt])
 }
 
