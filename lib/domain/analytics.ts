@@ -185,7 +185,7 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
     period: "mtd",
   })
 
-  const [accounts, bills, investments, cryptoAssets, transactions, loans] =
+  const [accounts, bills, investments, cryptoAssets, loans] =
     await Promise.all([
       prisma.domainAccount.findMany({
         where: {
@@ -208,9 +208,6 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
           sourceProvider: filters.provider,
         },
       }),
-      prisma.domainTransaction.findMany({
-        where: buildTransactionWhere(filters),
-      }),
       prisma.pluggyLoanRecord.findMany({
         where: {
           ...(filters.provider && filters.provider !== SourceProvider.PLUGGY
@@ -222,6 +219,42 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
         },
       }),
     ])
+
+  const excludedCategoryNames = Array.from(EXCLUDED_SPENDING_CATEGORIES)
+  const excludedCategories = await prisma.domainCategory.findMany({
+
+    where: {
+      OR: [
+        { kind: "TRANSFER" },
+        { name: { in: excludedCategoryNames } }
+      ]
+    },
+    select: { id: true }
+  })
+  const excludedIds = excludedCategories.map(c => c.id)
+
+  const [inflowAgg, outflowAgg] = await Promise.all([
+    prisma.domainTransaction.aggregate({
+      where: {
+        ...buildTransactionWhere(filters),
+        direction: DomainTransactionDirection.INFLOW,
+        domainCategoryId: { notIn: excludedIds }
+      },
+      _sum: { amount: true },
+      _count: true
+    }),
+    prisma.domainTransaction.aggregate({
+      where: {
+        ...buildTransactionWhere(filters),
+        direction: DomainTransactionDirection.OUTFLOW,
+        domainCategoryId: { notIn: excludedIds }
+      },
+      _sum: { amount: true },
+      _count: true
+    })
+  ])
+
+
 
   // Split accounts by semantic role:
   // - BANK / CASH / OTHER: true liquid assets (positive = money you have)
@@ -270,25 +303,9 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
 
   const loanBalance = sumDecimals(loans.map((loan) => loan.contractAmount))
   const liabilitiesTotal = creditCardLiabilities.plus(otherBillsAmount).plus(loanBalance)
-  // Build category lookup to exclude transfers from income/expense totals
-  const allCategories = await prisma.domainCategory.findMany()
-  const overviewCatMap = new Map(allCategories.map((c) => [c.id, c]))
+  const inflow = decimal(inflowAgg._sum?.amount)
+  const outflow = decimal(outflowAgg._sum?.amount).abs()
 
-  const realTransactions = transactions.filter((tx) => {
-    const cat = tx.domainCategoryId ? overviewCatMap.get(tx.domainCategoryId) : null
-    return isRealSpending(cat?.name, cat?.kind)
-  })
-
-  const inflow = sumDecimals(
-    realTransactions
-      .filter((transaction) => transaction.direction === DomainTransactionDirection.INFLOW)
-      .map((transaction) => transaction.amount)
-  )
-  const outflow = sumDecimals(
-    realTransactions
-      .filter((transaction) => transaction.direction === DomainTransactionDirection.OUTFLOW)
-      .map((transaction) => transaction.amount.abs())
-  )
 
   // ── Fiat / crypto breakdown ─────────────────────────────────────────────
   // Fiat-only side: liquid bank/cash + traditional investments minus debts.
@@ -324,7 +341,8 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
     },
     counts: {
       accounts: accounts.length,
-      transactions: transactions.length,
+      transactions: (Number(inflowAgg._count) || 0) + (Number(outflowAgg._count) || 0),
+
       bills: bills.length,
       investments: investments.length,
       cryptoAssets: cryptoAssets.length,
@@ -593,52 +611,55 @@ export async function getSpendingByCategoryMetrics(searchParams: URLSearchParams
     period: "mtd",
     limit: 20,
   })
-  const transactions = await prisma.domainTransaction.findMany({
+  const excludedCategoryNames = Array.from(EXCLUDED_SPENDING_CATEGORIES)
+  const excludedCategories = await prisma.domainCategory.findMany({
+    where: {
+      OR: [
+        { kind: "TRANSFER" },
+        { name: { in: excludedCategoryNames } }
+      ]
+    },
+    select: { id: true }
+  })
+  const excludedIds = excludedCategories.map(c => c.id)
+
+  const grouped = await prisma.domainTransaction.groupBy({
+    by: ["domainCategoryId"],
     where: {
       ...buildTransactionWhere(filters),
       direction: DomainTransactionDirection.OUTFLOW,
+      domainCategoryId: { notIn: excludedIds }
     },
-    orderBy: [{ occurredAt: "desc" }],
+    _sum: { amount: true },
+    _count: true,
   })
 
-  const categories = await prisma.domainCategory.findMany()
-  const categoryMap = new Map(categories.map((category) => [category.id, category]))
-  const groups = new Map<
-    string,
-    {
-      categoryId: string | null
-      name: string
-      amount: Prisma.Decimal
-      count: number
-      averageAmount: Prisma.Decimal
-    }
-  >()
+  const categoryIds = grouped
+    .map((g) => g.domainCategoryId)
+    .filter((id): id is string => Boolean(id))
 
-  for (const transaction of transactions) {
-    const category = transaction.domainCategoryId
-      ? categoryMap.get(transaction.domainCategoryId)
-      : null
+  const categoryDetails = await prisma.domainCategory.findMany({
+    where: { id: { in: categoryIds } },
+  })
+  const categoryMap = new Map(categoryDetails.map((c) => [c.id, c]))
 
-    // Skip internal transfers and credit card payments
-    if (!isRealSpending(category?.name, category?.kind)) continue
+  const groups = grouped.map((group) => {
+    const category = group.domainCategoryId ? categoryMap.get(group.domainCategoryId) : null
+    const amount = decimal(group._sum?.amount).abs()
 
-    const key = transaction.domainCategoryId ?? "uncategorized"
-    const current = groups.get(key) ?? {
-      categoryId: transaction.domainCategoryId,
+    return {
+      categoryId: group.domainCategoryId,
       name: category?.name ?? "Sem categoria",
-      amount: ZERO,
-      count: 0,
-      averageAmount: ZERO,
+      amount,
+      count: Number(group._count) || 0,
+      averageAmount: group._count ? amount.div(Number(group._count)) : ZERO,
     }
+  })
 
-    current.amount = current.amount.plus(transaction.amount.abs())
-    current.count += 1
-    current.averageAmount = current.amount.div(current.count)
-    groups.set(key, current)
-  }
 
-  const total = sumDecimals(Array.from(groups.values()).map((group) => group.amount))
-  const results = Array.from(groups.values())
+  const total = sumDecimals(groups.map((group) => group.amount))
+  const results = groups
+
     .map((group) => ({
       ...group,
       sharePercent: percentOf(group.amount, total),
