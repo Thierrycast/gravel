@@ -138,8 +138,29 @@ Ativos crypto com PnL (formato simplificado).
 | Metodo | Rota | Descricao |
 |--------|------|-----------|
 | GET | `/api/sync/status` | Status consolidado dos providers |
-| GET | `/api/sync/trigger` | Retorna info da ultima execucao (`lastSyncAt`, `syncStatus`) — usado pelo botao de sync na UI |
+| GET | `/api/sync/trigger` | Retorna info da ultima execucao (`lastSyncAt`, `syncStatus`) \u2014 usado pelo botao de sync na UI |
 | POST | `/api/sync/trigger` | Dispara sync Pluggy fire-and-forget (UI de uso pessoal; sem API key) |
+
+### Configura\u00e7\u00f5es
+| Metodo | Rota | Descricao |
+|--------|------|-----------|
+| GET | `/api/settings` | Retorna as configura\u00e7\u00f5es do usu\u00e1rio (sal\u00e1rio, vault, etc.) |
+| POST | `/api/settings` | Atualiza as configura\u00e7\u00f5es |
+
+### Cen\u00e1rios & Empr\u00e9stimos
+| Metodo | Rota | Descricao |
+|--------|------|-----------|
+| GET | `/api/scenarios` | Lista eventos de cen\u00e1rio |
+| POST | `/api/scenarios` | Criar evento de cen\u00e1rio |
+| DELETE | `/api/scenarios` | Remover evento |
+| GET | `/api/lends` | Lista empr\u00e9stimos (Cofre de Amigos) |
+| POST | `/api/lends` | Criar empr\u00e9stimo |
+| PUT | `/api/lends` | Atualizar status do empr\u00e9stimo |
+
+### Insights de IA
+| Metodo | Rota | Descricao |
+|--------|------|-----------|
+| GET | `/api/insights` | Retorna nudges comportamentais, Lei de Benford e assinaturas ocultas |
 
 ---
 
