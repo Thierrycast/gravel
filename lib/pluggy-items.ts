@@ -4,6 +4,7 @@ type SavePluggyItemInput = {
   itemId: string
   connectorId?: number | null
   connectorName?: string | null
+  imageUrl?: string | null
   status?: string | null
 }
 
@@ -19,12 +20,14 @@ export async function savePluggyItem(input: SavePluggyItemInput) {
     update: {
       connectorId: input.connectorId ?? undefined,
       connectorName: input.connectorName ?? undefined,
+      imageUrl: input.imageUrl ?? undefined,
       status: input.status ?? undefined,
     },
     create: {
       pluggyItemId: input.itemId,
       connectorId: input.connectorId ?? undefined,
       connectorName: input.connectorName ?? undefined,
+      imageUrl: input.imageUrl ?? undefined,
       status: input.status ?? undefined,
     },
   })
@@ -40,6 +43,7 @@ export async function updateStoredPluggyItem(input: SavePluggyItemInput) {
     data: {
       connectorId: input.connectorId ?? undefined,
       connectorName: input.connectorName ?? undefined,
+      imageUrl: input.imageUrl ?? undefined,
       status: input.status ?? undefined,
     },
   })

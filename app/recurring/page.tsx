@@ -66,12 +66,18 @@ export default function RecurringPage() {
   })
 
   const fixedExpenses = useMemo(
-    () => data?.rules.filter((r) => r.type === "EXPENSE" && !r.isManual) ?? [],
+    () => data?.rules.filter((r) => 
+      r.type === "EXPENSE" && 
+      !/(\d+)\/(\d+)/.test(r.description)
+    ) ?? [],
     [data]
   )
 
   const installmentItems = useMemo(
-    () => data?.rules.filter((r) => r.type === "EXPENSE" && r.isManual) ?? [],
+    () => data?.rules.filter((r) => 
+      r.type === "EXPENSE" && 
+      /(\d+)\/(\d+)/.test(r.description)
+    ) ?? [],
     [data]
   )
 
@@ -131,7 +137,7 @@ export default function RecurringPage() {
       {/* Chart Card */}
       <div className="rounded-xl border bg-card p-6">
         <div className="flex items-center justify-between mb-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
             Este ano / {year}
           </p>
           <div className="flex items-center gap-4">
@@ -297,24 +303,35 @@ export default function RecurringPage() {
                   key={rule.id}
                   className="flex items-center justify-between rounded-lg border bg-card p-3 hover:bg-muted/30 transition-colors"
                 >
-                  <div className="flex flex-col gap-1.5 min-w-0 flex-1">
-                    <span className="text-sm font-medium truncate">
-                      {rule.description}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="text-[10px]">
-                        {rule.category}
-                      </Badge>
-                      <div className="flex items-center gap-1.5 flex-1">
-                        <div className="h-1.5 flex-1 max-w-24 rounded-full bg-muted/50 overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-amber-500"
-                            style={{ width: `${progressValue}%` }}
-                          />
-                        </div>
-                        <span className="text-[10px] text-muted-foreground">
-                          {current}/{total}
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    {rule.logoUrl ? (
+                      <div className="shrink-0 size-8 rounded-lg border border-border/40 bg-muted/30 p-1 flex items-center justify-center overflow-hidden">
+                        <img src={rule.logoUrl} alt={rule.description} className="size-full object-contain" />
+                      </div>
+                    ) : (
+                      <div className="shrink-0 size-8 rounded-lg border border-border/40 bg-muted/50 flex items-center justify-center">
+                        <span className="text-[10px] font-mono text-muted-foreground uppercase">{rule.description.slice(0, 2)}</span>
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <span className="text-sm font-medium truncate">
+                        {rule.description}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest px-1 border border-border/60 rounded-[2px]">
+                          {rule.category}
                         </span>
+                        <div className="flex items-center gap-1.5 flex-1">
+                          <div className="h-1.5 flex-1 max-w-24 rounded-full bg-muted/50 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-amber-500"
+                              style={{ width: `${progressValue}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] font-mono text-muted-foreground">
+                            {current}/{total}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -345,17 +362,28 @@ export default function RecurringPage() {
                 key={rule.id}
                 className="flex items-center justify-between rounded-lg border bg-card p-3 hover:bg-muted/30 transition-colors"
               >
-                <div className="flex flex-col gap-1 min-w-0 flex-1">
-                  <span className="text-sm font-medium truncate">
-                    {rule.description}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="text-[10px]">
-                      {rule.category}
-                    </Badge>
-                    <Badge variant="outline" className="text-[10px]">
-                      {frequencyLabel[rule.frequency] ?? rule.frequency}
-                    </Badge>
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  {rule.logoUrl ? (
+                    <div className="shrink-0 size-8 rounded-lg border border-border/40 bg-muted/30 p-1 flex items-center justify-center overflow-hidden">
+                      <img src={rule.logoUrl} alt={rule.description} className="size-full object-contain" />
+                    </div>
+                  ) : (
+                    <div className="shrink-0 size-8 rounded-lg border border-border/40 bg-muted/50 flex items-center justify-center">
+                      <span className="text-[10px] font-mono text-muted-foreground uppercase">{rule.description.slice(0, 2)}</span>
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <span className="text-sm font-medium truncate">
+                      {rule.description}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest px-1 border border-border/60 rounded-[2px]">
+                        {rule.category}
+                      </span>
+                      <span className="text-[10px] font-mono text-muted-foreground uppercase">
+                        {frequencyLabel[rule.frequency] ?? rule.frequency}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <span className="text-sm font-semibold tabular-nums text-pink-400 ml-3">

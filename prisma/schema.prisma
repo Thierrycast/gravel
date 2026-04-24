@@ -74,6 +74,7 @@ model DomainAccount {
   sourceParentId   String?
   ownerName        String?
   institutionName  String?
+  imageUrl         String?
   metadataJson     String?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
@@ -253,9 +254,53 @@ model DomainRecurringRule {
   amount             Decimal?
   interval           String?
   active             Boolean  @default(true)
+  imageUrl           String?
   metadataJson       String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+}
+
+model UserSetting {
+  id                  String   @id @default("default")
+  monthlySalary       Decimal  @default(0)
+  showFutureSalary    Boolean  @default(false)
+  showFutureAccounts  Boolean  @default(true)
+  syncIntervalHours   Int      @default(6)
+  syncLookbackDays    Int      @default(30)
+  dashboardConfigJson String?
+  vaultEnabled        Boolean  @default(false)
+  vaultMasterPassword String?
+  vaultInactivityMin  Int      @default(0)
+  updatedAt           DateTime @updatedAt
+  createdAt           DateTime @default(now())
+}
+
+model DomainLend {
+  id               String   @id @default(cuid())
+  friendName       String
+  friendPhone      String?
+  amount           Decimal
+  description      String?
+  dueDate          DateTime
+  status           String   @default("PENDING") // PENDING, PAID
+  categoryId       String?
+  domainBillId     String?
+  domainTransactionId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model DomainScenarioEvent {
+  id          String   @id @default(cuid())
+  title       String
+  amount      Decimal
+  date        DateTime
+  isRecurring Boolean  @default(false)
+  frequency   String?  // MONTHLY, etc.
+  categoryId  String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model DomainSyncState {
@@ -323,6 +368,7 @@ model DomainCryptoPosition {
   costBasis     Decimal
   averagePrice  Decimal
   pnlUnrealized Decimal?
+  imageUrl      String?
   lastUpdatedAt DateTime @updatedAt
   createdAt     DateTime @default(now())
 }
@@ -404,6 +450,7 @@ model PluggyItem {
   pluggyItemId  String   @unique
   connectorId   Int?
   connectorName String?
+  imageUrl      String?
   status        String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

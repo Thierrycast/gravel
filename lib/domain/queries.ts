@@ -331,7 +331,7 @@ export async function getDashboardTransactions(searchParams: URLSearchParams) {
     }),
     prisma.domainAccount.findMany({
       where: accountIds.length > 0 ? { id: { in: accountIds } } : { id: "__none__" },
-      select: { id: true, name: true },
+      select: { id: true, name: true, imageUrl: true },
     }),
     prisma.domainMerchant.findMany({
       where: merchantIds.length > 0 ? { id: { in: merchantIds } } : { id: "__none__" },
@@ -340,29 +340,34 @@ export async function getDashboardTransactions(searchParams: URLSearchParams) {
   ])
 
   const categoryMap = new Map(categories.map((c) => [c.id, c.name]))
-  const accountMap = new Map(accounts.map((a) => [a.id, a.name]))
+  const accountMap = new Map(accounts.map((a) => [a.id, { name: a.name, imageUrl: a.imageUrl }]))
   const merchantMap = new Map(merchants.map((m) => [m.id, m.displayName]))
 
-  const mapped = payload.results.map((tx) => ({
-    id: tx.id,
-    description: tx.description ?? "Sem descrição",
-    amount: tx.amount,
-    date: tx.occurredAt,
-    direction: tx.direction,
-    categoryName: tx.domainCategoryId
-      ? categoryMap.get(tx.domainCategoryId) ?? "Sem categoria"
-      : "Sem categoria",
-    categoryId: tx.domainCategoryId,
-    accountId: tx.domainAccountId,
-    accountName: tx.domainAccountId ? accountMap.get(tx.domainAccountId) ?? "" : "",
-    merchantId: tx.domainMerchantId,
-    merchantName:
-      tx.domainMerchantId
-        ? merchantMap.get(tx.domainMerchantId) ?? tx.merchantName ?? null
-        : tx.merchantName ?? null,
-    currencyCode: tx.currencyCode,
-    ignored: tx.ignored,
-  }))
+  const mapped = payload.results.map((tx) => {
+    const accountInfo = tx.domainAccountId ? accountMap.get(tx.domainAccountId) : null
+    
+    return {
+      id: tx.id,
+      description: tx.description ?? "Sem descrição",
+      amount: tx.amount,
+      date: tx.occurredAt,
+      direction: tx.direction,
+      categoryName: tx.domainCategoryId
+        ? categoryMap.get(tx.domainCategoryId) ?? "Sem categoria"
+        : "Sem categoria",
+      categoryId: tx.domainCategoryId,
+      accountId: tx.domainAccountId,
+      accountName: accountInfo?.name ?? "",
+      accountImageUrl: accountInfo?.imageUrl ?? null,
+      merchantId: tx.domainMerchantId,
+      merchantName:
+        tx.domainMerchantId
+          ? merchantMap.get(tx.domainMerchantId) ?? tx.merchantName ?? null
+          : tx.merchantName ?? null,
+      currencyCode: tx.currencyCode,
+      ignored: tx.ignored,
+    }
+  })
 
   return {
     summary: {
@@ -374,5 +379,21 @@ export async function getDashboardTransactions(searchParams: URLSearchParams) {
       pageSize: payload.pageSize,
       totalPages: Math.max(1, Math.ceil(payload.total / payload.pageSize)),
     },
+  }
+}
+
+export async function getUserSettings() {
+  const setting = await prisma.userSetting.findFirst()
+  if (!setting) {
+    return {
+      monthlySalary: 0,
+      showFutureSalary: true,
+      showFutureAccounts: true,
+    }
+  }
+  return {
+    monthlySalary: Number(setting.monthlySalary),
+    showFutureSalary: setting.showFutureSalary,
+    showFutureAccounts: setting.showFutureAccounts,
   }
 }

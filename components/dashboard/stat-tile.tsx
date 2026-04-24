@@ -46,11 +46,11 @@ export function StatTile({
       {loading ? (
         <Skeleton className="h-7 w-28" />
       ) : (
-        <p className={cn("text-[22px] font-semibold tabular-nums tracking-tight", toneClass)}>
+        <p className={cn("text-2xl font-bold tabular-nums tracking-tighter", toneClass)}>
           {value}
         </p>
       )}
-      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
         {hint ? <span className="truncate">{hint}</span> : <span />}
         {delta}
       </div>

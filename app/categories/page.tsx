@@ -744,7 +744,7 @@ function CategoriesPageContent() {
               <Card>
                 <CardContent className="flex flex-col items-center gap-5 p-5 sm:flex-row sm:justify-between">
                   <div className="flex flex-col items-center gap-1 sm:items-start">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                    <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
                       Gasto {period.period === "mtd" ? "neste mês" : period.period === "ytd" ? "neste ano" : `em ${period.label.toLowerCase()}`}
                     </p>
                     <p className="text-4xl font-bold tabular-nums tracking-tight">
@@ -807,7 +807,7 @@ function CategoriesPageContent() {
               ) : (
                 <div className="rounded-xl border bg-card">
                   {/* Table header */}
-                  <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2 sm:gap-4 border-b px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground sm:grid-cols-[1fr_120px_80px_100px]">
+                  <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2 sm:gap-4 border-b px-4 py-3 text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground sm:grid-cols-[1fr_120px_80px_100px]">
                     <span>Categoria</span>
                     <span className="hidden text-right sm:block">Saldo</span>
                     <span className="text-right">%</span>

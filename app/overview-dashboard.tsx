@@ -6,16 +6,25 @@ import {
   ArrowDownLeft, 
   Wallet, 
   TrendingUp, 
+  Brain,
+  Lightbulb,
+  AlertTriangle
 } from "lucide-react"
 
 import dynamic from "next/dynamic"
 import { StatTile } from "@/components/dashboard/stat-tile"
 import { ChartSkeleton } from "@/components/dashboard/skeleton-chart"
 import { RecentTransactions } from "@/components/dashboard/recent-transactions"
-import { UpcomingExpenses } from "@/components/dashboard/upcoming-expenses"
-import { usePeriod } from "@/hooks/use-period"
-import { useCurrency } from "@/lib/currency-context"
 import { PeriodSwitcher } from "@/components/period-switcher"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+import { useRouter, useSearchParams } from "next/navigation"
+import { useEffect, useState } from "react"
+import { useApi } from "@/hooks/use-api"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { useCurrency } from "@/lib/currency-context"
+import { usePeriod } from "@/hooks/use-period"
+import { UpcomingExpenses } from "@/components/dashboard/upcoming-expenses"
 
 const NetWorthChart = dynamic(
   () => import("@/components/dashboard/net-worth-chart").then(mod => mod.NetWorthChart),
@@ -47,6 +56,7 @@ type OverviewDashboardData = {
     points: Array<{
       date: string
       netWorth: number
+      scenarioNetWorth?: number
       assets?: number | null
       liabilities?: number | null
     }>
@@ -82,15 +92,42 @@ type OverviewDashboardData = {
 interface OverviewDashboardProps {
   initialData: OverviewDashboardData
 }
-
 export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
   const periodState = usePeriod()
   const { format } = useCurrency()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { data: insights } = useApi<any>("/api/insights")
+  
+  const [showSalary, setShowSalary] = useState(searchParams.get("showFutureSalary") !== "false")
+  const [showFuture, setShowFuture] = useState(searchParams.get("showFutureAccounts") !== "false")
+
+  const updateParam = (key: string, value: boolean) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set(key, String(value))
+    router.push(`?${params.toString()}`, { scroll: false })
+  }
 
   const { overview, categories, netWorth, transactions, recurring } = initialData
 
   return (
     <div className="flex flex-col gap-8 pb-12">
+      
+      {/* AI Nudges */}
+      {insights?.nudges?.length > 0 && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {insights.nudges.map((nudge: any, i: number) => (
+            <Alert key={i} className="bg-primary/5 border-primary/20 animate-in fade-in slide-in-from-top-4 duration-500">
+               {nudge.type === "WARNING" ? <AlertTriangle className="size-4 text-red-500" /> : <Lightbulb className="size-4 text-amber-500" />}
+               <AlertTitle className="text-xs font-bold uppercase tracking-wider">{nudge.title}</AlertTitle>
+               <AlertDescription className="text-xs text-muted-foreground">
+                 {nudge.message}
+               </AlertDescription>
+            </Alert>
+          ))}
+        </div>
+      )}
+
       {/* Header & Period Switcher */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
@@ -100,7 +137,31 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-6">
+          <div className="flex items-center gap-4 border-r pr-6 border-border/60">
+             <div className="flex items-center space-x-2">
+                <Switch 
+                  id="show-salary" 
+                  checked={showSalary} 
+                  onCheckedChange={(val) => {
+                    setShowSalary(val)
+                    updateParam("showFutureSalary", val)
+                  }}
+                />
+                <Label htmlFor="show-salary" className="text-xs font-medium cursor-pointer">Salários</Label>
+             </div>
+             <div className="flex items-center space-x-2">
+                <Switch 
+                  id="show-future" 
+                  checked={showFuture} 
+                  onCheckedChange={(val) => {
+                    setShowFuture(val)
+                    updateParam("showFutureAccounts", val)
+                  }}
+                />
+                <Label htmlFor="show-future" className="text-xs font-medium cursor-pointer">Parcelas</Label>
+             </div>
+          </div>
           <PeriodSwitcher state={periodState} />
         </div>
       </div>
@@ -172,11 +233,11 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
       </div>
 
       {/* Transactions & Bills */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+      <div className="grid gap-6 lg:grid-cols-3 items-stretch">
+        <div className="lg:col-span-2 flex flex-col h-full">
           <RecentTransactions transactions={transactions.results} loading={false} />
         </div>
-        <div>
+        <div className="flex flex-col h-full">
           <UpcomingExpenses rules={recurring.rules} totalMonthly={recurring.summary.totalMonthly} loading={false} />
         </div>
       </div>

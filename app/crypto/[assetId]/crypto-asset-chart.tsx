@@ -48,7 +48,7 @@ export function CryptoAssetChart({ data }: { data: { date: string; price: number
               if (active && payload && payload.length) {
                 return (
                   <div className="rounded-lg border bg-background p-2 shadow-sm">
-                    <div className="text-[10px] uppercase text-muted-foreground mb-1">
+                    <div className="text-xs uppercase text-muted-foreground mb-1">
                       {label}
                     </div>
                     <div className="font-mono text-sm font-medium">

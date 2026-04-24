@@ -17,6 +17,7 @@ interface Transaction {
   category: string
   categoryId?: string | null
   accountName: string
+  accountImageUrl?: string | null
   merchantName?: string | null
 }
 
@@ -41,7 +42,7 @@ export function RecentTransactions({ transactions, loading }: RecentTransactions
   }, [transactions])
 
   return (
-    <Card className="col-span-full lg:col-span-2 rounded-none border-border">
+    <Card className="col-span-full lg:col-span-2 rounded-none border-border h-full flex flex-col">
       <CardHeader className="pb-3">
         <CardTitle className="text-xs font-mono tracking-widest uppercase text-muted-foreground">Transações Recentes</CardTitle>
         <CardAction>
@@ -54,7 +55,7 @@ export function RecentTransactions({ transactions, loading }: RecentTransactions
           </Link>
         </CardAction>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1">
         {loading ? (
           <div className="space-y-3">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -71,7 +72,7 @@ export function RecentTransactions({ transactions, loading }: RecentTransactions
           <div className="space-y-4">
             {grouped.map(([dateKey, txs]) => (
               <div key={dateKey}>
-                <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-2">
+                <p className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-2">
                   {dateKey === "sem-data" ? "SEM_DATA" : formatDate(dateKey)}
                 </p>
                 <div className="space-y-1.5">
@@ -90,13 +91,24 @@ export function RecentTransactions({ transactions, loading }: RecentTransactions
                         >
                           {tx.direction === "INFLOW" || Number(tx.amount) > 0 ? "+" : "−"}
                         </span>
-                        <div className="min-w-0">
-                          <p className="text-sm truncate">
-                            {tx.merchantName || tx.description}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground font-mono truncate">
-                            {tx.accountName}
-                          </p>
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {tx.accountImageUrl ? (
+                            <div className="shrink-0 size-8 rounded-lg border border-border/40 bg-muted/30 p-1 flex items-center justify-center overflow-hidden">
+                              <img src={tx.accountImageUrl} alt={tx.accountName} className="size-full object-contain" />
+                            </div>
+                          ) : (
+                            <div className="shrink-0 size-8 rounded-lg border border-border/40 bg-muted/50 flex items-center justify-center">
+                              <span className="text-[10px] font-mono text-muted-foreground uppercase">{tx.accountName.slice(0, 2)}</span>
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate leading-tight">
+                              {tx.merchantName || tx.description}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground font-mono truncate uppercase tracking-tighter mt-0.5">
+                              {tx.accountName}
+                            </p>
+                          </div>
                         </div>
                       </div>
                       <span

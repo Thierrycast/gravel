@@ -42,7 +42,7 @@ export function SyncStatus() {
 
   return (
     <div className={cn(
-      "flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-mono uppercase tracking-wider border transition-all",
+      "flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono uppercase tracking-wider border transition-all",
       isAnyRunning ? "bg-amber-500/10 border-amber-500/20 text-amber-500" :
       isAnyError ? "bg-rose-500/10 border-rose-500/20 text-rose-500" :
       "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"

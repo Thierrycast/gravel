@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { PageError } from "@/components/page-error"
 import {
   Sheet,
@@ -208,6 +208,7 @@ export default function AccountsPage() {
                       <CardHeader>
                         <div className="flex items-center gap-3">
                           <Avatar>
+                            <AvatarImage src={account.imageUrl || undefined} />
                             <AvatarFallback>
                               {getInitials(account.institution || account.name)}
                             </AvatarFallback>
@@ -288,6 +289,7 @@ export default function AccountsPage() {
                     <CardHeader>
                       <div className="flex items-center gap-3">
                         <Avatar>
+                          <AvatarImage src={account.imageUrl || undefined} />
                           <AvatarFallback>
                             {getInitials(account.institution || account.name)}
                           </AvatarFallback>
@@ -364,6 +366,7 @@ export default function AccountsPage() {
             <div className="flex flex-col gap-4 px-4 pb-4">
               <div className="flex items-center gap-3">
                 <Avatar size="lg">
+                  <AvatarImage src={selectedAccount.imageUrl || undefined} />
                   <AvatarFallback>
                     {getInitials(
                       selectedAccount.institution || selectedAccount.name

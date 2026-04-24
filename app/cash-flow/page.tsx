@@ -222,7 +222,7 @@ export default function CashFlowPage() {
       {/* Hero: Resultado Liquido */}
       <div className="rounded-xl border bg-card p-6">
         <div className="flex items-center gap-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
             Resultado Liquido
           </p>
           <Tooltip>
@@ -248,7 +248,7 @@ export default function CashFlowPage() {
         {/* Summary row */}
         <div className="mt-4 flex flex-wrap gap-4 sm:gap-6 border-t border-border/50 pt-4">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
               Receitas
             </p>
             <p className="mt-0.5 text-sm font-semibold tabular-nums text-emerald-400">
@@ -256,7 +256,7 @@ export default function CashFlowPage() {
             </p>
           </div>
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
               Despesas
             </p>
             <p className="mt-0.5 text-sm font-semibold tabular-nums text-pink-400">
@@ -264,7 +264,7 @@ export default function CashFlowPage() {
             </p>
           </div>
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
               Medio Mensal
             </p>
             <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">
@@ -285,7 +285,7 @@ export default function CashFlowPage() {
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
                   Receitas
                 </p>
                 <Tooltip>
@@ -357,7 +357,7 @@ export default function CashFlowPage() {
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
                   Despesas
                 </p>
                 <Tooltip>
@@ -424,7 +424,7 @@ export default function CashFlowPage() {
       <Card className="rounded-xl border bg-card">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
               Resultado Mensal
             </p>
             <ChangeBadge value={overview?.summary?.netChange} />
@@ -496,13 +496,13 @@ export default function CashFlowPage() {
       {chartData.length > 0 && (
         <div className="rounded-xl border bg-card">
           <div className="px-6 pt-5 pb-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
               Detalhamento Mensal
             </p>
           </div>
           <div className="px-2 pb-2">
             {/* Table header */}
-            <div className="grid grid-cols-4 gap-4 px-4 pb-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+            <div className="grid grid-cols-4 gap-4 px-4 pb-2 text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
               <span>Mes</span>
               <span className="text-right">Receitas</span>
               <span className="text-right">Despesas</span>

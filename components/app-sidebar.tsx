@@ -18,6 +18,9 @@ import {
   Landmark,
   ArrowUpRight,
   Activity,
+  Settings2,
+  Sparkles,
+  Brain,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -106,9 +109,19 @@ const investmentNavItems = [
 
 const planningNavItems = [
   {
+    title: "Insights AI",
+    href: "/insights",
+    icon: Brain,
+  },
+  {
     title: "Proje\u00e7\u00f5es",
     href: "/projection",
     icon: Activity,
+  },
+  {
+    title: "Cen\u00e1rios",
+    href: "/scenarios",
+    icon: Sparkles,
   },
   {
     title: "Metas",
@@ -119,6 +132,11 @@ const planningNavItems = [
     title: "Relat\u00f3rios",
     href: "/reports",
     icon: FileText,
+  },
+  {
+    title: "Configura\u00e7\u00f5es",
+    href: "/settings",
+    icon: Settings2,
   },
   {
     title: "Conex\u00f5es",
@@ -137,12 +155,26 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/">
-                <div className="flex aspect-square size-8 shrink-0 items-center justify-center border border-primary/40 bg-background text-primary">
-                  <span className="text-[10px] font-bold tracking-widest font-mono">GRV</span>
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-lg shadow-primary/20 group-data-[collapsible=icon]:size-8">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="size-5"
+                  >
+                    <path d="M2 20c1-2 3-3 5-3s4 1 5 3" />
+                    <path d="M7 17c1-3 4-5 8-5s7 2 8 5" />
+                    <path d="M12 12c1-4 5-7 10-7" />
+                    <circle cx="5" cy="5" r="1" fill="currentColor" />
+                    <circle cx="10" cy="8" r="1" fill="currentColor" />
+                  </svg>
                 </div>
-                <div className="grid flex-1 text-left leading-tight">
-                  <span className="truncate text-sm font-bold tracking-widest font-mono text-foreground">GRAVEL</span>
-                  <span className="truncate text-[10px] tracking-widest text-muted-foreground font-mono">FINANCE_v1</span>
+                <div className="flex flex-col gap-0.5 leading-none">
+                  <span className="font-black text-lg tracking-tighter uppercase italic">Gravel</span>
+                  <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest">Finance OS</span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -225,7 +257,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
-        <div className="px-3 py-2 text-[10px] font-mono text-muted-foreground tracking-wider border-t border-border">
+        <div className="px-3 py-2 text-xs font-mono text-muted-foreground tracking-wider border-t border-border">
           SYS::OK
         </div>
       </SidebarFooter>

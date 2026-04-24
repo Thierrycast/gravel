@@ -39,7 +39,7 @@ export function BottomNav() {
             key={href}
             href={href}
             className={cn(
-              "flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-mono tracking-widest transition-colors",
+              "flex flex-1 flex-col items-center justify-center gap-0.5 text-xs font-mono tracking-widest transition-colors",
               isActive
                 ? "text-primary"
                 : "text-muted-foreground hover:text-foreground"
@@ -52,7 +52,7 @@ export function BottomNav() {
       })}
       <button
         onClick={toggleSidebar}
-        className="flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-mono tracking-widest text-muted-foreground transition-colors hover:text-foreground"
+        className="flex flex-1 flex-col items-center justify-center gap-0.5 text-xs font-mono tracking-widest text-muted-foreground transition-colors hover:text-foreground"
       >
         <MoreHorizontal className="size-5" />
         <span>Menu</span>

@@ -208,7 +208,7 @@ export default function BillsPage() {
     <div className="flex flex-col gap-6 p-4 sm:p-6 lg:p-10 max-w-5xl mx-auto w-full">
       {/* Period Navigation */}
       <div className="flex items-center justify-between">
-        <h1 className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+        <h1 className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
           Faturas
         </h1>
         <div className="flex items-center gap-1">
@@ -216,7 +216,7 @@ export default function BillsPage() {
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 px-2.5 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
+              className="h-7 px-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
               onClick={handleGoToToday}
             >
               Hoje
@@ -257,7 +257,7 @@ export default function BillsPage() {
         </div>
       ) : summary ? (
         <div className="rounded-xl border bg-card p-6 space-y-5">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
             Total das Faturas
           </p>
           <p className="text-4xl font-bold tabular-nums tracking-tight text-pink-400">
@@ -267,7 +267,7 @@ export default function BillsPage() {
           {/* Breakdown by status */}
           <div className="flex flex-wrap gap-6">
             <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
                 Abertas
               </p>
               <p className="text-sm font-semibold tabular-nums">
@@ -275,7 +275,7 @@ export default function BillsPage() {
               </p>
             </div>
             <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-red-400">
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-red-400">
                 Vencidas
               </p>
               <p className="text-sm font-semibold tabular-nums text-red-400">
@@ -283,7 +283,7 @@ export default function BillsPage() {
               </p>
             </div>
             <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-emerald-400">
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-emerald-400">
                 Pagas
               </p>
               <p className="text-sm font-semibold tabular-nums text-emerald-400">
@@ -319,7 +319,7 @@ export default function BillsPage() {
           </div>
 
           {/* Legend */}
-          <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <span className="inline-block size-2 rounded-full bg-zinc-400" />
               Abertas
@@ -340,7 +340,7 @@ export default function BillsPage() {
       {!loading && summary && (
         <div className="grid grid-cols-3 gap-3">
           <div className="rounded-xl border bg-card p-4 space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
               Abertas
             </p>
             <p className="text-lg font-bold tabular-nums">
@@ -351,7 +351,7 @@ export default function BillsPage() {
             </p>
           </div>
           <div className="rounded-xl border bg-card p-4 space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-red-400">
+            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-red-400">
               Vencidas
             </p>
             <p className="text-lg font-bold tabular-nums text-red-400">
@@ -362,7 +362,7 @@ export default function BillsPage() {
             </p>
           </div>
           <div className="rounded-xl border bg-card p-4 space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-emerald-400">
+            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-emerald-400">
               Pagas
             </p>
             <p className="text-lg font-bold tabular-nums text-emerald-400">
@@ -377,7 +377,7 @@ export default function BillsPage() {
 
       {/* Bills list */}
       <div className="space-y-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+        <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
           Faturas do Periodo
         </p>
 
@@ -423,7 +423,7 @@ export default function BillsPage() {
                         <Badge
                           variant="outline"
                           className={cn(
-                            "shrink-0 rounded-full border px-2 py-0 text-[10px] font-semibold uppercase tracking-wider",
+                            "shrink-0 rounded-full border px-2 py-0 text-xs font-semibold uppercase tracking-wider",
                             statusConfig.className
                           )}
                         >
@@ -431,7 +431,7 @@ export default function BillsPage() {
                           {statusConfig.label}
                         </Badge>
                       </div>
-                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Calendar className="size-3" />
                           Vence {formatDate(bill.dueDate)}
@@ -458,7 +458,7 @@ export default function BillsPage() {
                       <p className="text-base font-bold tabular-nums text-pink-400">
                         {format(bill.totalAmount)}
                       </p>
-                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <span className="tabular-nums">
                           Min: {format(bill.minimumPayment)}
                         </span>
@@ -498,7 +498,7 @@ export default function BillsPage() {
       {/* Upcoming Bills */}
       {!loading && summary?.upcoming && summary.upcoming.length > 0 && (
         <div className="space-y-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
             Proximos Vencimentos
           </p>
           <div className="rounded-xl border bg-card divide-y">
@@ -509,14 +509,14 @@ export default function BillsPage() {
                   key={bill.id}
                   className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-accent/50"
                 >
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
                     {getInitials(bill.accountName)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold truncate">
                       {bill.accountName}
                     </p>
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {formatDate(bill.dueDate)}
                     </p>
                   </div>
@@ -526,7 +526,7 @@ export default function BillsPage() {
                     </p>
                     <p
                       className={cn(
-                        "text-[10px] font-semibold uppercase tracking-wider",
+                        "text-xs font-semibold uppercase tracking-wider",
                         statusConfig.className.split(" ")[1]
                       )}
                     >

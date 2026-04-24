@@ -114,15 +114,14 @@ export function SankeyChart({
       if (c.total <= 0) return
       linkList.push({ source: 1, target: i + 2, value: c.total, color: c.color })
     })
-
     return { nodes: nodeList, links: linkList }
   }, [data])
 
   const margin = useMemo(
     () =>
       width < 640
-        ? { top: 16, right: 50, bottom: 16, left: 50 }
-        : { top: 16, right: 160, bottom: 16, left: 160 },
+        ? { top: 20, right: 80, bottom: 20, left: 80 }
+        : { top: 20, right: 200, bottom: 20, left: 200 },
     [width]
   )
 
@@ -196,7 +195,7 @@ export function SankeyChart({
       <div className="hidden sm:flex flex-wrap items-center justify-between gap-4 px-2">
         <div className="flex flex-wrap items-center gap-6">
           <div className="flex items-center gap-3">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Altura</span>
+            <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Altura</span>
             <div className="w-24">
               <Slider
                 value={[userHeight]}
@@ -206,11 +205,11 @@ export function SankeyChart({
                 onValueChange={(val: number[]) => setUserHeight(val[0])}
               />
             </div>
-            <span className="font-mono text-[10px] text-muted-foreground min-w-[32px]">{userHeight}px</span>
+            <span className="font-mono text-xs text-muted-foreground min-w-[32px]">{userHeight}px</span>
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Espaçamento</span>
+            <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Espaçamento</span>
             <div className="w-24">
               <Slider
                 value={[nodePadding]}
@@ -220,11 +219,11 @@ export function SankeyChart({
                 onValueChange={(val: number[]) => setNodePadding(val[0])}
               />
             </div>
-            <span className="font-mono text-[10px] text-muted-foreground min-w-[32px]">{nodePadding}</span>
+            <span className="font-mono text-xs text-muted-foreground min-w-[32px]">{nodePadding}</span>
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Largura</span>
+            <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Largura</span>
             <div className="w-24">
               <Slider
                 value={[nodeWidth]}
@@ -234,11 +233,11 @@ export function SankeyChart({
                 onValueChange={(val: number[]) => setNodeWidth(val[0])}
               />
             </div>
-            <span className="font-mono text-[10px] text-muted-foreground min-w-[32px]">{nodeWidth}px</span>
+            <span className="font-mono text-xs text-muted-foreground min-w-[32px]">{nodeWidth}px</span>
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Curvatura</span>
+            <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Curvatura</span>
             <div className="w-24">
               <Slider
                 value={[curvature * 100]}
@@ -248,13 +247,13 @@ export function SankeyChart({
                 onValueChange={(val: number[]) => setCurvature(val[0] / 100)}
               />
             </div>
-            <span className="font-mono text-[10px] text-muted-foreground min-w-[32px]">{Math.round(curvature * 100)}%</span>
+            <span className="font-mono text-xs text-muted-foreground min-w-[32px]">{Math.round(curvature * 100)}%</span>
           </div>
 
           <button
             onClick={() => setShowLabels(!showLabels)}
             className={cn(
-              "font-mono text-[10px] uppercase tracking-widest px-2 py-1 border transition-colors",
+              "font-mono text-xs uppercase tracking-widest px-2 py-1 border transition-colors",
               showLabels ? "bg-primary/10 border-primary/30 text-primary" : "bg-muted border-border text-muted-foreground"
             )}
           >
@@ -277,7 +276,7 @@ export function SankeyChart({
         <button
           onClick={() => setShowLabels(!showLabels)}
           className={cn(
-            "font-mono text-[10px] uppercase tracking-widest px-2 py-1 border transition-colors",
+            "font-mono text-xs uppercase tracking-widest px-2 py-1 border transition-colors",
             showLabels ? "bg-primary/10 border-primary/30 text-primary" : "bg-muted border-border text-muted-foreground"
           )}
         >
@@ -349,7 +348,7 @@ export function SankeyChart({
               .filter((n) => (n.x1 ?? 0) > (width * 2) / 3)
               .sort((a, b) => (a.y0 ?? 0) - (b.y0 ?? 0))
             
-            const labelH = 20
+            const labelH = 28
 
             const solve = (nodes: typeof leftNodes) => {
               const labels = nodes.map((n) => ({
@@ -439,34 +438,34 @@ export function SankeyChart({
 
                   {!hideLabel && showLabels && (
                     <g className="transition-opacity duration-300">
-                      <text
-                        x={isRight ? x1 + 8 : isLeft ? x0 - 8 : x0 - 8}
-                        y={labelY - 6}
-                        dy="0.35em"
-                        textAnchor={isRight ? "start" : "end"}
-                        fill="oklch(0.95 0 0)"
-                        fontSize={width < 640 ? 9 : 10}
-                        fontFamily="monospace"
-                        fontWeight={isClickable ? 500 : 700}
-                        className="pointer-events-none select-none"
-                      >
-                        {width < 640 && node.name.length > 10
-                          ? node.name.slice(0, 9) + "…"
-                          : node.name}
-                      </text>
-                      {width >= 400 && (
                         <text
-                          x={isRight ? x1 + 8 : isLeft ? x0 - 8 : x0 - 8}
-                          y={labelY + 8}
+                          x={isRight ? x1 + 10 : isLeft ? x0 - 10 : x0 - 10}
+                          y={labelY - 6}
                           dy="0.35em"
                           textAnchor={isRight ? "start" : "end"}
-                          fill="oklch(0.70 0 0)"
-                          fontSize={9}
+                          fill="oklch(0.95 0 0)"
+                          fontSize={width < 640 ? 12 : 13}
                           fontFamily="monospace"
+                          fontWeight={isClickable ? 500 : 700}
                           className="pointer-events-none select-none"
                         >
-                          {isPrivate ? "••••" : format(nodeValue)}
+                          {width < 640 && node.name.length > 15
+                            ? node.name.slice(0, 14) + "…"
+                            : node.name}
                         </text>
+                      {width >= 400 && (
+                          <text
+                            x={isRight ? x1 + 10 : isLeft ? x0 - 10 : x0 - 10}
+                            y={labelY + 10}
+                            dy="0.35em"
+                            textAnchor={isRight ? "start" : "end"}
+                            fill="oklch(0.70 0 0)"
+                            fontSize={width < 640 ? 11 : 12}
+                            fontFamily="monospace"
+                            className="pointer-events-none select-none"
+                          >
+                            {isPrivate ? "••••" : format(nodeValue)}
+                          </text>
                       )}
                     </g>
                   )}

@@ -112,7 +112,7 @@ export default function RecurringIncomePage() {
       {/* Chart */}
       <div className="rounded-xl border bg-card p-6">
         <div className="flex items-center justify-between mb-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
             Este ano / {new Date().getFullYear()}
           </p>
           <div className="flex items-center gap-2">
@@ -160,7 +160,7 @@ export default function RecurringIncomePage() {
       {/* Income list */}
       <div>
         <div className="mb-4">
-          <h3 className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+          <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
             Receitas Recorrentes
           </h3>
         </div>
@@ -183,11 +183,11 @@ export default function RecurringIncomePage() {
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">{rule.description}</p>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <Badge variant="outline" className="text-[10px]">
+                      <Badge variant="outline" className="text-xs">
                         {frequencyLabel[rule.frequency] ?? rule.frequency}
                       </Badge>
                       {rule.nextDate && (
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-xs text-muted-foreground">
                           Pr&oacute;xima: {formatDate(rule.nextDate)}
                         </span>
                       )}
@@ -199,7 +199,7 @@ export default function RecurringIncomePage() {
                     {format(rule.amount)}
                   </p>
                   {rule.nextDate && (
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {daysUntilLabel(rule.nextDate)}
                     </p>
                   )}

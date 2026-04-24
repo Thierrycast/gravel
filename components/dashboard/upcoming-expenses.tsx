@@ -15,6 +15,8 @@ interface RecurringExpense {
   frequency: string
   category: string
   nextDate: string
+  logoUrl?: string | null
+  merchantName?: string | null
 }
 
 interface UpcomingExpensesProps {
@@ -34,10 +36,10 @@ const frequencyLabels: Record<string, string> = {
 export function UpcomingExpenses({ rules, totalMonthly, loading }: UpcomingExpensesProps) {
   const { format } = useCurrency()
   return (
-    <Card className="col-span-full lg:col-span-1">
-      <CardHeader>
-        <CardTitle>Despesas Recorrentes</CardTitle>
-        <CardDescription>
+    <Card className="col-span-full lg:col-span-1 rounded-none border-border h-full flex flex-col">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-xs font-mono tracking-widest uppercase text-muted-foreground">Despesas Recorrentes</CardTitle>
+        <CardDescription className="text-[10px] font-mono text-muted-foreground/60 uppercase">
           {totalMonthly != null
             ? `Total mensal: ${format(totalMonthly)}`
             : "Carregando..."}
@@ -45,14 +47,14 @@ export function UpcomingExpenses({ rules, totalMonthly, loading }: UpcomingExpen
         <CardAction>
           <Link
             href="/recurring"
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            className="inline-flex items-center gap-1 text-xs font-mono text-muted-foreground hover:text-primary transition-colors"
           >
-            Ver mais
-            <ArrowRight className="h-3.5 w-3.5" />
+            ver_mais
+            <ArrowRight className="h-3 w-3" />
           </Link>
         </CardAction>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1">
         {loading ? (
           <div className="space-y-4">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -71,28 +73,39 @@ export function UpcomingExpenses({ rules, totalMonthly, loading }: UpcomingExpen
               rules.map((expense) => (
                 <div
                   key={expense.id}
-                  className="flex items-start justify-between gap-3 pb-4 border-b last:border-0 last:pb-0"
+                  className="flex items-start justify-between gap-3 pb-3 border-b border-border/40 last:border-0 last:pb-0"
                 >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium leading-none truncate">
-                      {expense.description}
-                    </p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <Badge variant="secondary" className="text-[10px]">
-                        {expense.category}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-1.5">
-                      <Repeat className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground">
-                        {frequencyLabels[expense.frequency] ?? expense.frequency}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        &middot; {daysUntilLabel(expense.nextDate)}
-                      </span>
+                  <div className="flex-1 min-w-0 flex items-start gap-3">
+                    {expense.logoUrl ? (
+                      <div className="shrink-0 size-8 rounded-lg border border-border/40 bg-muted/30 p-1 flex items-center justify-center overflow-hidden mt-0.5">
+                        <img src={expense.logoUrl} alt={expense.description} className="size-full object-contain" />
+                      </div>
+                    ) : (
+                      <div className="shrink-0 size-8 rounded-lg border border-border/40 bg-muted/50 flex items-center justify-center mt-0.5">
+                        <span className="text-[10px] font-mono text-muted-foreground uppercase">{expense.description.slice(0, 2)}</span>
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium leading-none truncate">
+                        {expense.description}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-2">
+                        <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest px-1 border border-border/60 rounded-[2px]">
+                          {expense.category}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <Repeat className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-[10px] font-mono text-muted-foreground uppercase">
+                            {frequencyLabels[expense.frequency] ?? expense.frequency}
+                          </span>
+                          <span className="text-[10px] font-mono text-muted-foreground">
+                            &middot; {daysUntilLabel(expense.nextDate)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <span className="text-sm font-medium tabular-nums whitespace-nowrap text-red-500">
+                  <span className="text-sm font-medium tabular-nums whitespace-nowrap text-rose-500 mt-0.5">
                     {format(expense.amount)}
                   </span>
                 </div>

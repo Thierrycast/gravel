@@ -12,8 +12,10 @@ import {
   parseNumberParam,
 } from "@/lib/core/filters"
 import { computeCryptoPositionStates } from "@/lib/domain/crypto-math"
+import { getUserSettings } from "./queries"
 import { getUsdBrlRate } from "@/lib/exchange-rate"
 import { prisma } from "@/lib/prisma"
+import { getCryptoLogo } from "@/lib/domain/utils"
 
 const ZERO = new Prisma.Decimal(0)
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -185,7 +187,7 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
     period: "mtd",
   })
 
-  const [accounts, bills, investments, cryptoAssets, loans] =
+  const [accounts, bills, investments, cryptoAssets, loans, settings] =
     await Promise.all([
       prisma.domainAccount.findMany({
         where: {
@@ -218,6 +220,7 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
           },
         },
       }),
+      getUserSettings(),
     ])
 
   const excludedCategoryNames = Array.from(EXCLUDED_SPENDING_CATEGORIES)
@@ -297,9 +300,17 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
   
   // For cards, we take the maximum of the statement (bill) or the current balance (debt).
   // This handles the transition between billing cycles correctly.
-  const creditCardLiabilities = creditCardDebt.greaterThan(openCardBillsAmount) 
+  // CRITICAL: If settings.showFutureAccounts is false, we prioritize the bills (already invoiced)
+  // to avoid showing a negative net worth due to future installments.
+  let creditCardLiabilities = creditCardDebt.greaterThan(openCardBillsAmount) 
     ? creditCardDebt 
     : openCardBillsAmount
+
+  if (!settings.showFutureAccounts && openCardBillsAmount.greaterThan(0)) {
+    // If we want to hide future installments, we only show the current bills amount
+    // provided there is one (otherwise we show the debt as it might be current spending)
+    creditCardLiabilities = openCardBillsAmount
+  }
 
   const loanBalance = sumDecimals(loans.map((loan) => loan.contractAmount))
   const liabilitiesTotal = creditCardLiabilities.plus(otherBillsAmount).plus(loanBalance)
@@ -411,7 +422,7 @@ export async function getNetWorthMetrics(searchParams?: URLSearchParams) {
   const filters = buildMetricFilters(searchParams ?? new URLSearchParams(), {
     period: "12m",
   })
-  const [overview, snapshots, usdBrl] = await Promise.all([
+  const [overview, snapshots, usdBrl, settings, activeScenarios, pendingLends] = await Promise.all([
     getOverviewMetrics(searchParams),
     prisma.portfolioSnapshot.findMany({
       where: {
@@ -424,16 +435,30 @@ export async function getNetWorthMetrics(searchParams?: URLSearchParams) {
       take: 120,
     }),
     getUsdBrlRate(),
+    getUserSettings(),
+    prisma.domainScenarioEvent.findMany({
+      where: { isActive: true },
+      orderBy: { date: "asc" }
+    }),
+    prisma.domainLend.findMany({
+      where: { status: "PENDING" }
+    })
   ])
 
   const rate = new Prisma.Decimal(usdBrl)
   const cryptoAssets = overview.cryptoTotal.mul(rate)
-  const grossAssets = overview.fiatAssets.plus(cryptoAssets)
-  const currentNetWorth = overview.fiatNetWorth.plus(cryptoAssets)
+  
+  // Pending lends are money we HAVE but is currently with others. 
+  // For net worth purposes, it's an asset.
+  const totalPendingLends = sumDecimals(pendingLends.map(l => l.amount))
+  
+  const grossAssets = overview.fiatAssets.plus(cryptoAssets).plus(totalPendingLends)
+  const currentNetWorth = overview.fiatNetWorth.plus(cryptoAssets).plus(totalPendingLends)
 
   const points: Array<{
     date: Date
     netWorth: Prisma.Decimal
+    scenarioNetWorth?: number
     source: "snapshot" | "current"
     assets?: Prisma.Decimal
     fiatAssets?: Prisma.Decimal
@@ -455,17 +480,61 @@ export async function getNetWorthMetrics(searchParams?: URLSearchParams) {
     source: "current",
   })
 
+  // Add future projection points
+  if ((settings.showFutureSalary && settings.monthlySalary > 0) || activeScenarios.length > 0) {
+    let projectedNW = currentNetWorth
+    let scenarioNW = currentNetWorth
+    const now = new Date()
+    
+    // Projection for next 12 months (or more if requested in settings)
+    const lookaheadMonths = 12 
+    
+    for (let i = 1; i <= lookaheadMonths; i++) {
+      const projDate = new Date(now)
+      projDate.setMonth(projDate.getMonth() + i)
+      projDate.setDate(1) // Start of month
+      
+      const monthStart = new Date(projDate.getFullYear(), projDate.getMonth(), 1)
+      const monthEnd = new Date(projDate.getFullYear(), projDate.getMonth() + 1, 0)
+
+      // Apply Base Salary (Reality)
+      if (settings.showFutureSalary) {
+        projectedNW = projectedNW.plus(new Prisma.Decimal(settings.monthlySalary))
+      }
+      
+      // Scenario NW starts equal to projected unless modified by scenarios
+      scenarioNW = projectedNW
+
+      // Apply Scenarios (Hypothetical)
+      const monthScenarios = activeScenarios.filter(s => {
+        const d = new Date(s.date)
+        return d >= monthStart && d <= monthEnd
+      })
+
+      for (const scenario of monthScenarios) {
+        scenarioNW = scenarioNW.plus(new Prisma.Decimal(scenario.amount as any))
+      }
+      
+      points.push({
+        date: projDate,
+        netWorth: projectedNW,
+        scenarioNetWorth: scenarioNW.toNumber(),
+        source: "snapshot",
+      })
+    }
+  }
+
   return {
     current: currentNetWorth,
     points,
     valuation: {
-      fiatAssets: overview.fiatAssets,
+      fiatAssets: overview.fiatAssets.plus(totalPendingLends),
       accountBalance: overview.accountBalance,
       investmentsTotal: overview.investmentsTotal,
       cryptoAssets,
       grossAssets,
       liabilities: overview.liabilitiesTotal,
-      fiatNetWorth: overview.fiatNetWorth,
+      fiatNetWorth: overview.fiatNetWorth.plus(totalPendingLends),
       cryptoNetWorth: cryptoAssets,
       netWorth: currentNetWorth,
       usdBrlRate: rate,
@@ -870,6 +939,7 @@ export async function getCryptoAssetMetrics(searchParams: URLSearchParams) {
 
     return {
       asset,
+      imageUrl: getCryptoLogo(asset),
       quoteAsset: price?.quoteAsset ?? state?.quoteAsset ?? null,
       quantity,
       coveredQuantity,

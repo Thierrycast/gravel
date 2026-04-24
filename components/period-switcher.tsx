@@ -39,7 +39,7 @@ export function PeriodSwitcher({ state, className, options }: PeriodSwitcherProp
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        <DropdownMenuLabel className="text-xs uppercase tracking-wider text-muted-foreground">
           Período
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
