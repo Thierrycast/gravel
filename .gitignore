@@ -15,6 +15,7 @@
 /playwright-report/
 /test-results/
 /screenshots/
+/.playwright-cli/
 
 # next.js
 /.next/
@@ -27,6 +28,7 @@
 .DS_Store
 *.pem
 .ai/
+.kilo/
 
 # debug
 npm-debug.log*
@@ -51,3 +53,8 @@ next-env.d.ts
 
 # agents
 skills-lock.json
+
+# local maintenance scratchpads
+/scratch/
+/check_inflows.js
+/cleanup_recurring.js

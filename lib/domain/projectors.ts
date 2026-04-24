@@ -13,6 +13,7 @@ import {
 
 import { markDomainSyncState } from "@/lib/admin/ops"
 import { computeCryptoPositionStates } from "@/lib/domain/crypto-math"
+import { detectExplicitInstallment, rebuildInstallmentGroups } from "@/lib/domain/installments"
 import { prisma } from "@/lib/prisma"
 
 function normalizeText(value?: string | null) {
@@ -324,6 +325,27 @@ async function projectPluggyCategories() {
       })
       projected += 1
     }
+
+    const categories = await tx.domainCategory.findMany({
+      where: { sourceProvider: SourceProvider.PLUGGY },
+      select: { id: true, sourceExternalId: true },
+    })
+    const categoryBySourceId = new Map(
+      categories
+        .filter((category) => category.sourceExternalId)
+        .map((category) => [category.sourceExternalId as string, category.id])
+    )
+
+    for (const record of records) {
+      if (!record.parentId) continue
+      const id = categoryBySourceId.get(record.externalId)
+      const parentId = categoryBySourceId.get(record.parentId)
+      if (!id || !parentId || id === parentId) continue
+      await tx.domainCategory.update({
+        where: { id },
+        data: { parentId },
+      })
+    }
   })
 
   await markDomainSyncState({
@@ -605,7 +627,7 @@ async function projectPluggyTransactions() {
       orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
     }),
     prisma.domainCategory.findMany({
-      select: { id: true, slug: true, sourceProvider: true, sourceExternalId: true },
+      select: { id: true, slug: true, name: true, sourceProvider: true, sourceExternalId: true },
     }),
     prisma.domainMerchant.findMany({
       select: { id: true, displayName: true, normalizedName: true, cnpj: true },
@@ -632,6 +654,9 @@ async function projectPluggyTransactions() {
     categories
       .filter((c) => c.sourceProvider === SourceProvider.PLUGGY && c.sourceExternalId)
       .map((c) => [`${c.sourceProvider}:${c.sourceExternalId as string}`, c.id])
+  )
+  const categoriesByName = new Map<string, string>(
+    categories.map((c) => [normalizeText(c.name) ?? c.name.toLowerCase(), c.id])
   )
   const ignoredIds = new Set(ignoredRows.map((r) => r.domainTransactionId))
 
@@ -692,6 +717,16 @@ async function projectPluggyTransactions() {
         select: { id: true, sourceExternalId: true, domainTransactionId: true },
       }),
     ])
+    const existingTxIds = existingTransactions.map((transaction) => transaction.id)
+    const enrichments = existingTxIds.length > 0
+      ? await prisma.transactionEnrichment.findMany({
+          where: {
+            domainTransactionId: { in: existingTxIds },
+            status: "SUCCESS",
+          },
+        })
+      : []
+    const enrichmentByTxId = new Map(enrichments.map((enrichment) => [enrichment.domainTransactionId, enrichment]))
 
     const existingTxByExtId = new Map<string, { id: string; metadataJson: string | null }>(
       existingTransactions.map((t) => [t.sourceExternalId, { id: t.id, metadataJson: t.metadataJson }])
@@ -718,11 +753,20 @@ async function projectPluggyTransactions() {
       ? accountMap.get(record.accountExternalId)
       : undefined
 
+    const existingEntry = existingTxByExtId.get(record.externalId)
+    const enrichment = existingEntry?.id ? enrichmentByTxId.get(existingEntry.id) : null
+    const effectiveMerchantName =
+      record.merchantName ??
+      enrichment?.merchantBusinessName ??
+      enrichment?.merchantName ??
+      null
+    const effectiveMerchantCnpj = record.merchantCnpj ?? enrichment?.merchantCnpj ?? null
+
     const merchant = resolveMerchantInMemory(
       {
         sourceProvider: SourceProvider.PLUGGY,
-        merchantName: record.merchantName,
-        merchantCnpj: record.merchantCnpj,
+        merchantName: effectiveMerchantName,
+        merchantCnpj: effectiveMerchantCnpj,
       },
       {
         rules: merchantRules,
@@ -742,17 +786,20 @@ async function projectPluggyTransactions() {
       ? DomainTransactionDirection.INFLOW
       : DomainTransactionDirection.OUTFLOW
 
-    const categoryId = await resolveCategoryId(
+    let categoryId = await resolveCategoryId(
       {
         sourceProvider: SourceProvider.PLUGGY,
         providerCategoryId: record.categoryId,
-        merchantName: record.merchantName,
-        merchantCnpj: record.merchantCnpj,
+        merchantName: effectiveMerchantName,
+        merchantCnpj: effectiveMerchantCnpj,
         description: record.description,
         amount,
       },
       { rules: categoryRules, categoriesBySource, categoriesBySlug }
     )
+    if (!record.categoryId && enrichment?.pluggyCategory) {
+      categoryId = categoriesByName.get(normalizeText(enrichment.pluggyCategory) ?? "") ?? categoryId
+    }
 
     const metadataJson = JSON.stringify({
       providerCode: record.providerCode,
@@ -763,9 +810,9 @@ async function projectPluggyTransactions() {
     const normalizedDescription =
       normalizeText(record.description ?? record.descriptionRaw) ?? null
 
-    const existingEntry = existingTxByExtId.get(record.externalId)
     const existingTxId = existingEntry?.id
     let occurredAt = record.date ?? record.createdAt
+    const installment = detectExplicitInstallment(record.description ?? record.descriptionRaw)
 
     // Check for manual overrides in the existing transaction
     if (existingEntry?.metadataJson) {
@@ -788,9 +835,11 @@ async function projectPluggyTransactions() {
         sourceParentId: record.accountExternalId,
         domainAccountId: accountId ?? null,
         domainMerchantId: merchant?.id ?? null,
+        installmentNumber: installment?.current ?? null,
+        installmentTotal: installment?.total ?? null,
         providerCategoryId: record.categoryId ?? null,
-        merchantName: record.merchantName ?? null,
-        merchantCnpj: record.merchantCnpj ?? null,
+        merchantName: effectiveMerchantName,
+        merchantCnpj: effectiveMerchantCnpj,
         metadataJson,
         ignored: ignoredIds.has(existingTxId),
       }
@@ -811,10 +860,12 @@ async function projectPluggyTransactions() {
         sourceParentId: record.accountExternalId,
         domainAccountId: accountId ?? null,
         domainMerchantId: merchant?.id ?? null,
+        installmentNumber: installment?.current ?? null,
+        installmentTotal: installment?.total ?? null,
         domainCategoryId: categoryId ?? null,
         providerCategoryId: record.categoryId ?? null,
-        merchantName: record.merchantName ?? null,
-        merchantCnpj: record.merchantCnpj ?? null,
+        merchantName: effectiveMerchantName,
+        merchantCnpj: effectiveMerchantCnpj,
         ignored: false,
         metadataJson,
       })
@@ -1155,6 +1206,7 @@ export async function projectPluggyReadModels() {
   const accounts = await projectPluggyAccounts()
   const merchants = await projectPluggyMerchants()
   const transactions = await projectPluggyTransactions()
+  const installmentGroups = await rebuildInstallmentGroups()
   const bills = await projectPluggyBills()
   const investments = await projectPluggyInvestments()
 
@@ -1163,6 +1215,7 @@ export async function projectPluggyReadModels() {
     accounts,
     merchants,
     transactions,
+    installmentGroups,
     bills,
     investments,
   }

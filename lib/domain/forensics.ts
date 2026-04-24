@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { DomainTransactionDirection } from "@prisma/client";
+import { DomainTransaction, DomainTransactionDirection } from "@prisma/client";
 
 /**
  * Benford's Law check for transaction amounts.
@@ -45,7 +45,7 @@ export async function detectHiddenSubscriptions() {
     orderBy: { occurredAt: "asc" },
   });
 
-  const groups: Record<string, any[]> = {};
+  const groups: Record<string, DomainTransaction[]> = {};
 
   // Group by merchant name or description (normalized)
   for (const tx of transactions) {

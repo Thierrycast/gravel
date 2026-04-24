@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { getPortfolioPayload } from "@/lib/domain/derived"
 import { serializeForJson } from "@/lib/core/http"
 import { getUsdBrlRate } from "@/lib/exchange-rate"
+import { isBrlCurrency } from "@/lib/domain/currency"
 
 export const dynamic = "force-dynamic"
 
@@ -60,6 +61,7 @@ export async function GET() {
 
   for (const account of payload.accounts) {
     if (creditKinds.has(account.kind)) continue // skip — these are debts
+    if (!isBrlCurrency(account.currencyCode)) continue
     const balance = Number(account.balance?.toString() ?? "0")
     if (balance > 0) {
       fiatItems.push({
@@ -71,6 +73,7 @@ export async function GET() {
     }
   }
   for (const inv of payload.investments) {
+    if (!isBrlCurrency(inv.currencyCode)) continue
     const balance = Number(inv.balance?.toString() ?? "0")
     if (balance > 0) {
       fiatItems.push({
@@ -127,6 +130,7 @@ export async function GET() {
     percentage: number
   }> = []
   for (const loan of payload.loans) {
+    if (!isBrlCurrency(loan.currencyCode)) continue
     const amount = Number(loan.contractAmount?.toString() ?? "0")
     if (amount > 0) {
       liabilityItems.push({
@@ -139,17 +143,21 @@ export async function GET() {
     }
   }
   for (const account of payload.accounts) {
+    if (!isBrlCurrency(account.currencyCode)) continue
     const balance = Number(account.balance?.toString() ?? "0")
-    // Only accounts with NEGATIVE balance are real liabilities (credit card debt).
-    // Positive-balance CARD accounts are assets, not liabilities.
-    if (balance < 0) {
-      const absBalance = Math.abs(balance)
+    const isCreditAccount = creditKinds.has(account.kind)
+    // Pluggy card accounts usually expose the outstanding balance as a
+    // positive value. Non-card negative balances are still liabilities.
+    const liabilityAmount = isCreditAccount
+      ? Math.max(balance, 0)
+      : Math.max(Math.abs(Math.min(balance, 0)), 0)
+    if (liabilityAmount > 0) {
       liabilityItems.push({
         name: account.name,
         type: "credit",
-        value: absBalance,
+        value: liabilityAmount,
         percentage:
-          liabilitiesTotalNum > 0 ? (absBalance / liabilitiesTotalNum) * 100 : 0,
+          liabilitiesTotalNum > 0 ? (liabilityAmount / liabilitiesTotalNum) * 100 : 0,
       })
     }
   }

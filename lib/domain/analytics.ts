@@ -12,6 +12,7 @@ import {
   parseNumberParam,
 } from "@/lib/core/filters"
 import { computeCryptoPositionStates } from "@/lib/domain/crypto-math"
+import { isBrlCurrency, sumCurrencyDecimals } from "@/lib/domain/currency"
 import { getUserSettings } from "./queries"
 import { getUsdBrlRate } from "@/lib/exchange-rate"
 import { prisma } from "@/lib/prisma"
@@ -151,6 +152,7 @@ function buildTransactionWhere(filters: MetricFilters): Prisma.DomainTransaction
     domainCategoryId: filters.categoryId,
     domainMerchantId: filters.merchantId,
     sourceProvider: filters.provider,
+    OR: [{ currencyCode: null }, { currencyCode: "BRL" }, { currencyCode: "R$" }],
     ...(filters.includeIgnored ? {} : { ignored: false }),
   }
 }
@@ -163,23 +165,33 @@ export function parseMetricQuery(searchParams: URLSearchParams, defaults?: {
   return buildMetricFilters(searchParams, defaults)
 }
 
-// Category kinds that represent internal transfers (not real spending)
-const TRANSFER_CATEGORY_KINDS = new Set(["TRANSFER"])
-const EXCLUDED_SPENDING_CATEGORIES = new Set([
+export const EXCLUDED_SPENDING_CATEGORIES = [
   "pagamento de cartão de crédito",
   "transferência mesma titularidade",
   "transferência entre contas",
   "pagamento de fatura",
-])
+  "fatura de cartão",
+  "pagamento de fatura de cartão",
+  "investimento",
+  "aplicação",
+  "resgate",
+  "aporte",
+  "depósito para corretora",
+  "transferência - mesma titularidade"
+]
+
+export function isInternalTransfer(categoryName?: string | null, categoryKind?: string | null) {
+  if (categoryKind === "TRANSFER") return true
+  if (!categoryName) return false
+  const lower = categoryName.toLowerCase()
+  return EXCLUDED_SPENDING_CATEGORIES.some(excluded => lower.includes(excluded.toLowerCase()))
+}
 
 function isRealSpending(
   categoryName: string | undefined,
   categoryKind: string | undefined
 ): boolean {
-  if (categoryKind && TRANSFER_CATEGORY_KINDS.has(categoryKind)) return false
-  if (categoryName && EXCLUDED_SPENDING_CATEGORIES.has(categoryName.toLowerCase()))
-    return false
-  return true
+  return !isInternalTransfer(categoryName, categoryKind)
 }
 
 export async function getOverviewMetrics(searchParams?: URLSearchParams) {
@@ -220,16 +232,16 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
           },
         },
       }),
-      getUserSettings(),
+      getUserSettings(searchParams),
     ])
 
-  const excludedCategoryNames = Array.from(EXCLUDED_SPENDING_CATEGORIES)
   const excludedCategories = await prisma.domainCategory.findMany({
-
     where: {
       OR: [
         { kind: "TRANSFER" },
-        { name: { in: excludedCategoryNames } }
+        ...EXCLUDED_SPENDING_CATEGORIES.map(name => ({
+          name: { contains: name }
+        }))
       ]
     },
     select: { id: true }
@@ -272,10 +284,10 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
     DomainAccountKind.CARD,
   ])
 
-  const liquidAccounts = accounts.filter((a) => trueAssetKinds.has(a.kind))
-  const creditAccounts = accounts.filter((a) => creditKinds.has(a.kind))
+  const liquidAccounts = accounts.filter((a) => trueAssetKinds.has(a.kind) && isBrlCurrency(a.currencyCode))
+  const creditAccounts = accounts.filter((a) => creditKinds.has(a.kind) && isBrlCurrency(a.currencyCode))
 
-  const accountBalance = sumDecimals(liquidAccounts.map((account) => account.balance))
+  const accountBalance = sumCurrencyDecimals(liquidAccounts, (account) => account.balance, (account) => account.currencyCode)
   // Credit card outstanding balance (positive in Pluggy = debt owed by the user)
   const creditCardDebt = sumDecimals(
     creditAccounts.map((account) => {
@@ -284,7 +296,7 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
       return bal.greaterThan(0) ? bal : ZERO
     })
   )
-  const investmentsTotal = sumDecimals(investments.map((item) => item.balance))
+  const investmentsTotal = sumCurrencyDecimals(investments, (item) => item.balance, (item) => item.currencyCode)
   const cryptoTotal = sumDecimals(cryptoAssets.map((item) => item.value))
   
   // Liabilities logic:
@@ -292,8 +304,9 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
   // We separate bills into those linked to a credit card account and those that aren't.
   const creditAccountIds = new Set(creditAccounts.map(a => a.id))
   
-  const cardBills = bills.filter(b => b.domainAccountId && creditAccountIds.has(b.domainAccountId))
-  const otherBills = bills.filter(b => !b.domainAccountId || !creditAccountIds.has(b.domainAccountId))
+  const brlBills = bills.filter((bill) => isBrlCurrency(bill.currencyCode))
+  const cardBills = brlBills.filter(b => b.domainAccountId && creditAccountIds.has(b.domainAccountId))
+  const otherBills = brlBills.filter(b => !b.domainAccountId || !creditAccountIds.has(b.domainAccountId))
   
   const openCardBillsAmount = sumDecimals(cardBills.map(b => b.totalAmount))
   const otherBillsAmount = sumDecimals(otherBills.map(b => b.totalAmount))
@@ -312,7 +325,7 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
     creditCardLiabilities = openCardBillsAmount
   }
 
-  const loanBalance = sumDecimals(loans.map((loan) => loan.contractAmount))
+  const loanBalance = sumCurrencyDecimals(loans, (loan) => loan.contractAmount, (loan) => loan.currencyCode)
   const liabilitiesTotal = creditCardLiabilities.plus(otherBillsAmount).plus(loanBalance)
   const inflow = decimal(inflowAgg._sum?.amount)
   const outflow = decimal(outflowAgg._sum?.amount).abs()
@@ -435,7 +448,7 @@ export async function getNetWorthMetrics(searchParams?: URLSearchParams) {
       take: 120,
     }),
     getUsdBrlRate(),
-    getUserSettings(),
+    getUserSettings(searchParams),
     prisma.domainScenarioEvent.findMany({
       where: { isActive: true },
       orderBy: { date: "asc" }
@@ -512,7 +525,7 @@ export async function getNetWorthMetrics(searchParams?: URLSearchParams) {
       })
 
       for (const scenario of monthScenarios) {
-        scenarioNW = scenarioNW.plus(new Prisma.Decimal(scenario.amount as any))
+        scenarioNW = scenarioNW.plus(decimal(scenario.amount))
       }
       
       points.push({
@@ -680,12 +693,13 @@ export async function getSpendingByCategoryMetrics(searchParams: URLSearchParams
     period: "mtd",
     limit: 20,
   })
-  const excludedCategoryNames = Array.from(EXCLUDED_SPENDING_CATEGORIES)
   const excludedCategories = await prisma.domainCategory.findMany({
     where: {
       OR: [
         { kind: "TRANSFER" },
-        { name: { in: excludedCategoryNames } }
+        ...EXCLUDED_SPENDING_CATEGORIES.map(name => ({
+          name: { contains: name }
+        }))
       ]
     },
     select: { id: true }

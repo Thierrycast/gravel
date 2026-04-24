@@ -7,6 +7,7 @@ import {
   parseDateParam,
   parseNumberParam,
 } from "@/lib/core/filters"
+import { buildTransactionDisplay } from "@/lib/domain/enrichment/display"
 import { prisma } from "@/lib/prisma"
 
 /** Resolves a period shorthand into a start Date. Must stay in sync with analytics.ts resolvePeriodStart. */
@@ -86,6 +87,7 @@ export async function getDomainTransactions(searchParams: URLSearchParams) {
   const filters = parseDomainQuery(searchParams)
   const pagination = normalizePagination(filters.page, filters.pageSize)
   let searchWhere: Prisma.DomainTransactionWhereInput[] | undefined
+  let categoryFilterIds: string[] | undefined
 
   if (filters.q) {
     const [categories, accounts, merchants] = await Promise.all([
@@ -141,13 +143,39 @@ export async function getDomainTransactions(searchParams: URLSearchParams) {
     ]
   }
 
+  if (filters.categoryId) {
+    const categories = await prisma.domainCategory.findMany({
+      select: { id: true, parentId: true },
+    })
+    const childrenByParent = new Map<string, string[]>()
+    for (const category of categories) {
+      if (!category.parentId) continue
+      childrenByParent.set(category.parentId, [
+        ...(childrenByParent.get(category.parentId) ?? []),
+        category.id,
+      ])
+    }
+    const ids = new Set<string>([filters.categoryId])
+    const queue = [filters.categoryId]
+    while (queue.length > 0) {
+      const current = queue.shift()
+      if (!current) continue
+      for (const childId of childrenByParent.get(current) ?? []) {
+        if (ids.has(childId)) continue
+        ids.add(childId)
+        queue.push(childId)
+      }
+    }
+    categoryFilterIds = Array.from(ids)
+  }
+
   const where: Prisma.DomainTransactionWhereInput = {
     occurredAt: {
       gte: filters.from,
       lte: filters.to,
     },
     domainAccountId: filters.accountId,
-    domainCategoryId: filters.categoryId,
+    domainCategoryId: categoryFilterIds ? { in: categoryFilterIds } : undefined,
     domainMerchantId: filters.merchantId,
     direction: filters.direction,
     sourceProvider: filters.provider ? (filters.provider as never) : undefined,
@@ -324,10 +352,10 @@ export async function getDashboardTransactions(searchParams: URLSearchParams) {
     )
   )
 
-  const [categories, accounts, merchants] = await Promise.all([
+  const [categories, accounts, merchants, merchantEnrichments, transactionEnrichments] = await Promise.all([
     prisma.domainCategory.findMany({
-      where: categoryIds.length > 0 ? { id: { in: categoryIds } } : { id: "__none__" },
-      select: { id: true, name: true },
+      where: categoryIds.length > 0 ? {} : { id: "__none__" },
+      select: { id: true, name: true, parentId: true },
     }),
     prisma.domainAccount.findMany({
       where: accountIds.length > 0 ? { id: { in: accountIds } } : { id: "__none__" },
@@ -337,35 +365,43 @@ export async function getDashboardTransactions(searchParams: URLSearchParams) {
       where: merchantIds.length > 0 ? { id: { in: merchantIds } } : { id: "__none__" },
       select: { id: true, displayName: true },
     }),
+    prisma.merchantEnrichment.findMany({
+      where: merchantIds.length > 0 ? { domainMerchantId: { in: merchantIds } } : { id: "__none__" },
+      select: { domainMerchantId: true, logoUrl: true, status: true },
+    }),
+    prisma.transactionEnrichment.findMany({
+      where: payload.results.length > 0 ? { domainTransactionId: { in: payload.results.map((tx) => tx.id) } } : { id: "__none__" },
+      select: { domainTransactionId: true, status: true },
+    }),
   ])
 
-  const categoryMap = new Map(categories.map((c) => [c.id, c.name]))
+  const categoryMap = new Map(categories.map((c) => [c.id, c]))
   const accountMap = new Map(accounts.map((a) => [a.id, { name: a.name, imageUrl: a.imageUrl }]))
-  const merchantMap = new Map(merchants.map((m) => [m.id, m.displayName]))
+  const merchantMap = new Map(merchants.map((m) => [m.id, m]))
+  const merchantEnrichmentMap = new Map(merchantEnrichments.map((item) => [item.domainMerchantId, item]))
+  const transactionEnrichmentMap = new Map(transactionEnrichments.map((item) => [item.domainTransactionId, item]))
 
   const mapped = payload.results.map((tx) => {
     const accountInfo = tx.domainAccountId ? accountMap.get(tx.domainAccountId) : null
+    const category = tx.domainCategoryId ? categoryMap.get(tx.domainCategoryId) : null
+    const parentCategory = category?.parentId ? categoryMap.get(category.parentId) : null
+    const merchant = tx.domainMerchantId ? merchantMap.get(tx.domainMerchantId) : null
+    const merchantEnrichment = tx.domainMerchantId
+      ? merchantEnrichmentMap.get(tx.domainMerchantId)
+      : null
+    const transactionEnrichment = transactionEnrichmentMap.get(tx.id)
     
     return {
-      id: tx.id,
-      description: tx.description ?? "Sem descrição",
-      amount: tx.amount,
-      date: tx.occurredAt,
-      direction: tx.direction,
-      categoryName: tx.domainCategoryId
-        ? categoryMap.get(tx.domainCategoryId) ?? "Sem categoria"
-        : "Sem categoria",
-      categoryId: tx.domainCategoryId,
+      ...buildTransactionDisplay(tx, {
+        category,
+        parentCategory,
+        merchant,
+        merchantLogoUrl: merchantEnrichment?.logoUrl ?? null,
+        enrichmentStatus: transactionEnrichment?.status ?? merchantEnrichment?.status ?? null,
+      }),
       accountId: tx.domainAccountId,
       accountName: accountInfo?.name ?? "",
       accountImageUrl: accountInfo?.imageUrl ?? null,
-      merchantId: tx.domainMerchantId,
-      merchantName:
-        tx.domainMerchantId
-          ? merchantMap.get(tx.domainMerchantId) ?? tx.merchantName ?? null
-          : tx.merchantName ?? null,
-      currencyCode: tx.currencyCode,
-      ignored: tx.ignored,
     }
   })
 
@@ -382,18 +418,26 @@ export async function getDashboardTransactions(searchParams: URLSearchParams) {
   }
 }
 
-export async function getUserSettings() {
+export async function getUserSettings(searchParams?: URLSearchParams) {
   const setting = await prisma.userSetting.findFirst()
-  if (!setting) {
-    return {
-      monthlySalary: 0,
-      showFutureSalary: true,
-      showFutureAccounts: true,
+
+  const base = {
+    monthlySalary: setting ? Number(setting.monthlySalary) : 0,
+    showFutureSalary: setting ? setting.showFutureSalary : true,
+    showFutureAccounts: setting ? setting.showFutureAccounts : true,
+  }
+
+  if (searchParams) {
+    const showFutureSalary = searchParams.get("showFutureSalary")
+    if (showFutureSalary !== null) {
+      base.showFutureSalary = showFutureSalary === "true"
+    }
+
+    const showFutureAccounts = searchParams.get("showFutureAccounts")
+    if (showFutureAccounts !== null) {
+      base.showFutureAccounts = showFutureAccounts === "true"
     }
   }
-  return {
-    monthlySalary: Number(setting.monthlySalary),
-    showFutureSalary: setting.showFutureSalary,
-    showFutureAccounts: setting.showFutureAccounts,
-  }
+
+  return base
 }

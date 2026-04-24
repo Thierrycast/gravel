@@ -5,8 +5,7 @@ import {
   ArrowUpRight, 
   ArrowDownLeft, 
   Wallet, 
-  TrendingUp, 
-  Brain,
+  TrendingUp,
   Lightbulb,
   AlertTriangle
 } from "lucide-react"
@@ -19,7 +18,7 @@ import { PeriodSwitcher } from "@/components/period-switcher"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useApi } from "@/hooks/use-api"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useCurrency } from "@/lib/currency-context"
@@ -92,12 +91,23 @@ type OverviewDashboardData = {
 interface OverviewDashboardProps {
   initialData: OverviewDashboardData
 }
+
+type Nudge = {
+  type: "WARNING" | "INFO" | string
+  title: string
+  message: string
+}
+
+type InsightsResponse = {
+  nudges?: Nudge[]
+}
+
 export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
   const periodState = usePeriod()
   const { format } = useCurrency()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { data: insights } = useApi<any>("/api/insights")
+  const { data: insights } = useApi<InsightsResponse>("/api/insights")
   
   const [showSalary, setShowSalary] = useState(searchParams.get("showFutureSalary") !== "false")
   const [showFuture, setShowFuture] = useState(searchParams.get("showFutureAccounts") !== "false")
@@ -109,14 +119,15 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
   }
 
   const { overview, categories, netWorth, transactions, recurring } = initialData
+  const nudges = insights?.nudges ?? []
 
   return (
     <div className="flex flex-col gap-8 pb-12">
       
       {/* AI Nudges */}
-      {insights?.nudges?.length > 0 && (
+      {nudges.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {insights.nudges.map((nudge: any, i: number) => (
+          {nudges.map((nudge, i) => (
             <Alert key={i} className="bg-primary/5 border-primary/20 animate-in fade-in slide-in-from-top-4 duration-500">
                {nudge.type === "WARNING" ? <AlertTriangle className="size-4 text-red-500" /> : <Lightbulb className="size-4 text-amber-500" />}
                <AlertTitle className="text-xs font-bold uppercase tracking-wider">{nudge.title}</AlertTitle>
@@ -131,7 +142,7 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
       {/* Header & Period Switcher */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Painel financeiro</h1>
           <p className="text-sm text-muted-foreground">
             {periodState.label} • {new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
           </p>
@@ -167,6 +178,7 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
       </div>
 
       {/* Main Stats Grid */}
+      <p className="sr-only">Resultado do período</p>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
           label="Patrimônio Líquido"
@@ -201,7 +213,7 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
         <div className="surface flex flex-col gap-6 p-6 lg:col-span-2">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <TrendingUp className="size-4" /> Evolução do Patrimônio
+              <TrendingUp className="size-4" /> Patrimônio ao longo do tempo
             </h2>
           </div>
           <div className="h-[300px] w-full">

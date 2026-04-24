@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import { Suspense, useState, useMemo } from "react"
-import Link from "next/link"
+import { Suspense, useState, useMemo } from "react";
+import Link from "next/link";
 import {
   Plus,
   Pencil,
@@ -10,16 +10,13 @@ import {
   Tag,
   Zap,
   BarChart3,
-} from "lucide-react"
-import { PieChart, Pie, Cell } from "recharts"
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
+} from "lucide-react";
+import { PieChart, Pie, Cell } from "recharts";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -27,7 +24,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -35,113 +32,119 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
-} from "@/components/ui/chart"
-import { useApi } from "@/hooks/use-api"
-import { usePeriod } from "@/hooks/use-period"
-import { useCurrency } from "@/lib/currency-context"
-import { PageHeader } from "@/components/page-header"
-import { PeriodSwitcher } from "@/components/period-switcher"
-import { formatPercent } from "@/lib/format"
-import { getCategoryEmoji, getCategoryColor } from "@/lib/category-emoji"
+} from "@/components/ui/chart";
+import { useApi } from "@/hooks/use-api";
+import { usePeriod } from "@/hooks/use-period";
+import { useCurrency } from "@/lib/currency-context";
+import { PageHeader } from "@/components/page-header";
+import { PeriodSwitcher } from "@/components/period-switcher";
+import { formatPercent } from "@/lib/format";
+import { getCategoryEmoji, getCategoryColor } from "@/lib/category-emoji";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { useRouter, useSearchParams } from "next/navigation";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 interface SpendingCategory {
-  name: string
-  categoryId: string
-  amount: number
-  sharePercent: number
-  count: number
+  name: string;
+  categoryId: string;
+  amount: number;
+  sharePercent: number;
+  count: number;
 }
 
 interface SpendingResponse {
   summary: {
-    total: number
-    appliedFilters?: { from?: string; to?: string }
-  }
-  results: SpendingCategory[]
+    total: number;
+    appliedFilters?: { from?: string; to?: string };
+  };
+  results: SpendingCategory[];
 }
 
 interface DomainCategory {
-  id: string
-  slug: string
-  name: string
-  kind: string
-  color: string | null
+  id: string;
+  slug: string;
+  name: string;
+  kind: string;
+  color: string | null;
+  parentId: string | null;
 }
 
 interface DomainCategoriesResponse {
-  results: DomainCategory[]
+  results: DomainCategory[];
 }
 
+type DisplayCategory = SpendingCategory;
+
 interface TagItem {
-  id: string
-  name: string
-  color: string
-  createdAt: string
-  updatedAt: string
+  id: string;
+  name: string;
+  color: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface TagsResponse {
-  results: TagItem[]
+  results: TagItem[];
 }
 
 interface RuleCategory {
-  id: string
-  name: string
+  id: string;
+  name: string;
 }
 
 interface AutomationRule {
-  id: string
-  provider: string | null
-  matchType: string
-  matchField: string
-  matchValue: string
-  domainCategoryId: string | null
-  active: boolean
-  priority: number
-  category: RuleCategory | null
-  createdAt: string
-  updatedAt: string
+  id: string;
+  provider: string | null;
+  matchType: string;
+  matchField: string;
+  matchValue: string;
+  domainCategoryId: string | null;
+  active: boolean;
+  priority: number;
+  category: RuleCategory | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface AutomationsResponse {
-  results: AutomationRule[]
+  results: AutomationRule[];
 }
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-type TabKey = "categorias" | "tags" | "automacoes"
+type TabKey = "categorias" | "tags" | "automacoes";
 
 const MATCH_FIELD_LABELS: Record<string, string> = {
   description: "Descrição",
   merchantName: "Nome do Comerciante",
   merchantCnpj: "CNPJ",
   providerCategoryId: "Categoria do Provider",
-}
+};
 
 const MATCH_TYPE_LABELS: Record<string, string> = {
   EXACT: "Exato",
   CONTAINS: "Contém",
   PREFIX: "Prefixo",
   REGEX: "Regex",
-}
+};
 
 // ---------------------------------------------------------------------------
 // Loading skeleton
@@ -157,7 +160,7 @@ function LoadingSkeleton() {
         ))}
       </div>
     </div>
-  )
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -169,13 +172,13 @@ function CategoryBadge({
   index,
   size = "md",
 }: {
-  name: string
-  index?: number
-  size?: "sm" | "md"
+  name: string;
+  index?: number;
+  size?: "sm" | "md";
 }) {
-  const emoji = getCategoryEmoji(name)
-  const color = getCategoryColor(name, index)
-  const sizeClasses = size === "sm" ? "size-8 text-sm" : "size-10 text-lg"
+  const emoji = getCategoryEmoji(name);
+  const color = getCategoryColor(name, index);
+  const sizeClasses = size === "sm" ? "size-8 text-sm" : "size-10 text-lg";
 
   return (
     <div
@@ -184,7 +187,7 @@ function CategoryBadge({
     >
       <span>{emoji}</span>
     </div>
-  )
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -192,56 +195,56 @@ function CategoryBadge({
 // ---------------------------------------------------------------------------
 
 function TagsTab() {
-  const { data: tagsData, refetch } = useApi<TagsResponse>("/api/tags")
-  const tags = tagsData?.results ?? []
+  const { data: tagsData, refetch } = useApi<TagsResponse>("/api/tags");
+  const tags = tagsData?.results ?? [];
 
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [editingTag, setEditingTag] = useState<TagItem | null>(null)
-  const [tagName, setTagName] = useState("")
-  const [tagColor, setTagColor] = useState("#6366f1")
-  const [saving, setSaving] = useState(false)
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingTag, setEditingTag] = useState<TagItem | null>(null);
+  const [tagName, setTagName] = useState("");
+  const [tagColor, setTagColor] = useState("#6366f1");
+  const [saving, setSaving] = useState(false);
 
   function openCreate() {
-    setEditingTag(null)
-    setTagName("")
-    setTagColor("#6366f1")
-    setDialogOpen(true)
+    setEditingTag(null);
+    setTagName("");
+    setTagColor("#6366f1");
+    setDialogOpen(true);
   }
 
   function openEdit(tag: TagItem) {
-    setEditingTag(tag)
-    setTagName(tag.name)
-    setTagColor(tag.color)
-    setDialogOpen(true)
+    setEditingTag(tag);
+    setTagName(tag.name);
+    setTagColor(tag.color);
+    setDialogOpen(true);
   }
 
   async function handleSave() {
-    if (!tagName.trim()) return
-    setSaving(true)
+    if (!tagName.trim()) return;
+    setSaving(true);
     try {
       if (editingTag) {
         await fetch(`/api/tags/${editingTag.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: tagName.trim(), color: tagColor }),
-        })
+        });
       } else {
         await fetch("/api/tags", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: tagName.trim(), color: tagColor }),
-        })
+        });
       }
-      setDialogOpen(false)
-      refetch()
+      setDialogOpen(false);
+      refetch();
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function handleDelete(id: string) {
-    await fetch(`/api/tags/${id}`, { method: "DELETE" })
-    refetch()
+    await fetch(`/api/tags/${id}`, { method: "DELETE" });
+    refetch();
   }
 
   return (
@@ -352,7 +355,7 @@ function TagsTab() {
         </DialogContent>
       </Dialog>
     </>
-  )
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -361,45 +364,46 @@ function TagsTab() {
 
 function AutomacoesTab() {
   const { data: rulesData, refetch } =
-    useApi<AutomationsResponse>("/api/automations")
-  const { data: categoriesData } =
-    useApi<DomainCategoriesResponse>("/api/domain/categories")
+    useApi<AutomationsResponse>("/api/automations");
+  const { data: categoriesData } = useApi<DomainCategoriesResponse>(
+    "/api/domain/categories",
+  );
 
-  const rules = rulesData?.results ?? []
-  const domainCategories = categoriesData?.results ?? []
+  const rules = rulesData?.results ?? [];
+  const domainCategories = categoriesData?.results ?? [];
 
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [editingRule, setEditingRule] = useState<AutomationRule | null>(null)
-  const [matchField, setMatchField] = useState("description")
-  const [matchType, setMatchType] = useState("CONTAINS")
-  const [matchValue, setMatchValue] = useState("")
-  const [domainCategoryId, setDomainCategoryId] = useState("")
-  const [priority, setPriority] = useState(100)
-  const [saving, setSaving] = useState(false)
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<AutomationRule | null>(null);
+  const [matchField, setMatchField] = useState("description");
+  const [matchType, setMatchType] = useState("CONTAINS");
+  const [matchValue, setMatchValue] = useState("");
+  const [domainCategoryId, setDomainCategoryId] = useState("");
+  const [priority, setPriority] = useState(100);
+  const [saving, setSaving] = useState(false);
 
   function openCreate() {
-    setEditingRule(null)
-    setMatchField("description")
-    setMatchType("CONTAINS")
-    setMatchValue("")
-    setDomainCategoryId("")
-    setPriority(100)
-    setDialogOpen(true)
+    setEditingRule(null);
+    setMatchField("description");
+    setMatchType("CONTAINS");
+    setMatchValue("");
+    setDomainCategoryId("");
+    setPriority(100);
+    setDialogOpen(true);
   }
 
   function openEdit(rule: AutomationRule) {
-    setEditingRule(rule)
-    setMatchField(rule.matchField)
-    setMatchType(rule.matchType)
-    setMatchValue(rule.matchValue)
-    setDomainCategoryId(rule.domainCategoryId ?? "")
-    setPriority(rule.priority)
-    setDialogOpen(true)
+    setEditingRule(rule);
+    setMatchField(rule.matchField);
+    setMatchType(rule.matchType);
+    setMatchValue(rule.matchValue);
+    setDomainCategoryId(rule.domainCategoryId ?? "");
+    setPriority(rule.priority);
+    setDialogOpen(true);
   }
 
   async function handleSave() {
-    if (!matchValue.trim()) return
-    setSaving(true)
+    if (!matchValue.trim()) return;
+    setSaving(true);
     try {
       const payload = {
         matchField,
@@ -407,30 +411,30 @@ function AutomacoesTab() {
         matchValue: matchValue.trim(),
         domainCategoryId: domainCategoryId || null,
         priority,
-      }
+      };
       if (editingRule) {
         await fetch(`/api/automations/${editingRule.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
-        })
+        });
       } else {
         await fetch("/api/automations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
-        })
+        });
       }
-      setDialogOpen(false)
-      refetch()
+      setDialogOpen(false);
+      refetch();
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function handleDelete(id: string) {
-    await fetch(`/api/automations/${id}`, { method: "DELETE" })
-    refetch()
+    await fetch(`/api/automations/${id}`, { method: "DELETE" });
+    refetch();
   }
 
   async function handleToggleActive(rule: AutomationRule) {
@@ -438,8 +442,8 @@ function AutomacoesTab() {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ active: !rule.active }),
-    })
-    refetch()
+    });
+    refetch();
   }
 
   return (
@@ -498,7 +502,9 @@ function AutomacoesTab() {
                         <span className="text-muted-foreground">--</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-center">{rule.priority}</TableCell>
+                    <TableCell className="text-center">
+                      {rule.priority}
+                    </TableCell>
                     <TableCell className="text-center">
                       <button
                         onClick={() => handleToggleActive(rule)}
@@ -562,11 +568,15 @@ function AutomacoesTab() {
                 <option value="description">Descrição</option>
                 <option value="merchantName">Nome do Comerciante</option>
                 <option value="merchantCnpj">CNPJ</option>
-                <option value="providerCategoryId">Categoria do Provider</option>
+                <option value="providerCategoryId">
+                  Categoria do Provider
+                </option>
               </select>
             </div>
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium">Tipo de Correspondência</label>
+              <label className="text-sm font-medium">
+                Tipo de Correspondência
+              </label>
               <select
                 value={matchType}
                 onChange={(e) => setMatchType(e.target.value)}
@@ -629,7 +639,7 @@ function AutomacoesTab() {
         </DialogContent>
       </Dialog>
     </>
-  )
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -650,7 +660,7 @@ function CategoriesLoadingFallback() {
       <Skeleton className="h-10 w-full rounded-xl" />
       <Skeleton className="h-[420px] rounded-xl" />
     </div>
-  )
+  );
 }
 
 export default function CategoriesPage() {
@@ -658,53 +668,137 @@ export default function CategoriesPage() {
     <Suspense fallback={<CategoriesLoadingFallback />}>
       <CategoriesPageContent />
     </Suspense>
-  )
+  );
 }
 
 function CategoriesPageContent() {
-  const { format } = useCurrency()
-  const [activeTab, setActiveTab] = useState<TabKey>("categorias")
-  const period = usePeriod("mtd")
+  const { format } = useCurrency();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState<TabKey>("categorias");
+  const period = usePeriod("mtd");
 
-  const { data: spending, loading: spendingLoading } =
-    useApi<SpendingResponse>("/api/domain/metrics/spending/categories", {
+  const [showSalary, setShowSalary] = useState(
+    searchParams.get("showFutureSalary") !== "false",
+  );
+  const [showFuture, setShowFuture] = useState(
+    searchParams.get("showFutureAccounts") !== "false",
+  );
+  const [detailed, setDetailed] = useState(
+    searchParams.get("detailed") !== "false",
+  );
+
+  const updateParam = (key: string, value: boolean) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set(key, String(value));
+    router.push(`?${params.toString()}`, { scroll: false });
+  };
+
+  const { data: spending, loading: spendingLoading } = useApi<SpendingResponse>(
+    "/api/domain/metrics/spending/categories",
+    {
       ...period.params,
       limit: "30",
-    })
+    },
+  );
 
-  const loading = spendingLoading
+  // Fetch all categories for hierarchy
+  const { data: allCategoriesData } = useApi<DomainCategoriesResponse>("/api/domain/categories", {
+    pageSize: "500",
+  });
+
+  const loading = spendingLoading;
 
   const sortedCategories = useMemo(() => {
-    if (!spending?.results) return []
-    return [...spending.results].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
-  }, [spending])
+    if (!spending?.results) return [];
+    return [...spending.results].sort(
+      (a, b) => Math.abs(b.amount) - Math.abs(a.amount),
+    );
+  }, [spending]);
+
+  // Compute aggregated categories (roll up to parent)
+  const aggregatedCategories = useMemo(() => {
+    if (!spending?.results || !allCategoriesData?.results) return [];
+
+    const catParentMap = new Map<string, string | null>();
+    allCategoriesData.results.forEach((cat) => {
+      catParentMap.set(cat.id, cat.parentId);
+    });
+
+    const rootAmounts: Record<string, number> = {};
+    const rootCounts: Record<string, number> = {};
+
+    spending.results.forEach((item) => {
+      let rootId = item.categoryId;
+      let parentId = catParentMap.get(item.categoryId);
+      while (parentId) {
+        rootId = parentId;
+        parentId = catParentMap.get(rootId);
+      }
+      rootAmounts[rootId] = (rootAmounts[rootId] || 0) + item.amount;
+      rootCounts[rootId] = (rootCounts[rootId] || 0) + item.count;
+    });
+
+    const rootCats = allCategoriesData.results.filter(
+      (cat) => !cat.parentId && rootAmounts[cat.id] !== undefined,
+    );
+
+    const total = rootCats.reduce(
+      (sum, cat) => sum + rootAmounts[cat.id],
+      0,
+    );
+
+    const results = rootCats
+      .map((cat) => ({
+        categoryId: cat.id,
+        name: cat.name,
+        amount: rootAmounts[cat.id],
+        sharePercent: total > 0 ? (rootAmounts[cat.id] / total) * 100 : 0,
+        count: rootCounts[cat.id] || 0,
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
+    return results;
+  }, [spending, allCategoriesData]);
+
+  const displayCategories = useMemo(() => {
+    return detailed ? sortedCategories : aggregatedCategories;
+  }, [detailed, sortedCategories, aggregatedCategories]);
 
   const chartConfig = useMemo(() => {
-    const config: ChartConfig = {}
-    sortedCategories.forEach((cat, i) => {
+    const config: ChartConfig = {};
+    displayCategories.forEach((cat, i) => {
       config[cat.name] = {
         label: cat.name,
         color: getCategoryColor(cat.name, i),
-      }
-    })
-    return config
-  }, [sortedCategories])
+      };
+    });
+    return config;
+  }, [displayCategories]);
 
   const pieData = useMemo(() => {
-    return sortedCategories.map((cat, i) => ({
+    return displayCategories.map((cat, i) => ({
       name: cat.name,
       value: Math.abs(cat.amount),
       fill: getCategoryColor(cat.name, i),
-    }))
-  }, [sortedCategories])
+    }));
+  }, [displayCategories]);
 
-  const totalSpending = spending?.summary?.total ?? 0
+  const totalSpending = spending?.summary?.total ?? 0;
 
   const tabs: { key: TabKey; label: string; icon: React.ReactNode }[] = [
-    { key: "categorias", label: "Categorias", icon: <BarChart3 className="size-4" /> },
+    {
+      key: "categorias",
+      label: "Categorias",
+      icon: <BarChart3 className="size-4" />,
+    },
     { key: "tags", label: "Tags", icon: <Tag className="size-4" /> },
-    { key: "automacoes", label: "Automações", icon: <Zap className="size-4" /> },
-  ]
+    {
+      key: "automacoes",
+      label: "Automações",
+      icon: <Zap className="size-4" />,
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-6">
@@ -712,7 +806,63 @@ function CategoriesPageContent() {
         eyebrow="Categorias"
         title="Categorias e regras"
         description="Acompanhe onde o dinheiro saiu no período e mantenha tags e automações em ordem."
-        actions={activeTab === "categorias" ? <PeriodSwitcher state={period} /> : null}
+        actions={
+          activeTab === "categorias" ? (
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-4 border-r pr-6 border-border/60">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="show-salary"
+                    checked={showSalary}
+                    onCheckedChange={(val) => {
+                      setShowSalary(val);
+                      updateParam("showFutureSalary", val);
+                    }}
+                  />
+                  <Label
+                    htmlFor="show-salary"
+                    className="text-xs font-medium cursor-pointer"
+                  >
+                    Salários
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="show-future"
+                    checked={showFuture}
+                    onCheckedChange={(val) => {
+                      setShowFuture(val);
+                      updateParam("showFutureAccounts", val);
+                    }}
+                  />
+                  <Label
+                    htmlFor="show-future"
+                    className="text-xs font-medium cursor-pointer"
+                  >
+                    Parcelas
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="detailed"
+                    checked={detailed}
+                    onCheckedChange={(val) => {
+                      setDetailed(val);
+                      updateParam("detailed", val);
+                    }}
+                  />
+                  <Label
+                    htmlFor="detailed"
+                    className="text-xs font-medium cursor-pointer"
+                  >
+                    Subcategorias
+                  </Label>
+                </div>
+              </div>
+              <PeriodSwitcher state={period} />
+            </div>
+          ) : null
+        }
       />
 
       {/* Tab navigation */}
@@ -745,7 +895,12 @@ function CategoriesPageContent() {
                 <CardContent className="flex flex-col items-center gap-5 p-5 sm:flex-row sm:justify-between">
                   <div className="flex flex-col items-center gap-1 sm:items-start">
                     <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                      Gasto {period.period === "mtd" ? "neste mês" : period.period === "ytd" ? "neste ano" : `em ${period.label.toLowerCase()}`}
+                      Gasto{" "}
+                      {period.period === "mtd"
+                        ? "neste mês"
+                        : period.period === "ytd"
+                          ? "neste ano"
+                          : `em ${period.label.toLowerCase()}`}
                     </p>
                     <p className="text-4xl font-bold tabular-nums tracking-tight">
                       {format(totalSpending)}
@@ -761,9 +916,7 @@ function CategoriesPageContent() {
                         <ChartTooltip
                           content={
                             <ChartTooltipContent
-                              formatter={(value) =>
-                                format(value as number)
-                              }
+                              formatter={(value) => format(value as number)}
                             />
                           }
                         />
@@ -790,11 +943,12 @@ function CategoriesPageContent() {
 
               {/* Info banner */}
               <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-                Clique numa categoria para abrir a lista de transações já filtrada.
+                Clique numa categoria para abrir a lista de transações já
+                filtrada.
               </div>
 
               {/* Category list */}
-              {sortedCategories.length === 0 ? (
+              {displayCategories.length === 0 ? (
                 <Card>
                   <CardContent className="flex flex-col items-center justify-center py-12">
                     <BarChart3 className="mb-3 size-10 text-muted-foreground" />
@@ -811,16 +965,20 @@ function CategoriesPageContent() {
                     <span>Categoria</span>
                     <span className="hidden text-right sm:block">Saldo</span>
                     <span className="text-right">%</span>
-                    <span className="hidden text-right sm:block">Transações</span>
+                    <span className="hidden text-right sm:block">
+                      Transações
+                    </span>
                   </div>
 
                   {/* Category rows */}
-                  {sortedCategories.map((cat, i) => {
-                    const color = getCategoryColor(cat.name, i)
+                  {displayCategories.map((cat: DisplayCategory, i: number) => {
+                    const color = getCategoryColor(cat.name, i);
                     const barPercent = Math.min(
-                      (Math.abs(cat.amount) / Math.abs(sortedCategories[0].amount)) * 100,
-                      100
-                    )
+                      (Math.abs(cat.amount) /
+                        Math.abs(displayCategories[0]?.amount || 1)) *
+                        100,
+                      100,
+                    );
 
                     return (
                       <Link
@@ -860,11 +1018,12 @@ function CategoriesPageContent() {
                         {/* Transaction count */}
                         <div className="hidden text-right sm:block">
                           <Badge variant="secondary" className="text-xs">
-                            {cat.count} {cat.count === 1 ? "transação" : "transações"}
+                            {cat.count}{" "}
+                            {cat.count === 1 ? "transação" : "transações"}
                           </Badge>
                         </div>
                       </Link>
-                    )
+                    );
                   })}
                 </div>
               )}
@@ -876,5 +1035,5 @@ function CategoriesPageContent() {
       {activeTab === "tags" && <TagsTab />}
       {activeTab === "automacoes" && <AutomacoesTab />}
     </div>
-  )
+  );
 }

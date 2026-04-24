@@ -2,16 +2,14 @@
 
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { 
-  Settings2, 
-  RefreshCw, 
-  DollarSign, 
-  LayoutDashboard, 
-  Calendar,
+import {
+  RefreshCw,
+  DollarSign,
+  LayoutDashboard,
   Save,
   Loader2,
   Shield,
-  Lock
+  Palette
 } from "lucide-react"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -20,12 +18,24 @@ import { Switch } from "@/components/ui/switch"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { ThemePicker } from "@/components/theme-picker"
 import { useApi } from "@/hooks/use-api"
 
+type SettingsFormData = {
+  monthlySalary: number
+  showFutureSalary: boolean
+  showFutureAccounts: boolean
+  syncIntervalHours: number
+  syncLookbackDays: number
+  vaultEnabled: boolean
+  vaultMasterPassword: string
+  vaultInactivityMin: number
+}
+
 export default function SettingsPage() {
-  const { data: settings, loading, refetch } = useApi<any>("/api/settings")
+  const { data: settings, loading, refetch } = useApi<SettingsFormData>("/api/settings")
   const [saving, setSaving] = useState(false)
-  const [formData, setFormData] = useState<any>({
+  const [formData, setFormData] = useState<SettingsFormData>({
     monthlySalary: 0,
     showFutureSalary: false,
     showFutureAccounts: true,
@@ -62,7 +72,7 @@ export default function SettingsPage() {
       if (!res.ok) throw new Error("Falha ao salvar")
       toast.success("Configurações salvas com sucesso!")
       refetch()
-    } catch (error) {
+    } catch {
       toast.error("Erro ao salvar configurações")
     } finally {
       setSaving(false)
@@ -130,6 +140,22 @@ export default function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+        {/* Appearance */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Palette className="size-5 text-primary" />
+              <CardTitle>Aparência</CardTitle>
+            </div>
+            <CardDescription>
+              Escolha a personalidade visual do painel. Cada tema tem tipografia e cantos próprios, e cada um suporta modo claro e escuro. Use o botão no cabeçalho para alternar claro/escuro.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ThemePicker />
+          </CardContent>
+        </Card>
+
         {/* Sync Engine */}
         <Card>
           <CardHeader>

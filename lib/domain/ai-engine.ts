@@ -1,11 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { getOverviewMetrics } from "./analytics";
-import { getUsdBrlRate } from "@/lib/exchange-rate";
 
 export async function getBehavioralNudges() {
-  const [overview, usdBrl, transactions] = await Promise.all([
+  const [overview, transactions] = await Promise.all([
     getOverviewMetrics(),
-    getUsdBrlRate(),
     prisma.domainTransaction.findMany({
       where: { direction: "OUTFLOW" },
       orderBy: { occurredAt: "desc" },

@@ -74,6 +74,7 @@ model DomainAccount {
   sourceParentId   String?
   ownerName        String?
   institutionName  String?
+  nickname         String?
   imageUrl         String?
   metadataJson     String?
   createdAt        DateTime          @default(now())
@@ -113,6 +114,10 @@ model DomainTransaction {
   domainMerchantId      String?
   domainCategoryId      String?
   providerCategoryId    String?
+  installmentGroupId    String?
+  installmentNumber     Int?
+  installmentTotal      Int?
+  merchantLogoUrl       String?
   merchantName          String?
   merchantCnpj          String?
   ignored               Boolean                    @default(false)
@@ -127,12 +132,72 @@ model DomainTransaction {
   @@unique([sourceProvider, sourceExternalId])
   @@index([domainMerchantId, occurredAt])
   @@index([domainCategoryId, occurredAt])
+  @@index([installmentGroupId, occurredAt])
   @@index([domainAccountId, occurredAt])
   @@index([ignored, occurredAt, createdAt])
   @@index([direction, ignored, occurredAt, amount])
   @@index([direction, ignored, occurredAt, domainCategoryId, amount])
   @@index([direction, ignored, domainCategoryId, occurredAt, amount])
   @@index([occurredAt])
+}
+
+model MerchantEnrichment {
+  id                String   @id @default(cuid())
+  domainMerchantId  String   @unique
+  domain            String?
+  logoUrl           String?
+  normalizedName    String?
+  description       String?
+  socialsJson       String?
+  source            String   @default("logo.dev")
+  status            String   @default("PENDING")
+  lastResolvedAt    DateTime?
+  lastDescribedAt   DateTime?
+  expiresAt         DateTime?
+  errorMessage      String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([status, expiresAt])
+  @@index([domain])
+}
+
+model TransactionEnrichment {
+  id                  String   @id @default(cuid())
+  domainTransactionId String   @unique
+  pluggyCategory      String?
+  pluggyCategoryId    String?
+  merchantName        String?
+  merchantBusinessName String?
+  merchantCnpj        String?
+  status              String   @default("PENDING")
+  version             String   @default("pluggy-categorize-v1")
+  lastEnrichedAt      DateTime?
+  payloadJson         String?
+  errorJson           String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([status, lastEnrichedAt])
+}
+
+model TransactionInstallmentGroup {
+  id                String   @id @default(cuid())
+  merchantKey       String?
+  descriptionKey    String?
+  accountId         String?
+  categoryId        String?
+  amount            Decimal
+  totalInstallments Int
+  firstDate         DateTime
+  lastDate          DateTime
+  confidence        Decimal
+  source            String   @default("detected")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([merchantKey, descriptionKey, accountId])
+  @@index([firstDate, lastDate])
 }
 
 model DomainTransactionSource {
@@ -148,19 +213,23 @@ model DomainTransactionSource {
 }
 
 model DomainCategory {
-  id               String             @id @default(cuid())
-  slug             String             @unique
-  name             String
-  kind             DomainCategoryKind @default(OTHER)
-  color            String?
-  sourceProvider   SourceProvider?
-  sourceExternalId String?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-  transactions     DomainTransaction[]
+  id                 String             @id @default(cuid())
+  slug               String             @unique
+  name               String
+  kind               DomainCategoryKind @default(OTHER)
+  color              String?
+  sourceProvider     SourceProvider?
+  sourceExternalId   String?
+  parentId           String?
+  parent             DomainCategory?    @relation("CategoryTree", fields: [parentId], references: [id])
+  children           DomainCategory[]   @relation("CategoryTree")
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  transactions       DomainTransaction[]
 
 
   @@unique([sourceProvider, sourceExternalId])
+  @@index([parentId])
 }
 
 model DomainMerchant {

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { RefreshCw, CheckCircle2, AlertCircle, Clock } from "lucide-react"
+import { RefreshCw, CheckCircle2, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface SyncState {

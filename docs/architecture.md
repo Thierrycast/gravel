@@ -6,7 +6,7 @@ Gravel Finance e uma aplicacao local-first: todos os dados financeiros sao sincr
 
 ```
 Pluggy ──┐
-          ├── Ingestao ── Provider Records ── Projecao ── Domain Read Models ── Metricas ── UI
+          ├── Ingestao ── Provider Records ── Enrichment ── Projecao ── Domain Read Models ── Metricas ── UI
 Binance ─┘
 ```
 
@@ -22,6 +22,8 @@ Orquestracao de sync: adquire locks, chama integracoes, persiste snapshots e rec
 - `queries.ts` - consultas aos read models com paginacao e filtros
 - `analytics.ts` - calculos de metricas (overview, cash-flow, net-worth, spending, crypto, scenarios)
 - `derived.ts` - deteccao de recorrencias, projecao de saldo, portfolio consolidado
+- `installments.ts` - detector central de parcelamento explicito e por similaridade conservadora
+- `enrichment/*` - normalizacao, Pluggy Categorize, Logo.dev e helpers raw/enriched/effective
 - `ai-engine.ts` - insights comportamentais e custo de oportunidade
 - `forensics.ts` - analise estatistica (Benford's Law) e deteccao de assinaturas ocultas
 - `crypto-math.ts` - custo medio movel e PnL de cripto
@@ -51,8 +53,41 @@ Dados normalizados do provedor. Insert-only (nao sobrescreve enriquecimentos int
 ### Domain Read Models
 Dados projetados e enriquecidos para consumo da aplicacao. Upsert controlado.
 - `DomainAccount`, `DomainTransaction`, `DomainBill`, `DomainInvestment`, `DomainCryptoAsset`, `DomainCategory`, `DomainMerchant`, `DomainRecurringRule`
+- `TransactionEnrichment` - cache do Pluggy Enrichment/Categorize por transacao de dominio
+- `MerchantEnrichment` - cache server-side de dominio/logo/describe do Logo.dev por merchant de dominio
+- `TransactionInstallmentGroup` - agrupamento logico de compras parceladas, mantendo cada parcela como transacao propria
 - `DomainLend` - registro de dívidas de terceiros/amigos
 - `DomainScenarioEvent` - eventos hipotéticos para simulações
+
+## Raw, Enriched e Effective
+
+Transacoes preservam a descricao/categoria/merchant originais do provedor nos records Pluggy. A projecao de dominio aplica a ordem:
+
+1. override do usuario ou regra local (`CategoryRule`, `MerchantAliasRule`)
+2. dado Pluggy original
+3. `TransactionEnrichment` quando o Pluggy Categorize retornar categoria/merchant complementar
+4. fallback `Nao categorizado`
+
+As APIs de leitura expõem campos de display ja resolvidos (`displayTitle`, `displaySubtitle`, `effectiveCategory`, `effectiveMerchant`, `merchantLogoUrl`) para evitar regra duplicada no client.
+
+## Enrichment e Logos
+
+Pluggy Categorize roda somente no backend usando a API key Pluggy cacheada. Lotes sao processados por tipo de conta, resultados recentes `SUCCESS`/`UNMATCHED` e erros recentes nao sao reenviados agressivamente, e uma rodada bem-sucedida reprojeta os read models Pluggy. Logo.dev usa `LOGO_DEV_SECRET_KEY` apenas em chamadas server-side de Describe e entrega para UI somente URLs CDN com `LOGO_DEV_PUBLISHABLE_KEY`.
+
+Agregados financeiros nao misturam moedas silenciosamente. Totais fiat sao calculados em BRL; cripto e valores USD sao convertidos explicitamente ou exibidos separados por moeda nas telas de investimento.
+
+Comandos admin protegidos:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/enrichment/pluggy/run \
+  -H 'X-INTERNAL-API-KEY: ...'
+
+curl -X POST http://localhost:3000/api/admin/enrichment/logo/run \
+  -H 'X-INTERNAL-API-KEY: ...'
+
+curl -X POST http://localhost:3000/api/admin/domain/rebuild-installments \
+  -H 'X-INTERNAL-API-KEY: ...'
+```
 
 ### Dados da Aplicacao
 Criados diretamente pela UI, sem dependencia de provedores.

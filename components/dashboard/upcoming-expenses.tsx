@@ -1,7 +1,6 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle, CardAction, CardDescription } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { daysUntilLabel } from "@/lib/format"
 import { useCurrency } from "@/lib/currency-context"
