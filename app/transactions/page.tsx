@@ -580,12 +580,12 @@ function TransactionsContent() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="border-border">
-                  <TableHead className="font-mono text-xs tracking-widest text-muted-foreground uppercase whitespace-nowrap">Data</TableHead>
-                  <TableHead className="font-mono text-xs tracking-widest text-muted-foreground uppercase">Descrição</TableHead>
-                  <TableHead className="hidden md:table-cell font-mono text-xs tracking-widest text-muted-foreground uppercase">Conta</TableHead>
-                  <TableHead className="hidden sm:table-cell font-mono text-xs tracking-widest text-muted-foreground uppercase">Categoria</TableHead>
-                  <TableHead className="text-right font-mono text-xs tracking-widest text-muted-foreground uppercase">Valor</TableHead>
+                <TableRow className="border-border hover:bg-transparent">
+                  <TableHead className="font-mono text-sm tracking-wider text-muted-foreground uppercase whitespace-nowrap py-4">Data</TableHead>
+                  <TableHead className="font-mono text-sm tracking-wider text-muted-foreground uppercase py-4">Descrição</TableHead>
+                  <TableHead className="hidden md:table-cell font-mono text-sm tracking-wider text-muted-foreground uppercase py-4">Conta</TableHead>
+                  <TableHead className="hidden sm:table-cell font-mono text-sm tracking-wider text-muted-foreground uppercase py-4">Categoria</TableHead>
+                  <TableHead className="text-right font-mono text-sm tracking-wider text-muted-foreground uppercase py-4">Valor</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -598,17 +598,17 @@ function TransactionsContent() {
                   return (
                     <TableRow
                       key={transaction.id}
-                      className="cursor-pointer border-border hover:bg-muted/40"
+                      className="group cursor-pointer border-border hover:bg-muted/40 transition-colors"
                       onClick={() => openTransaction(transaction)}
                     >
-                      <TableCell className="whitespace-nowrap font-mono text-sm text-muted-foreground py-2">
+                      <TableCell className="whitespace-nowrap font-mono text-sm text-muted-foreground/80 py-4">
                         {formatDate(transaction.date)}
                       </TableCell>
-                      <TableCell className="py-2">
-                        <div className="flex min-w-0 items-center gap-2">
+                      <TableCell className="py-4">
+                        <div className="flex min-w-0 items-center gap-3">
                           <span
                             className={cn(
-                              "shrink-0 font-mono text-xs font-bold",
+                              "shrink-0 font-mono text-base font-black",
                               transaction.direction === "INFLOW"
                                 ? "text-emerald-400"
                                 : "text-rose-500"
@@ -617,13 +617,13 @@ function TransactionsContent() {
                             {transaction.direction === "INFLOW" ? "+" : "−"}
                           </span>
                           <div className="min-w-0">
-                            <p className="truncate text-sm flex items-center gap-2">
+                            <p className="truncate text-base font-semibold tracking-tight text-foreground/90 flex items-center gap-2">
                               {transaction.description}
                               {(() => {
                                 const match = transaction.description?.match(/(\d+)\/(\d+)/)
                                 if (match) {
                                   return (
-                                    <Badge variant="outline" className="h-4 px-1 text-xs font-mono border-muted-foreground/30 text-muted-foreground">
+                                    <Badge variant="outline" className="h-5 px-1.5 text-xs font-mono border-muted-foreground/30 text-muted-foreground">
                                       {match[0]}
                                     </Badge>
                                   )
@@ -633,40 +633,40 @@ function TransactionsContent() {
                             </p>
                             {transaction.merchantName &&
                             transaction.merchantName !== transaction.description ? (
-                              <p className="truncate text-sm text-muted-foreground">
+                              <p className="truncate text-sm font-medium text-muted-foreground/70">
                                 {transaction.merchantName}
                               </p>
                             ) : null}
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="hidden md:table-cell py-2">
-                        <div className="flex items-center gap-2">
+                      <TableCell className="hidden md:table-cell py-4">
+                        <div className="flex items-center gap-3">
                           {transaction.accountImageUrl ? (
-                            <div className="shrink-0 size-6 rounded-md border border-border/40 bg-muted/30 p-0.5 flex items-center justify-center overflow-hidden">
+                            <div className="shrink-0 size-7 rounded-lg border border-border/40 bg-muted/30 p-1 flex items-center justify-center overflow-hidden shadow-sm">
                               <img src={transaction.accountImageUrl} alt={transaction.accountName} className="size-full object-contain" />
                             </div>
                           ) : (
-                            <div className="shrink-0 size-6 rounded-md border border-border/40 bg-muted/50 flex items-center justify-center">
-                              <span className="text-[8px] font-mono text-muted-foreground uppercase">{transaction.accountName.slice(0, 2)}</span>
+                            <div className="shrink-0 size-7 rounded-lg border border-border/40 bg-muted/50 flex items-center justify-center shadow-sm">
+                              <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase">{transaction.accountName.slice(0, 2)}</span>
                             </div>
                           )}
-                          <span className="text-sm text-muted-foreground font-mono truncate max-w-[120px]">
+                          <span className="text-sm font-semibold text-muted-foreground/80 font-mono truncate max-w-[140px]">
                             {transaction.accountName || "—"}
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell className="hidden sm:table-cell py-2">
-                        <Badge variant="outline" className="gap-1 font-mono text-xs border-border text-muted-foreground">
-                          <span aria-hidden>{getCategoryEmoji(transaction.categoryName)}</span>
-                          <span className="max-w-[140px] truncate">
+                      <TableCell className="hidden sm:table-cell py-4">
+                        <Badge variant="outline" className="gap-1.5 py-1 px-2.5 font-mono text-sm border-border bg-muted/20 text-muted-foreground/80">
+                          <span aria-hidden className="text-base">{getCategoryEmoji(transaction.categoryName)}</span>
+                          <span className="max-w-[140px] truncate font-medium">
                             {transaction.categoryName}
                           </span>
                         </Badge>
                       </TableCell>
                       <TableCell
                         className={cn(
-                          "text-right font-mono text-sm tabular-nums py-2",
+                          "text-right font-mono text-base font-bold tabular-nums py-4",
                           amountToneClass(signedAmount)
                         )}
                       >

@@ -113,7 +113,7 @@ export function NetWorthChart({ history, period }: NetWorthChartProps) {
         />
         <Area
           dataKey="netWorth"
-          type="monotone"
+          type="linear"
           fill="url(#netWorthGradient)"
           stroke="var(--color-netWorth)"
           strokeWidth={2}
@@ -122,7 +122,7 @@ export function NetWorthChart({ history, period }: NetWorthChartProps) {
         {filteredData.some(d => d.scenarioNetWorth != null) && (
           <Line
             dataKey="scenarioNetWorth"
-            type="monotone"
+            type="linear"
             stroke="var(--color-scenarioNetWorth)"
             strokeWidth={2}
             strokeDasharray="5 5"
@@ -133,7 +133,7 @@ export function NetWorthChart({ history, period }: NetWorthChartProps) {
         {hasAssetValuation && (
           <>
             <Line
-              type="monotone"
+              type="linear"
               dataKey="assets"
               stroke="var(--color-assets)"
               strokeWidth={1.75}
@@ -142,7 +142,7 @@ export function NetWorthChart({ history, period }: NetWorthChartProps) {
               isAnimationActive={false}
             />
             <Line
-              type="monotone"
+              type="linear"
               dataKey="liabilities"
               stroke="var(--color-liabilities)"
               strokeWidth={1.75}
