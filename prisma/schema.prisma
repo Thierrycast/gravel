@@ -77,6 +77,9 @@ model DomainAccount {
   metadataJson     String?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
+  transactions     DomainTransaction[]
+  bills            DomainBill[]
+
 
   @@unique([sourceProvider, sourceExternalId])
   @@index([kind, updatedAt])
@@ -115,11 +118,17 @@ model DomainTransaction {
   metadataJson          String?
   createdAt             DateTime                   @default(now())
   updatedAt             DateTime                   @updatedAt
+  domainAccount         DomainAccount?             @relation(fields: [domainAccountId], references: [id])
+  domainCategory        DomainCategory?            @relation(fields: [domainCategoryId], references: [id])
+  domainMerchant         DomainMerchant?            @relation(fields: [domainMerchantId], references: [id])
+
 
   @@unique([sourceProvider, sourceExternalId])
   @@index([domainMerchantId, occurredAt])
   @@index([domainCategoryId, occurredAt])
   @@index([domainAccountId, occurredAt])
+  @@index([occurredAt, amount])
+  @@index([direction, occurredAt, amount])
   @@index([occurredAt])
 }
 
@@ -145,6 +154,8 @@ model DomainCategory {
   sourceExternalId String?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
+  transactions     DomainTransaction[]
+
 
   @@unique([sourceProvider, sourceExternalId])
 }
@@ -156,6 +167,8 @@ model DomainMerchant {
   cnpj           String?  @unique
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  transactions   DomainTransaction[]
+
 }
 
 model DomainMerchantSource {
@@ -186,6 +199,8 @@ model DomainBill {
   metadataJson         String?
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
+  domainAccount        DomainAccount? @relation(fields: [domainAccountId], references: [id])
+
 
   @@unique([sourceProvider, sourceExternalId])
   @@index([dueDate])
@@ -298,6 +313,44 @@ model PortfolioSnapshot {
   netWorth  Decimal
   createdAt DateTime @default(now())
 }
+
+model DomainCryptoPosition {
+  id            String   @id @default(cuid())
+  asset         String   @unique
+  quantity      Decimal
+  costBasis     Decimal
+  averagePrice  Decimal
+  pnlUnrealized Decimal?
+  lastUpdatedAt DateTime @updatedAt
+  createdAt     DateTime @default(now())
+}
+
+model DomainBalanceAnchor {
+  id                String   @id @default(cuid())
+  domainAccountId   String
+  year              Int
+  month             Int
+  balance           Decimal
+  transactionsCount Int      @default(0)
+  updatedAt         DateTime @updatedAt
+  createdAt         DateTime @default(now())
+
+  @@unique([domainAccountId, year, month])
+  @@index([domainAccountId, year, month])
+}
+
+model MacroSeriesPoint {
+  id        String   @id @default(cuid())
+  series    String   // e.g. "CDI", "IPCA"
+  date      DateTime
+  value     Decimal
+  createdAt DateTime @default(now())
+
+  @@unique([series, date])
+  @@index([series, date])
+}
+
+
 
 model BalanceProjection {
   id               String   @id @default(cuid())
