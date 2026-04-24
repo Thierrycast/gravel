@@ -1,38 +1,41 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { Plus, Building2, CreditCard } from "lucide-react"
-import { useApi } from "@/hooks/use-api"
-import { formatPercent } from "@/lib/format"
-import { useCurrency } from "@/lib/currency-context"
-import { Button } from "@/components/ui/button"
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { Plus, Building2, CreditCard, Pencil } from "lucide-react";
+import { useApi } from "@/hooks/use-api";
+import { usePeriod } from "@/hooks/use-period";
+import { formatPercent } from "@/lib/format";
+import { useCurrency } from "@/lib/currency-context";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
   CardDescription,
-} from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Progress } from "@/components/ui/progress"
-import { Separator } from "@/components/ui/separator"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { PageError } from "@/components/page-error"
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { PageError } from "@/components/page-error";
+import { PeriodSwitcher } from "@/components/period-switcher";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
   SheetDescription,
-} from "@/components/ui/sheet"
+} from "@/components/ui/sheet";
 
 import {
   type Account,
   type AccountsResponse,
   type AllocationResponse,
-} from "@/lib/types/api"
+} from "@/lib/types/api";
 
 function getInitials(name: string): string {
   return name
@@ -40,7 +43,7 @@ function getInitials(name: string): string {
     .map((w) => w[0])
     .slice(0, 2)
     .join("")
-    .toUpperCase()
+    .toUpperCase();
 }
 
 function getTypeLabel(kind: string): string {
@@ -51,8 +54,8 @@ function getTypeLabel(kind: string): string {
     SAVINGS: "Poupança",
     CHECKING: "Conta Corrente",
     INVESTMENT: "Investimento",
-  }
-  return labels[kind] || kind
+  };
+  return labels[kind] || kind;
 }
 
 function AccountCardSkeleton() {
@@ -71,47 +74,70 @@ function AccountCardSkeleton() {
         <Skeleton className="h-6 w-28" />
       </CardContent>
     </Card>
-  )
+  );
 }
 
 export default function AccountsPage() {
-  const { format } = useCurrency()
-  const { data: accountsData, loading: accountsLoading, error: accountsError, refetch: refetchAccounts } =
-    useApi<AccountsResponse>("/api/domain/accounts")
-  const { data: allocationData, loading: allocationLoading, error: allocationError, refetch: refetchAllocation } =
-    useApi<AllocationResponse>("/api/domain/metrics/accounts/allocation")
+  const { format } = useCurrency();
+  const period = usePeriod("mtd");
+  const {
+    data: accountsData,
+    loading: accountsLoading,
+    error: accountsError,
+    refetch: refetchAccounts,
+  } = useApi<AccountsResponse>("/api/domain/accounts");
+  const {
+    data: allocationData,
+    loading: allocationLoading,
+    error: allocationError,
+    refetch: refetchAllocation,
+  } = useApi<AllocationResponse>("/api/domain/metrics/accounts/allocation");
 
-  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
-  const [sheetOpen, setSheetOpen] = useState(false)
+  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [editingNickname, setEditingNickname] = useState(false);
+  const [nicknameInput, setNicknameInput] = useState("");
+  const [savingNickname, setSavingNickname] = useState(false);
 
-  const loading = accountsLoading || allocationLoading
+  const loading = accountsLoading || allocationLoading;
+
+  // Reset nickname editing state when account changes
+  useEffect(() => {
+    if (selectedAccount) {
+      setNicknameInput(selectedAccount.nickname || selectedAccount.name || "");
+    }
+  }, [selectedAccount]);
 
   if (accountsError || allocationError) {
     return (
       <PageError
         message="Erro ao carregar contas e saldos"
         refetch={() => {
-          refetchAccounts()
-          refetchAllocation()
+          refetchAccounts();
+          refetchAllocation();
         }}
       />
-    )
+    );
   }
 
-  const accounts = accountsData?.results ?? []
-  const creditAccounts = accounts.filter((a) => a.kind === "CARD" || a.kind === "CREDIT")
-  const bankAccounts = accounts.filter((a) => a.kind !== "CARD" && a.kind !== "CREDIT")
+  const accounts = accountsData?.results ?? [];
+  const creditAccounts = accounts.filter(
+    (a) => a.kind === "CARD" || a.kind === "CREDIT",
+  );
+  const bankAccounts = accounts.filter(
+    (a) => a.kind !== "CARD" && a.kind !== "CREDIT",
+  );
 
-  const totalCredit = allocationData?.summary.byKind.CREDIT ?? 0
-  const totalBank = allocationData?.summary.byKind.BANK ?? 0
+  const totalCredit = allocationData?.summary.byKind.CREDIT ?? 0;
+  const totalBank = allocationData?.summary.byKind.BANK ?? 0;
 
   const allocationMap = new Map(
-    (allocationData?.results ?? []).map((r) => [r.accountId, r])
-  )
+    (allocationData?.results ?? []).map((r) => [r.accountId, r]),
+  );
 
   function handleAccountClick(account: Account) {
-    setSelectedAccount(account)
-    setSheetOpen(true)
+    setSelectedAccount(account);
+    setSheetOpen(true);
   }
 
   return (
@@ -119,7 +145,9 @@ export default function AccountsPage() {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Contas</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            Contas
+          </h1>
           <p className="text-muted-foreground">
             Bancos, carteiras e saldos atuais
           </p>
@@ -130,6 +158,11 @@ export default function AccountsPage() {
             Adicionar Conta
           </Link>
         </Button>
+      </div>
+
+      {/* Period Selector */}
+      <div className="flex justify-end">
+        <PeriodSwitcher state={period} />
       </div>
 
       {/* Summary Cards */}
@@ -160,7 +193,9 @@ export default function AccountsPage() {
           <Card>
             <CardHeader>
               <CardDescription>Dívida em Cartões</CardDescription>
-              <CardTitle className={`text-2xl font-mono ${totalCredit > 0 ? "text-destructive" : "text-emerald-400"}`}>
+              <CardTitle
+                className={`text-2xl font-mono ${totalCredit > 0 ? "text-destructive" : "text-emerald-400"}`}
+              >
                 {format(totalCredit)}
               </CardTitle>
             </CardHeader>
@@ -198,7 +233,7 @@ export default function AccountsPage() {
                   <AccountCardSkeleton key={i} />
                 ))
               : creditAccounts.map((account) => {
-                  const allocation = allocationMap.get(account.id)
+                  const allocation = allocationMap.get(account.id);
                   return (
                     <Card
                       key={account.id}
@@ -232,7 +267,9 @@ export default function AccountsPage() {
                             <span className="text-muted-foreground">
                               Fatura Atual
                             </span>
-                            <span className={`font-semibold ${account.balance > 0 ? "text-destructive" : "text-emerald-400"}`}>
+                            <span
+                              className={`font-semibold ${account.balance > 0 ? "text-destructive" : "text-emerald-400"}`}
+                            >
                               {format(Math.abs(account.balance))}
                             </span>
                           </div>
@@ -251,13 +288,18 @@ export default function AccountsPage() {
                         </div>
                       </CardContent>
                     </Card>
-                  )
+                  );
                 })}
           </div>
 
           {!loading && creditAccounts.length > 0 && (
             <div className="mt-3 text-right text-sm text-muted-foreground">
-              Total: <span className={`font-medium ${totalCredit > 0 ? "text-destructive" : "text-emerald-400"}`}>{format(totalCredit)}</span>
+              Total:{" "}
+              <span
+                className={`font-medium ${totalCredit > 0 ? "text-destructive" : "text-emerald-400"}`}
+              >
+                {format(totalCredit)}
+              </span>
             </div>
           )}
         </div>
@@ -268,9 +310,7 @@ export default function AccountsPage() {
         <div className="flex items-center gap-2 mb-4">
           <Building2 className="size-5 text-muted-foreground" />
           <h2 className="text-xl font-semibold">Contas Bancárias</h2>
-          {!loading && (
-            <Badge variant="secondary">{bankAccounts.length}</Badge>
-          )}
+          {!loading && <Badge variant="secondary">{bankAccounts.length}</Badge>}
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -279,7 +319,7 @@ export default function AccountsPage() {
                 <AccountCardSkeleton key={i} />
               ))
             : bankAccounts.map((account) => {
-                const allocation = allocationMap.get(account.id)
+                const allocation = allocationMap.get(account.id);
                 return (
                   <Card
                     key={account.id}
@@ -323,7 +363,7 @@ export default function AccountsPage() {
                       )}
                     </CardContent>
                   </Card>
-                )
+                );
               })}
         </div>
 
@@ -339,9 +379,12 @@ export default function AccountsPage() {
         <Card className="py-12">
           <CardContent className="flex flex-col items-center text-center">
             <Building2 className="size-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">Nenhuma conta conectada</h3>
+            <h3 className="text-lg font-medium mb-2">
+              Nenhuma conta conectada
+            </h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Conecte suas contas bancárias para começar a acompanhar suas finanças.
+              Conecte suas contas bancárias para começar a acompanhar suas
+              finanças.
             </p>
             <Button asChild>
               <Link href="/connect">
@@ -358,9 +401,7 @@ export default function AccountsPage() {
         <SheetContent>
           <SheetHeader>
             <SheetTitle>{selectedAccount?.name}</SheetTitle>
-            <SheetDescription>
-              {selectedAccount?.institution}
-            </SheetDescription>
+            <SheetDescription>{selectedAccount?.institution}</SheetDescription>
           </SheetHeader>
           {selectedAccount && (
             <div className="flex flex-col gap-4 px-4 pb-4">
@@ -369,7 +410,7 @@ export default function AccountsPage() {
                   <AvatarImage src={selectedAccount.imageUrl || undefined} />
                   <AvatarFallback>
                     {getInitials(
-                      selectedAccount.institution || selectedAccount.name
+                      selectedAccount.institution || selectedAccount.name,
                     )}
                   </AvatarFallback>
                 </Avatar>
@@ -387,28 +428,104 @@ export default function AccountsPage() {
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Tipo</span>
                   <Badge variant="outline">
-                    {getTypeLabel(selectedAccount.subtype || selectedAccount.kind)}
+                    {getTypeLabel(
+                      selectedAccount.subtype || selectedAccount.kind,
+                    )}
                   </Badge>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Apelido</span>
+                  {editingNickname ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={nicknameInput}
+                        onChange={(e) => setNicknameInput(e.target.value)}
+                        className="w-32 h-7 text-sm"
+                        autoFocus
+                      />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={async () => {
+                          setSavingNickname(true);
+                          try {
+                            const res = await fetch(
+                              `/api/domain/accounts/${selectedAccount.id}`,
+                              {
+                                method: "PUT",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  nickname: nicknameInput.trim() || null,
+                                }),
+                              },
+                            );
+                            if (res.ok) {
+                              setEditingNickname(false);
+                              refetchAccounts();
+                            }
+                          } catch (error) {
+                            console.error("Failed to update nickname", error);
+                          } finally {
+                            setSavingNickname(false);
+                          }
+                        }}
+                        disabled={savingNickname}
+                      >
+                        {savingNickname ? "..." : "Salvar"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setEditingNickname(false)}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">
+                        {selectedAccount.nickname || selectedAccount.name}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => {
+                          setEditingNickname(true);
+                          setNicknameInput(
+                            selectedAccount.nickname ||
+                              selectedAccount.name ||
+                              "",
+                          );
+                        }}
+                      >
+                        <Pencil className="size-3" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Saldo</span>
                   <span
                     className={`font-semibold ${
-                      selectedAccount.kind === "CARD" || selectedAccount.kind === "CREDIT"
+                      selectedAccount.kind === "CARD" ||
+                      selectedAccount.kind === "CREDIT"
                         ? "text-destructive"
                         : ""
                     }`}
                   >
                     {format(
-                      selectedAccount.kind === "CARD" || selectedAccount.kind === "CREDIT"
+                      selectedAccount.kind === "CARD" ||
+                        selectedAccount.kind === "CREDIT"
                         ? Math.abs(selectedAccount.balance)
-                        : selectedAccount.balance
+                        : selectedAccount.balance,
                     )}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Moeda</span>
-                  <span className="text-sm">{selectedAccount.currencyCode}</span>
+                  <span className="text-sm">
+                    {selectedAccount.currencyCode}
+                  </span>
                 </div>
                 {selectedAccount.number && (
                   <div className="flex justify-between">
@@ -425,8 +542,8 @@ export default function AccountsPage() {
               <Separator />
 
               {(() => {
-                const allocation = allocationMap.get(selectedAccount.id)
-                if (!allocation) return null
+                const allocation = allocationMap.get(selectedAccount.id);
+                if (!allocation) return null;
                 return (
                   <div className="space-y-2">
                     <div className="text-sm font-medium">
@@ -438,11 +555,13 @@ export default function AccountsPage() {
                       {format(allocation.balance)})
                     </div>
                   </div>
-                )
+                );
               })()}
 
               <Button variant="outline" asChild className="mt-2">
-                <Link href={`/transactions?accountId=${selectedAccount.id}`}>
+                <Link
+                  href={`/transactions?accountId=${selectedAccount.id}&period=${period.period}`}
+                >
                   Ver Transações
                 </Link>
               </Button>
@@ -451,5 +570,5 @@ export default function AccountsPage() {
         </SheetContent>
       </Sheet>
     </div>
-  )
+  );
 }

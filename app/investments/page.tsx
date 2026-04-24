@@ -6,7 +6,7 @@ import { useApi } from "@/hooks/use-api"
 import { useCurrency } from "@/lib/currency-context"
 import { PageError } from "@/components/page-error"
 import { cn } from "@/lib/utils"
-import { amountToneClass } from "@/lib/format"
+import { amountToneClass, formatCurrencyByCode } from "@/lib/format"
 import {
   Card,
   CardContent,
@@ -40,6 +40,7 @@ interface InvestmentsResponse {
   results: Investment[]
   summary: {
     total: number
+    byCurrency?: Record<string, { count: number; balance: number }>
   }
 }
 
@@ -91,6 +92,33 @@ function toNumber(value: string | number | null | undefined): number {
   return typeof value === "string" ? parseFloat(value) || 0 : value
 }
 
+function currencyCodeOf(value?: string | null) {
+  const code = value?.trim().toUpperCase()
+  if (!code || code === "R$" || code === "REAL" || code === "REAIS") return "BRL"
+  if (code === "DOLAR" || code === "DOLLAR") return "USD"
+  return code
+}
+
+function displayMoney(
+  value: string | number | null | undefined,
+  currencyCode: string | null | undefined,
+  isPrivate: boolean
+) {
+  if (isPrivate) return "••••"
+  return formatCurrencyByCode(toNumber(value), currencyCodeOf(currencyCode))
+}
+
+function parseInvestmentMetadata(investment: Investment) {
+  try {
+    return JSON.parse(investment.metadataJson || "{}") as {
+      amountOriginal?: number | string | null
+      amountProfit?: number | string | null
+    }
+  } catch {
+    return {}
+  }
+}
+
 function SummarySkeleton() {
   return (
     <div className="grid gap-4 md:grid-cols-3">
@@ -122,32 +150,42 @@ function TableSkeleton() {
 }
 
 export default function InvestmentsPage() {
-  const { format } = useCurrency()
+  const { isPrivate } = useCurrency()
   const { data, loading, error, refetch } = useApi<InvestmentsResponse>("/api/domain/investments")
 
   const investments = useMemo(() => data?.results ?? [], [data])
 
-  const { totalBalance, positionCount, byType } = useMemo(() => {
-    let total = 0
-    const typeMap = new Map<string, { count: number; balance: number }>()
+  const { byCurrency, positionCount, byType } = useMemo(() => {
+    const currencyMap = new Map<string, { count: number; balance: number }>()
+    const typeMap = new Map<string, { count: number }>()
 
     for (const inv of investments) {
+      const currencyCode = currencyCodeOf(inv.currencyCode)
       const bal = toNumber(inv.balance)
-      total += bal
+      const currency = currencyMap.get(currencyCode) ?? { count: 0, balance: 0 }
+      currency.count += 1
+      currency.balance += bal
+      currencyMap.set(currencyCode, currency)
 
       const group = getGroupLabel(inv.type)
-      const existing = typeMap.get(group) ?? { count: 0, balance: 0 }
+      const existing = typeMap.get(group) ?? { count: 0 }
       existing.count += 1
-      existing.balance += bal
       typeMap.set(group, existing)
     }
 
+    const byCurrencyArr = Array.from(currencyMap.entries())
+      .map(([currencyCode, summary]) => ({ currencyCode, ...summary }))
+      .sort((a, b) => {
+        if (a.currencyCode === "BRL") return -1
+        if (b.currencyCode === "BRL") return 1
+        return b.balance - a.balance
+      })
     const byTypeArr = Array.from(typeMap.entries())
       .map(([type, data]) => ({ type, ...data }))
-      .sort((a, b) => b.balance - a.balance)
+      .sort((a, b) => b.count - a.count)
 
     return {
-      totalBalance: total,
+      byCurrency: byCurrencyArr,
       positionCount: investments.length,
       byType: byTypeArr,
     }
@@ -156,19 +194,24 @@ export default function InvestmentsPage() {
   const groupedInvestments = useMemo(() => {
     const groups = new Map<string, Investment[]>()
     for (const inv of investments) {
-      const group = getGroupLabel(inv.type)
+      const group = `${getGroupLabel(inv.type)}:${currencyCodeOf(inv.currencyCode)}`
       const list = groups.get(group) ?? []
       list.push(inv)
       groups.set(group, list)
     }
     // Sort groups by total balance desc
     return Array.from(groups.entries())
-      .map(([group, items]) => ({
-        group,
+      .map(([groupKey, items]) => ({
+        group: groupKey.split(":")[0],
+        currencyCode: groupKey.split(":")[1] ?? "BRL",
         items: items.sort((a, b) => toNumber(b.balance) - toNumber(a.balance)),
         total: items.reduce((sum, i) => sum + toNumber(i.balance), 0),
       }))
-      .sort((a, b) => b.total - a.total)
+      .sort((a, b) => {
+        if (a.currencyCode === "BRL" && b.currencyCode !== "BRL") return -1
+        if (b.currencyCode === "BRL" && a.currencyCode !== "BRL") return 1
+        return b.total - a.total
+      })
   }, [investments])
 
   if (error) {
@@ -194,10 +237,26 @@ export default function InvestmentsPage() {
             <CardHeader>
               <CardDescription className="flex items-center gap-1.5">
                 <TrendingUp className="size-3.5" />
-                Total Investido
+                Total por moeda
               </CardDescription>
-              <CardTitle className="text-2xl">
-                {format(totalBalance)}
+              <CardTitle className="space-y-1 text-base">
+                {byCurrency.length === 0 ? (
+                  "—"
+                ) : (
+                  byCurrency.map((item) => (
+                    <div
+                      key={item.currencyCode}
+                      className="flex items-center justify-between gap-3"
+                    >
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {item.currencyCode}
+                      </span>
+                      <span className="tabular-nums">
+                        {displayMoney(item.balance, item.currencyCode, isPrivate)}
+                      </span>
+                    </div>
+                  ))
+                )}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -251,16 +310,17 @@ export default function InvestmentsPage() {
 
       {/* Grouped Investment Tables */}
       {!loading &&
-        groupedInvestments.map(({ group, items, total }) => (
-          <Card key={group}>
+        groupedInvestments.map(({ group, currencyCode, items, total }) => (
+          <Card key={`${group}:${currencyCode}`}>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   {group}
+                  <Badge variant="outline">{currencyCode}</Badge>
                   <Badge variant="secondary">{items.length}</Badge>
                 </CardTitle>
                 <span className="text-sm font-semibold">
-                  {format(total)}
+                  {displayMoney(total, currencyCode, isPrivate)}
                 </span>
               </div>
             </CardHeader>
@@ -293,29 +353,27 @@ export default function InvestmentsPage() {
                       </TableCell>
                       <TableCell className="text-right font-mono text-xs text-muted-foreground">
                         {(() => {
-                          try {
-                            const meta = JSON.parse(inv.metadataJson || "{}")
-                            return meta.amountOriginal ? format(meta.amountOriginal) : "—"
-                          } catch { return "—" }
+                          const meta = parseInvestmentMetadata(inv)
+                          return meta.amountOriginal
+                            ? displayMoney(meta.amountOriginal, inv.currencyCode, isPrivate)
+                            : "—"
                         })()}
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        {format(toNumber(inv.balance))}
+                        {displayMoney(inv.balance, inv.currencyCode, isPrivate)}
                       </TableCell>
                       <TableCell className={cn(
                         "text-right font-medium",
                         (() => {
-                          try {
-                            const meta = JSON.parse(inv.metadataJson || "{}")
-                            return amountToneClass(meta.amountProfit)
-                          } catch { return "" }
+                          const meta = parseInvestmentMetadata(inv)
+                          return amountToneClass(toNumber(meta.amountProfit))
                         })()
                       )}>
                         {(() => {
-                          try {
-                            const meta = JSON.parse(inv.metadataJson || "{}")
-                            return meta.amountProfit ? format(meta.amountProfit) : "—"
-                          } catch { return "—" }
+                          const meta = parseInvestmentMetadata(inv)
+                          return meta.amountProfit
+                            ? displayMoney(meta.amountProfit, inv.currencyCode, isPrivate)
+                            : "—"
                         })()}
                       </TableCell>
                       <TableCell>

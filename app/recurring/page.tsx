@@ -1,29 +1,20 @@
-"use client"
+"use client";
 
-import { useState, useMemo } from "react"
-import Link from "next/link"
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-} from "recharts"
-import { Repeat, CreditCard, ChevronLeft, ChevronRight } from "lucide-react"
-import { useApi } from "@/hooks/use-api"
-import { useCurrency } from "@/lib/currency-context"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
+import { useState, useMemo } from "react";
+import Link from "next/link";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import { Repeat, CreditCard, ChevronLeft, ChevronRight } from "lucide-react";
+import { useApi } from "@/hooks/use-api";
+import { useCurrency } from "@/lib/currency-context";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
-} from "@/components/ui/chart"
+} from "@/components/ui/chart";
 
-import {
-  type RecurringData,
-} from "@/lib/types/api"
+import { type RecurringData } from "@/lib/types/api";
 
 const frequencyLabel: Record<string, string> = {
   MONTHLY: "Mensal",
@@ -31,7 +22,7 @@ const frequencyLabel: Record<string, string> = {
   BIWEEKLY: "Quinzenal",
   YEARLY: "Anual",
   QUARTERLY: "Trimestral",
-}
+};
 
 const chartConfig: ChartConfig = {
   fixed: {
@@ -42,63 +33,88 @@ const chartConfig: ChartConfig = {
     label: "Parcelas",
     color: "#3b82f6",
   },
-}
+};
 
 const MONTHS = [
-  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
-  "Jul", "Ago", "Set", "Out", "Nov", "Dez",
-]
+  "Jan",
+  "Fev",
+  "Mar",
+  "Abr",
+  "Mai",
+  "Jun",
+  "Jul",
+  "Ago",
+  "Set",
+  "Out",
+  "Nov",
+  "Dez",
+];
 
 const MONTH_FULL = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
-]
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+];
 
 export default function RecurringPage() {
-  const { format } = useCurrency()
-  const currentYear = new Date().getFullYear()
-  const currentMonth = new Date().getMonth()
-  const [year, setYear] = useState(currentYear)
-  const [selectedMonth, setSelectedMonth] = useState(currentMonth)
+  const { format } = useCurrency();
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth();
+  const [year, setYear] = useState(currentYear);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
 
   const { data, loading } = useApi<RecurringData>("/api/recurring", {
     year: String(year),
-  })
+  });
 
   const fixedExpenses = useMemo(
-    () => data?.rules.filter((r) => 
-      r.type === "EXPENSE" && 
-      !/(\d+)\/(\d+)/.test(r.description)
-    ) ?? [],
-    [data]
-  )
+    () =>
+      data?.rules.filter(
+        (r) =>
+          r.type === "EXPENSE" &&
+          !r.isInstallment &&
+          !/(\d+)\/(\d+)/.test(r.description),
+      ) ?? [],
+    [data],
+  );
 
   const installmentItems = useMemo(
-    () => data?.rules.filter((r) => 
-      r.type === "EXPENSE" && 
-      /(\d+)\/(\d+)/.test(r.description)
-    ) ?? [],
-    [data]
-  )
+    () =>
+      data?.rules.filter(
+        (r) =>
+          r.type === "EXPENSE" &&
+          (r.isInstallment || /(\d+)\/(\d+)/.test(r.description)),
+      ) ?? [],
+    [data],
+  );
 
   const fixedMonthly = fixedExpenses.reduce(
     (sum, r) => sum + Math.abs(Number(r.amount)),
-    0
-  )
+    0,
+  );
   const installmentMonthly = installmentItems.reduce(
     (sum, r) => sum + Math.abs(Number(r.amount)),
-    0
-  )
-  const totalMonthly = fixedMonthly + installmentMonthly
+    0,
+  );
+  const totalMonthly = fixedMonthly + installmentMonthly;
 
   const chartData = useMemo(() => {
-    if (!data) return []
+    if (!data) return [];
     return MONTHS.map((month) => ({
       month,
       fixed: fixedMonthly,
       installments: installmentMonthly,
-    }))
-  }, [data, fixedMonthly, installmentMonthly])
+    }));
+  }, [data, fixedMonthly, installmentMonthly]);
 
   if (loading) {
     return (
@@ -110,14 +126,16 @@ export default function RecurringPage() {
           <Skeleton className="h-96" />
         </div>
       </div>
-    )
+    );
   }
 
   return (
     <div className="flex flex-col gap-6 p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Recorr&ecirc;ncias</h1>
+        <h1 className="text-3xl font-bold tracking-tight">
+          Recorr&ecirc;ncias
+        </h1>
         <div className="flex items-center gap-3">
           <Link
             href="/recurring/expenses"
@@ -143,7 +161,9 @@ export default function RecurringPage() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <div className="size-2.5 rounded-full bg-amber-500" />
-              <span className="text-xs text-muted-foreground">Contas fixas</span>
+              <span className="text-xs text-muted-foreground">
+                Contas fixas
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <div className="size-2.5 rounded-full bg-blue-500" />
@@ -154,7 +174,10 @@ export default function RecurringPage() {
 
         <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
           <div className="flex-1 min-w-0">
-            <ChartContainer config={chartConfig} className="h-56 sm:h-64 w-full">
+            <ChartContainer
+              config={chartConfig}
+              className="h-56 sm:h-64 w-full"
+            >
               <BarChart data={chartData} accessibilityLayer>
                 <CartesianGrid vertical={false} strokeOpacity={0.1} />
                 <XAxis
@@ -177,8 +200,8 @@ export default function RecurringPage() {
                     <ChartTooltipContent
                       formatter={(value, name) => (
                         <span>
-                          {chartConfig[name as keyof typeof chartConfig]?.label}:{" "}
-                          {format(Number(value))}
+                          {chartConfig[name as keyof typeof chartConfig]?.label}
+                          : {format(Number(value))}
                         </span>
                       )}
                     />
@@ -206,24 +229,26 @@ export default function RecurringPage() {
               <button
                 onClick={() => {
                   if (selectedMonth === 0) {
-                    setSelectedMonth(11)
-                    setYear(year - 1)
+                    setSelectedMonth(11);
+                    setYear(year - 1);
                   } else {
-                    setSelectedMonth(selectedMonth - 1)
+                    setSelectedMonth(selectedMonth - 1);
                   }
                 }}
                 className="text-muted-foreground hover:text-foreground"
               >
                 <ChevronLeft className="size-4" />
               </button>
-              <span className="text-sm font-semibold">{MONTH_FULL[selectedMonth]}</span>
+              <span className="text-sm font-semibold">
+                {MONTH_FULL[selectedMonth]}
+              </span>
               <button
                 onClick={() => {
                   if (selectedMonth === 11) {
-                    setSelectedMonth(0)
-                    setYear(year + 1)
+                    setSelectedMonth(0);
+                    setYear(year + 1);
                   } else {
-                    setSelectedMonth(selectedMonth + 1)
+                    setSelectedMonth(selectedMonth + 1);
                   }
                 }}
                 className="text-muted-foreground hover:text-foreground"
@@ -237,18 +262,24 @@ export default function RecurringPage() {
                   <div className="size-2 rounded-full bg-amber-500" />
                   <span className="text-muted-foreground">Parcelas</span>
                 </div>
-                <span className="font-semibold tabular-nums">{format(installmentMonthly)}</span>
+                <span className="font-semibold tabular-nums">
+                  {format(installmentMonthly)}
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <div className="size-2 rounded-full bg-blue-500" />
                   <span className="text-muted-foreground">Contas fixas</span>
                 </div>
-                <span className="font-semibold tabular-nums">{format(fixedMonthly)}</span>
+                <span className="font-semibold tabular-nums">
+                  {format(fixedMonthly)}
+                </span>
               </div>
               <div className="border-t pt-2 flex justify-between">
                 <span className="font-semibold">Total</span>
-                <span className="font-bold tabular-nums">{format(totalMonthly)}</span>
+                <span className="font-bold tabular-nums">
+                  {format(totalMonthly)}
+                </span>
               </div>
             </div>
           </div>
@@ -260,10 +291,16 @@ export default function RecurringPage() {
         <button className="pb-2 text-sm font-medium border-b-2 border-foreground">
           Recorr&ecirc;ncias
         </button>
-        <Link href="/recurring/expenses" className="pb-2 text-sm text-muted-foreground hover:text-foreground">
+        <Link
+          href="/recurring/expenses"
+          className="pb-2 text-sm text-muted-foreground hover:text-foreground"
+        >
           Gasto por conta
         </Link>
-        <Link href="/categories" className="pb-2 text-sm text-muted-foreground hover:text-foreground">
+        <Link
+          href="/categories"
+          className="pb-2 text-sm text-muted-foreground hover:text-foreground"
+        >
           Gastos por categoria
         </Link>
       </div>
@@ -275,7 +312,9 @@ export default function RecurringPage() {
           <div className="flex items-center gap-2 mb-4">
             <Repeat className="size-4 text-muted-foreground" />
             <h3 className="font-semibold">Parcelas</h3>
-            <span className="text-xs text-muted-foreground">{installmentItems.length}</span>
+            <span className="text-xs text-muted-foreground">
+              {installmentItems.length}
+            </span>
           </div>
           <div className="space-y-2">
             {installmentItems.length === 0 && (
@@ -284,19 +323,20 @@ export default function RecurringPage() {
               </p>
             )}
             {installmentItems.map((rule) => {
-              const total = rule.occurrences > 0 ? rule.occurrences : 12
-              const remaining = rule.nextDate && rule.lastDate
-                ? Math.max(
-                    1,
-                    Math.ceil(
-                      (new Date(rule.lastDate).getTime() -
-                        new Date(rule.nextDate).getTime()) /
-                        (1000 * 60 * 60 * 24 * 30)
+              const total = rule.occurrences > 0 ? rule.occurrences : 12;
+              const remaining =
+                rule.nextDate && rule.lastDate
+                  ? Math.max(
+                      1,
+                      Math.ceil(
+                        (new Date(rule.lastDate).getTime() -
+                          new Date(rule.nextDate).getTime()) /
+                          (1000 * 60 * 60 * 24 * 30),
+                      ),
                     )
-                  )
-                : total
-              const current = Math.max(0, total - remaining)
-              const progressValue = (current / total) * 100
+                  : total;
+              const current = Math.max(0, total - remaining);
+              const progressValue = (current / total) * 100;
 
               return (
                 <div
@@ -306,11 +346,17 @@ export default function RecurringPage() {
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     {rule.logoUrl ? (
                       <div className="shrink-0 size-8 rounded-lg border border-border/40 bg-muted/30 p-1 flex items-center justify-center overflow-hidden">
-                        <img src={rule.logoUrl} alt={rule.description} className="size-full object-contain" />
+                        <img
+                          src={rule.logoUrl}
+                          alt={rule.description}
+                          className="size-full object-contain"
+                        />
                       </div>
                     ) : (
                       <div className="shrink-0 size-8 rounded-lg border border-border/40 bg-muted/50 flex items-center justify-center">
-                        <span className="text-[10px] font-mono text-muted-foreground uppercase">{rule.description.slice(0, 2)}</span>
+                        <span className="text-[10px] font-mono text-muted-foreground uppercase">
+                          {rule.description.slice(0, 2)}
+                        </span>
                       </div>
                     )}
                     <div className="flex flex-col gap-0.5 min-w-0">
@@ -339,7 +385,7 @@ export default function RecurringPage() {
                     {format(Math.abs(rule.amount))}
                   </span>
                 </div>
-              )
+              );
             })}
           </div>
         </div>
@@ -349,7 +395,9 @@ export default function RecurringPage() {
           <div className="flex items-center gap-2 mb-4">
             <CreditCard className="size-4 text-muted-foreground" />
             <h3 className="font-semibold">Contas Fixas</h3>
-            <span className="text-xs text-muted-foreground">{fixedExpenses.length}</span>
+            <span className="text-xs text-muted-foreground">
+              {fixedExpenses.length}
+            </span>
           </div>
           <div className="space-y-2">
             {fixedExpenses.length === 0 && (
@@ -365,11 +413,17 @@ export default function RecurringPage() {
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   {rule.logoUrl ? (
                     <div className="shrink-0 size-8 rounded-lg border border-border/40 bg-muted/30 p-1 flex items-center justify-center overflow-hidden">
-                      <img src={rule.logoUrl} alt={rule.description} className="size-full object-contain" />
+                      <img
+                        src={rule.logoUrl}
+                        alt={rule.description}
+                        className="size-full object-contain"
+                      />
                     </div>
                   ) : (
                     <div className="shrink-0 size-8 rounded-lg border border-border/40 bg-muted/50 flex items-center justify-center">
-                      <span className="text-[10px] font-mono text-muted-foreground uppercase">{rule.description.slice(0, 2)}</span>
+                      <span className="text-[10px] font-mono text-muted-foreground uppercase">
+                        {rule.description.slice(0, 2)}
+                      </span>
                     </div>
                   )}
                   <div className="flex flex-col gap-0.5 min-w-0">
@@ -395,5 +449,5 @@ export default function RecurringPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

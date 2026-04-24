@@ -1,38 +1,57 @@
-import { NextResponse } from "next/server"
+import { NextResponse } from "next/server";
 
-import { getRecurringPayload, refreshRecurringDerived } from "@/lib/domain/derived"
-import { serializeForJson } from "@/lib/core/http"
-import { prisma } from "@/lib/prisma"
-import { getMerchantLogo } from "@/lib/domain/utils"
+import {
+  getRecurringPayload,
+  refreshRecurringDerived,
+} from "@/lib/domain/derived";
+import { serializeForJson } from "@/lib/core/http";
+import { prisma } from "@/lib/prisma";
+import { getMerchantLogo } from "@/lib/domain/utils";
 
-export const dynamic = "force-dynamic"
+export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const existing = await prisma.domainRecurringRule.count({ where: { active: true } })
+  const existing = await prisma.domainRecurringRule.count({
+    where: { active: true },
+  });
   if (existing === 0) {
-    await refreshRecurringDerived()
+    await refreshRecurringDerived();
   }
 
-  const rules = await getRecurringPayload()
-  const categories = await prisma.domainCategory.findMany()
-  const categoryMap = new Map(categories.map((c) => [c.id, c.name]))
+  const rules = await getRecurringPayload();
+  const categories = await prisma.domainCategory.findMany();
+  const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
 
-  const merchantIds = rules.map((r) => r.merchantId).filter(Boolean) as string[]
+  const merchantIds = rules
+    .map((r) => r.merchantId)
+    .filter(Boolean) as string[];
   const merchants = await prisma.domainMerchant.findMany({
     where: { id: { in: merchantIds } },
     select: { id: true, displayName: true },
-  })
-  const merchantMap = new Map(merchants.map((m) => [m.id, m.displayName]))
+  });
+  const merchantMap = new Map(merchants.map((m) => [m.id, m.displayName]));
+  const merchantEnrichments = await prisma.merchantEnrichment.findMany({
+    where:
+      merchantIds.length > 0
+        ? { domainMerchantId: { in: merchantIds } }
+        : { id: "__none__" },
+    select: { domainMerchantId: true, logoUrl: true },
+  });
+  const merchantLogoMap = new Map(
+    merchantEnrichments.map((item) => [item.domainMerchantId, item.logoUrl]),
+  );
 
   // Map to UI-expected field names
   const mapped: import("@/lib/types/api").RecurringRule[] = rules.map((r) => {
-    const merchantName = r.merchantId ? merchantMap.get(r.merchantId) : null
+    const merchantName = r.merchantId ? merchantMap.get(r.merchantId) : null;
     return {
       id: r.id,
       description: r.title,
       amount: Number(r.amount),
       frequency: r.interval,
-      category: r.categoryId ? categoryMap.get(r.categoryId) ?? "Sem categoria" : "Sem categoria",
+      category: r.categoryId
+        ? (categoryMap.get(r.categoryId) ?? "Sem categoria")
+        : "Sem categoria",
       categoryId: r.categoryId,
       nextDate: r.nextDate.toISOString(),
       type: r.type,
@@ -42,31 +61,46 @@ export async function GET() {
       isManual: r.origin === "manual",
       origin: r.origin as "detected" | "manual",
       merchantName: merchantName ?? null,
-      logoUrl: getMerchantLogo(merchantName || r.title),
-    }
-  })
+      logoUrl:
+        (r.merchantId ? merchantLogoMap.get(r.merchantId) : null) ??
+        getMerchantLogo(merchantName || r.title),
+      isInstallment: r.isInstallment ?? false,
+    };
+  });
 
   function normalizeMonthlyAmount(amount: number, interval: string): number {
-    const value = Math.abs(amount)
+    const value = Math.abs(amount);
     switch (interval.toUpperCase()) {
-      case "WEEKLY": return value * 4.333
-      case "BIWEEKLY": return value * 2.166
-      case "MONTHLY": return value
-      case "QUARTERLY": return value / 3
-      case "YEARLY": return value / 12
-      default: return value
+      case "WEEKLY":
+        return value * 4.333;
+      case "BIWEEKLY":
+        return value * 2.166;
+      case "MONTHLY":
+        return value;
+      case "QUARTERLY":
+        return value / 3;
+      case "YEARLY":
+        return value / 12;
+      default:
+        return value;
     }
   }
 
   const summary = {
     totalMonthlyExpenses: rules
       .filter((r) => r.type === "EXPENSE")
-      .reduce((sum, r) => sum + normalizeMonthlyAmount(Number(r.amount), r.interval), 0),
+      .reduce(
+        (sum, r) => sum + normalizeMonthlyAmount(Number(r.amount), r.interval),
+        0,
+      ),
     totalMonthlyIncome: rules
       .filter((r) => r.type === "INCOME")
-      .reduce((sum, r) => sum + normalizeMonthlyAmount(Number(r.amount), r.interval), 0),
+      .reduce(
+        (sum, r) => sum + normalizeMonthlyAmount(Number(r.amount), r.interval),
+        0,
+      ),
     count: rules.length,
-  }
+  };
 
-  return NextResponse.json(serializeForJson({ rules: mapped, summary }))
+  return NextResponse.json(serializeForJson({ rules: mapped, summary }));
 }

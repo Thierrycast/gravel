@@ -2,15 +2,17 @@
 
 import { Skeleton } from "@/components/ui/skeleton"
 
+const BAR_HEIGHTS = [42, 68, 35, 74, 51, 83, 46, 61, 29, 57, 76, 39]
+
 export function ChartSkeleton() {
   return (
     <div className="flex flex-col gap-4 w-full h-full min-h-[300px]">
       <div className="flex items-end justify-between gap-2 h-full px-2">
-        {Array.from({ length: 12 }).map((_, i) => (
-          <Skeleton 
-            key={i} 
-            className="w-full bg-muted/40" 
-            style={{ height: `${Math.random() * 60 + 20}%` }} 
+        {BAR_HEIGHTS.map((height, i) => (
+          <Skeleton
+            key={i}
+            className="w-full bg-muted/40"
+            style={{ height: `${height}%` }}
           />
         ))}
       </div>

@@ -46,7 +46,7 @@ export function RecentTransactions({ transactions, loading }: RecentTransactions
   return (
     <Card className="col-span-full lg:col-span-2 rounded-none border-border h-full flex flex-col">
       <CardHeader className="pb-3 px-6">
-        <CardTitle className="text-sm font-bold tracking-widest uppercase text-muted-foreground/80">Transações Recentes</CardTitle>
+        <CardTitle className="text-sm font-bold tracking-widest uppercase text-muted-foreground/80">Movimentações recentes</CardTitle>
         <CardAction>
           <Link
             href="/transactions"

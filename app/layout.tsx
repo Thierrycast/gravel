@@ -36,6 +36,7 @@ export const viewport: Viewport = {
 import { Toaster } from "sonner";
 import { ModeToggle } from "@/components/mode-toggle";
 import { VaultProvider } from "@/components/vault-provider";
+import { NEXT_THEMES_REGISTRY } from "@/lib/theme";
 
 export default function RootLayout({
   children,
@@ -45,12 +46,13 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <body className="antialiased">
-        <ThemeProvider 
-          attribute="class" 
-          defaultTheme="system" 
-          enableSystem 
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
           disableTransitionOnChange
           storageKey="gravel-ui-theme"
+          themes={[...NEXT_THEMES_REGISTRY]}
         >
           <CurrencyProvider>
             <VaultProvider>

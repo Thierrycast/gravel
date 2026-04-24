@@ -1,9 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { ShieldAlert, ShieldCheck, Lock, Unlock, Loader2, Shield } from "lucide-react"
+import { ShieldCheck, Lock, Unlock, Loader2, Shield } from "lucide-react"
 import { toast } from "sonner"
-import { usePathname } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,12 +18,17 @@ interface VaultContextType {
 
 const VaultContext = React.createContext<VaultContextType | undefined>(undefined)
 
+type VaultSettings = {
+  vaultEnabled: boolean
+  vaultMasterPassword?: string | null
+  vaultInactivityMin: number
+}
+
 export function VaultProvider({ children }: { children: React.ReactNode }) {
-  const { data: settings, loading } = useApi<any>("/api/settings")
+  const { data: settings, loading } = useApi<VaultSettings>("/api/settings")
   const [isLocked, setIsLocked] = React.useState(false)
   const [passwordInput, setPasswordInput] = React.useState("")
   const [unlocking, setUnlocking] = React.useState(false)
-  const pathname = usePathname()
 
   const enabled = settings?.vaultEnabled ?? false
   const masterPassword = settings?.vaultMasterPassword

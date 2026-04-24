@@ -13,6 +13,11 @@
 - `PLUGGY_AUTH_PATH` (padrao: `/auth`)
 - `PLUGGY_CONNECT_TOKEN_PATH` (padrao: `/connect_token`)
 - `PLUGGY_API_KEY_TTL_SECONDS` (padrao: `7200`)
+- `PLUGGY_ENRICHMENT_API_BASE` (padrao: `https://enrichment-api.pluggy.ai`)
+- `GRAVEL_CLIENT_USER_ID` (opcional; usado no Pluggy Enrichment, padrao local)
+- `LOGO_DEV_PUBLISHABLE_KEY` (opcional; usado para URLs CDN de logos)
+- `LOGO_DEV_SECRET_KEY` (opcional; somente backend para Logo.dev Describe)
+- `LOGO_DEV_DOMAIN_OVERRIDES_JSON` (opcional; mapa JSON `{"merchant normalizado":"dominio.com"}`)
 
 ## Rotas Pluggy em uso
 - `POST /api/pluggy/connect-token`
@@ -58,6 +63,14 @@
   - Retorna o resumo persistido no banco local.
 - `POST /api/pluggy/sync`
   - Sincroniza dados do Pluggy para o banco local em modo `insert-only`.
+- `POST /api/admin/enrichment/pluggy/run`
+  - Envia lotes por tipo de conta ao Pluggy Categorize, persiste `TransactionEnrichment` e reprojeta os read models quando ha enriquecimento novo.
+- `POST /api/admin/enrichment/pluggy/backfill`
+  - Executa multiplos lotes de categorization para historico.
+- `POST /api/admin/enrichment/logo/run`
+  - Resolve dominios/logos de merchants conhecidos via cache `MerchantEnrichment`.
+- `POST /api/admin/domain/rebuild-installments`
+  - Recria agrupamentos logicos de compras parceladas.
 
 ## Fluxo
 1. Abrir `/connect`.
@@ -73,3 +86,5 @@
 - O `connectToken` e limitado ao widget. Dados de produtos continuam sendo buscados no backend com API key.
 - No Pluggy atual deste projeto, `transactions` exige `accountId`, entao a API local primeiro resolve as contas e depois agrega as transacoes por conta.
 - O plano de persistencia esta em `docs/pluggy-persistencia.md`.
+- Pluggy Categorize e uma camada complementar: regras locais continuam tendo precedencia sobre categorias/merchant enriquecidos.
+- O endpoint de enrichment pode estar indisponivel em contas sem feature premium; nesse caso o erro fica cacheado e a UI segue usando raw/provider/fallback.

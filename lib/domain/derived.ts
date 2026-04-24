@@ -5,6 +5,7 @@ import {
   getCashFlowMetrics,
   getCryptoPortfolioMetrics,
   getOverviewMetrics,
+  isInternalTransfer,
 } from "@/lib/domain/analytics";
 import { prisma } from "@/lib/prisma";
 
@@ -24,6 +25,7 @@ type RecurringMetadata = {
   lastOccurrenceAt?: string | null;
   direction?: string | null;
   sourceTransactionIds?: string[];
+  isInstallment?: boolean;
 };
 
 function decimal(value?: DecimalLike) {
@@ -135,11 +137,13 @@ export async function refreshRecurringDerived(options?: {
   const groups = new Map<string, typeof transactions>();
 
   for (const transaction of transactions) {
+    if (transaction.installmentGroupId || transaction.installmentTotal) continue;
+
     const category = transaction.domainCategoryId
       ? categoryMap.get(transaction.domainCategoryId)
       : null;
 
-    if (category?.kind === "TRANSFER") continue;
+    if (isInternalTransfer(category?.name, category?.kind)) continue;
 
     const normalizedDescription =
       transaction.normalizedDescription ??
@@ -177,6 +181,7 @@ export async function refreshRecurringDerived(options?: {
     occurrences: number;
     lastOccurrenceAt: Date;
     sourceTransactionIds: string[];
+    isInstallment?: boolean;
   }>;
 
   for (const group of groups.values()) {
@@ -266,6 +271,7 @@ export async function refreshRecurringDerived(options?: {
       occurrences: sorted.length,
       lastOccurrenceAt: lastTransaction.occurredAt,
       sourceTransactionIds: sorted.slice(-6).map((item) => item.id),
+      isInstallment: false,
     });
   }
 
@@ -298,6 +304,7 @@ export async function refreshRecurringDerived(options?: {
           lastOccurrenceAt: candidate.lastOccurrenceAt.toISOString(),
           direction: candidate.type,
           sourceTransactionIds: candidate.sourceTransactionIds,
+          isInstallment: candidate.isInstallment ?? false,
         } satisfies RecurringMetadata),
       },
     });
@@ -352,6 +359,7 @@ export async function getRecurringPayload(type?: "INCOME" | "EXPENSE") {
         lastOccurrenceAt: metadata.lastOccurrenceAt
           ? new Date(metadata.lastOccurrenceAt)
           : null,
+        isInstallment: metadata.isInstallment ?? false,
       };
     })
     .filter((rule) => (type ? rule.type === type : true))
@@ -401,6 +409,8 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
   ]);
 
   const variableTransactions = pastTransactions.filter((tx) => {
+    if (tx.installmentGroupId || tx.installmentTotal) return false;
+
     const cat = tx.domainCategoryId
       ? categoryMap.get(tx.domainCategoryId)
       : null;
@@ -410,6 +420,7 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
 
     const isRecurring = recurringRules.some((rule) => {
       if (rule.type === "INCOME") return false;
+      if (rule.isInstallment) return false;
       if (rule.merchantId && rule.merchantId === tx.domainMerchantId)
         return true;
       if (rule.descriptionPattern) {
@@ -461,12 +472,12 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
 
       if (rule.type === "INCOME") {
         recurringInflow = recurringInflow.plus(decimal(rule.amount));
-      } else if (rule.origin === "detected" || rule.interval === "MONTHLY") {
-        recurringOutflow = recurringOutflow.plus(decimal(rule.amount).abs());
-      } else {
+      } else if (rule.isInstallment) {
         installmentsOutflow = installmentsOutflow.plus(
           decimal(rule.amount).abs(),
         );
+      } else {
+        recurringOutflow = recurringOutflow.plus(decimal(rule.amount).abs());
       }
     }
 
@@ -480,15 +491,20 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
     const billsOutflow = sumDecimals(
       monthlyBills.map((bill) => bill.totalAmount),
     ).abs();
+    const billAccountIds = new Set(
+      monthlyBills
+        .map((bill) => bill.domainAccountId)
+        .filter((accountId): accountId is string => Boolean(accountId)),
+    );
 
-    // 3. Smart Installment Detection (from past transactions)
-    // Look for transactions that are part of an installment plan (e.g. "Purchase 1/3")
-    // If we are in month index=1, and there was a "1/3" in month -1, then month 1 is "3/3".
+    // 3. Smart Installment Detection (from persisted installment fields).
     const detectedInstallments = pastTransactions.filter((tx) => {
-      const match = tx.description?.match(/(\d+)\/(\d+)/);
-      if (!match) return false;
-      const current = parseInt(match[1], 10);
-      const total = parseInt(match[2], 10);
+      if (tx.domainAccountId && billAccountIds.has(tx.domainAccountId)) {
+        return false;
+      }
+      const current = tx.installmentNumber ?? null;
+      const total = tx.installmentTotal ?? null;
+      if (!current || !total) return false;
       if (current >= total) return false;
 
       // Calculate if this installment should fall into the current projection month
@@ -507,7 +523,11 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
 
     // 4. Future Transactions (Manual or scheduled)
     const futureTransactions = pastTransactions.filter(
-      (tx) => tx.occurredAt >= pointDate && tx.occurredAt <= pointMonthEnd,
+      (tx) =>
+        !tx.installmentGroupId &&
+        !tx.installmentTotal &&
+        tx.occurredAt >= pointDate &&
+        tx.occurredAt <= pointMonthEnd,
     );
     const futureInflow = sumDecimals(
       futureTransactions
@@ -709,6 +729,16 @@ export async function getDashboardRecurring() {
     select: { id: true, displayName: true },
   });
   const merchantMap = new Map(merchants.map((m) => [m.id, m.displayName]));
+  const merchantEnrichments = await prisma.merchantEnrichment.findMany({
+    where:
+      merchantIds.length > 0
+        ? { domainMerchantId: { in: merchantIds } }
+        : { id: "__none__" },
+    select: { domainMerchantId: true, logoUrl: true },
+  });
+  const merchantLogoMap = new Map(
+    merchantEnrichments.map((item) => [item.domainMerchantId, item.logoUrl]),
+  );
 
   const mapped = rules.map((r) => ({
     id: r.id,
@@ -727,6 +757,8 @@ export async function getDashboardRecurring() {
     isManual: r.origin === "manual",
     origin: r.origin,
     merchantName: r.merchantId ? merchantMap.get(r.merchantId) : null,
+    logoUrl: r.merchantId ? (merchantLogoMap.get(r.merchantId) ?? null) : null,
+    isInstallment: r.isInstallment ?? false,
   }));
 
   const total = rules.reduce((sum, r) => sum + Math.abs(Number(r.amount)), 0);

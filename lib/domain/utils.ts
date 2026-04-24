@@ -1,7 +1,12 @@
+import { buildLogoDevCryptoUrl, buildLogoDevUrl, resolveMerchantDomain } from "@/lib/domain/enrichment/logo-dev"
+
 /**
  * Resolves a reliable logo URL for a given cryptocurrency asset ticker.
  */
 export function getCryptoLogo(asset: string): string {
+  const logoDevUrl = buildLogoDevCryptoUrl(asset)
+  if (logoDevUrl) return logoDevUrl
+
   const ticker = asset.toLowerCase()
   // Reliable source for crypto icons from spothq/cryptocurrency-icons
   return `https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/128/color/${ticker}.png`
@@ -26,15 +31,18 @@ export function getMerchantLogo(name: string): string | null {
   const normalized = normalizeText(name)
   if (!normalized) return null
 
+  const domain = resolveMerchantDomain(name)
+  if (domain) return buildLogoDevUrl(domain)
+
   // Known patterns for common recurring services
-  if (normalized.includes("netflix")) return "https://www.netflix.com/favicon.ico"
-  if (normalized.includes("spotify")) return "https://www.scdn.co/mirror/home/twitter-og.png"
-  if (normalized.includes("amazon") || normalized.includes("prime")) return "https://www.amazon.com/favicon.ico"
-  if (normalized.includes("google") || normalized.includes("youtube")) return "https://www.google.com/favicon.ico"
-  if (normalized.includes("apple") || normalized.includes("icloud")) return "https://www.apple.com/favicon.ico"
-  if (normalized.includes("microsoft") || normalized.includes("office")) return "https://www.microsoft.com/favicon.ico"
-  if (normalized.includes("adobe")) return "https://www.adobe.com/favicon.ico"
-  if (normalized.includes("disney")) return "https://static-assets.bamgrid.com/product/disneyplus/images/share-default.14f444453695496543621f853359d361.png"
+  if (normalized.includes("netflix")) return buildLogoDevUrl("netflix.com")
+  if (normalized.includes("spotify")) return buildLogoDevUrl("spotify.com")
+  if (normalized.includes("amazon") || normalized.includes("prime")) return buildLogoDevUrl("amazon.com")
+  if (normalized.includes("google") || normalized.includes("youtube")) return buildLogoDevUrl("google.com")
+  if (normalized.includes("apple") || normalized.includes("icloud")) return buildLogoDevUrl("apple.com")
+  if (normalized.includes("microsoft") || normalized.includes("office")) return buildLogoDevUrl("microsoft.com")
+  if (normalized.includes("adobe")) return buildLogoDevUrl("adobe.com")
+  if (normalized.includes("disney")) return buildLogoDevUrl("disney.com")
   
   // Generic fallback using Clearbit (free tier/public)
   // return `https://logo.clearbit.com/${normalized.replace(/\s+/g, '')}.com`

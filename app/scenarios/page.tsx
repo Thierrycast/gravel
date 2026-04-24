@@ -10,7 +10,6 @@ import {
   CheckCircle2, 
   Clock, 
   Phone,
-  ArrowUpRight,
   Calculator,
   Calendar as CalendarIcon,
   Loader2,
@@ -24,20 +23,34 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
 import { useApi } from "@/hooks/use-api"
 import { Separator } from "@/components/ui/separator"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
 
+type Scenario = {
+  id: string
+  title: string
+  amount: number
+  date: string
+}
+
+type Lend = {
+  id: string
+  friendName: string
+  friendPhone?: string | null
+  amount: number
+  dueDate: string
+  description?: string | null
+  status: "PENDING" | "PAID" | string
+}
+
 export default function ScenariosPage() {
-  const { data: scenarios, refetch: refetchScenarios, loading: loadingScenarios } = useApi<any[]>("/api/scenarios")
-  const { data: lends, refetch: refetchLends, loading: loadingLends } = useApi<any[]>("/api/lends")
+  const { data: scenarios, refetch: refetchScenarios, loading: loadingScenarios } = useApi<Scenario[]>("/api/scenarios")
+  const { data: lends, refetch: refetchLends, loading: loadingLends } = useApi<Lend[]>("/api/lends")
   
   const [activeTab, setActiveTab] = useState("scenarios")
-  const [creatingScenario, setCreatingScenario] = useState(false)
-  const [creatingLend, setCreatingLend] = useState(false)
 
   // Scenario Form
   const [scenarioForm, setScenarioForm] = useState({
@@ -65,7 +78,6 @@ export default function ScenariosPage() {
       })
       if (!res.ok) throw new Error()
       toast.success("Cenário adicionado!")
-      setCreatingScenario(false)
       setScenarioForm({ title: "", amount: "", date: new Date(), isRecurring: false })
       refetchScenarios()
     } catch {
@@ -92,7 +104,6 @@ export default function ScenariosPage() {
       })
       if (!res.ok) throw new Error()
       toast.success("Empréstimo registrado!")
-      setCreatingLend(false)
       setLendForm({ friendName: "", friendPhone: "", amount: "", dueDate: new Date(), description: "" })
       refetchLends()
     } catch {

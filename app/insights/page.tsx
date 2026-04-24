@@ -4,22 +4,55 @@ import { useApi } from "@/hooks/use-api"
 import { 
   Brain, 
   Search, 
-  TrendingDown, 
   BarChart, 
-  AlertCircle, 
   Zap,
   Loader2,
   AlertTriangle,
   Lightbulb
 } from "lucide-react"
-import { BarChart as ReChartsBarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell } from "recharts"
+import { BarChart as ReChartsBarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 
+type Nudge = {
+  type: "WARNING" | "INFO" | string
+  title: string
+  message: string
+}
+
+type HiddenSubscription = {
+  name: string
+  avgGap: number
+  avgAmount: number
+  occurrences: number
+}
+
+type InsightsResponse = {
+  nudges?: Nudge[]
+  forensics?: {
+    benford?: {
+      actual: number[]
+      ideal: number[]
+    }
+    hiddenSubs?: HiddenSubscription[]
+  }
+}
+
 export default function InsightsPage() {
-  const { data: insights, loading } = useApi<any>("/api/insights")
+  const { data: insights, loading } = useApi<InsightsResponse>("/api/insights")
+
+  const chartConfig = {
+    valor: {
+      label: "Seu Perfil",
+      color: "hsl(var(--primary))",
+    },
+    ideal: {
+      label: "Ideal",
+      color: "hsl(var(--muted-foreground))",
+    },
+  }
 
   if (loading) {
     return (
@@ -49,7 +82,7 @@ export default function InsightsPage() {
           Provocações Comportamentais
         </h2>
         <div className="grid gap-4 md:grid-cols-2">
-          {insights?.nudges?.map((nudge: any, i: number) => (
+          {insights?.nudges?.map((nudge, i) => (
             <Alert key={i} variant={nudge.type === "WARNING" ? "destructive" : "default"} className="bg-card/50 backdrop-blur-sm border-2">
               {nudge.type === "WARNING" ? <AlertTriangle className="size-5" /> : <Lightbulb className="size-5 text-amber-500" />}
               <AlertTitle className="font-bold">{nudge.title}</AlertTitle>
@@ -77,16 +110,16 @@ export default function InsightsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="h-[300px]">
-             <ResponsiveContainer width="100%" height="100%">
+             <ChartContainer config={chartConfig}>
                 <ReChartsBarChart data={benfordData}>
                    <CartesianGrid vertical={false} strokeDasharray="3 3" strokeOpacity={0.1} />
                    <XAxis dataKey="digit" fontSize={12} tickLine={false} axisLine={false} />
                    <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
                    <ChartTooltip content={<ChartTooltipContent />} />
-                   <Bar dataKey="valor" fill="var(--primary)" radius={[4, 4, 0, 0]} name="Seu Perfil" />
-                   <Bar dataKey="ideal" fill="oklch(0.5 0 0)" radius={[4, 4, 0, 0]} fillOpacity={0.3} name="Ideal" />
+                   <Bar dataKey="valor" fill="var(--color-valor)" radius={[4, 4, 0, 0]} />
+                   <Bar dataKey="ideal" fill="var(--color-ideal)" radius={[4, 4, 0, 0]} fillOpacity={0.3} />
                 </ReChartsBarChart>
-             </ResponsiveContainer>
+             </ChartContainer>
           </CardContent>
         </Card>
 
@@ -109,7 +142,7 @@ export default function InsightsPage() {
                    <p className="text-sm text-muted-foreground">Nenhuma assinatura oculta detectada.</p>
                  </div>
                )}
-               {insights?.forensics?.hiddenSubs?.map((sub: any, i: number) => (
+               {insights?.forensics?.hiddenSubs?.map((sub, i) => (
                  <div key={i} className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
                     <div className="flex flex-col">
                        <span className="font-medium">{sub.name}</span>
