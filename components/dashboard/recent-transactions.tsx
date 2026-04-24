@@ -15,9 +15,9 @@ interface Transaction {
   date: string
   direction?: string
   category: string
-  categoryId?: string
+  categoryId?: string | null
   accountName: string
-  merchantName?: string
+  merchantName?: string | null
 }
 
 interface RecentTransactionsProps {

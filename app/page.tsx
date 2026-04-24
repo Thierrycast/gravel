@@ -1,11 +1,11 @@
 import { 
   getOverviewMetrics, 
   getSpendingByCategoryMetrics, 
-  getNetWorthMetrics, 
-  getBillsSummaryMetrics 
+  getNetWorthMetrics 
 } from "@/lib/domain/analytics"
 import { getDashboardTransactions } from "@/lib/domain/queries"
 import { getDashboardRecurring } from "@/lib/domain/derived"
+import { ensurePrismaReady } from "@/lib/prisma"
 import { OverviewDashboard } from "./overview-dashboard"
 import { serializeDomain } from "@/lib/core/serialization"
 
@@ -25,24 +25,55 @@ export default async function Page({
     }
   })
 
+  await ensurePrismaReady()
+
   // Parallel fetch everything directly from the domain layer (bypassing internal API)
-  const [overview, categories, netWorth, transactions, recurring, bills] = await Promise.all([
+  const [overview, categories, netWorth, transactions, recurring] = await Promise.all([
     getOverviewMetrics(urlParams),
     getSpendingByCategoryMetrics(urlParams),
     getNetWorthMetrics(urlParams),
     getDashboardTransactions(urlParams),
     getDashboardRecurring(),
-    getBillsSummaryMetrics(urlParams),
   ])
 
-  // Apply serialization to ensure clean payload for Client Components
   const initialData = serializeDomain({
-    overview,
-    categories,
-    netWorth,
-    transactions,
-    recurring,
-    bills,
+    overview: {
+      fiat: {
+        netWorth: overview.fiatNetWorth,
+        assets: overview.fiatAssets,
+        investments: overview.investmentsTotal,
+      },
+      inflow: overview.periodInflow,
+      outflow: overview.periodOutflow,
+      counts: {
+        investments: overview.counts.investments,
+      },
+    },
+    categories: {
+      results: categories.results.slice(0, 5),
+    },
+    netWorth: {
+      points: netWorth.points,
+    },
+    transactions: {
+      results: transactions.results.map((transaction) => ({
+        ...transaction,
+        category: transaction.categoryName,
+      })),
+    },
+    recurring: {
+      rules: recurring.rules.map((rule) => ({
+        id: rule.id,
+        description: rule.description,
+        amount: rule.amount ?? 0,
+        frequency: rule.frequency,
+        category: rule.category,
+        nextDate: rule.nextDate,
+      })),
+      summary: {
+        totalMonthly: recurring.summary.totalMonthly,
+      },
+    },
   })
 
   return (
