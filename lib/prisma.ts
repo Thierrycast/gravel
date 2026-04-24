@@ -1,26 +1,35 @@
 import { PrismaClient } from "@prisma/client"
 
 declare global {
-  var prisma: PrismaClient | undefined
+  var prismaBase: PrismaClient | undefined
 }
 
-export const prisma =
-  globalThis.prisma ||
+const prismaBase =
+  globalThis.prismaBase ||
   new PrismaClient({
     log: ["error", "warn"],
   })
 
-// Optimization: Enable WAL mode for SQLite concurrency
-if (!globalThis.prisma) {
-  prisma.$executeRawUnsafe(`PRAGMA journal_mode = WAL;`).catch((err) => {
-    console.error("Failed to enable WAL mode:", err)
-  })
-  prisma.$executeRawUnsafe(`PRAGMA synchronous = NORMAL;`).catch((err) => {
-    console.error("Failed to enable synchronous NORMAL:", err)
-  })
+const prismaBootstrap = globalThis.prismaBase
+  ? Promise.resolve()
+  : prismaBase.$connect()
+      .then(async () => {
+        await prismaBase.$queryRawUnsafe(`PRAGMA journal_mode = WAL;`)
+        await prismaBase.$queryRawUnsafe(`PRAGMA synchronous = NORMAL;`)
+        await prismaBase.$queryRawUnsafe(`PRAGMA busy_timeout = 5000;`)
+      })
+      .catch((err) => {
+        console.error("Failed to configure SQLite pragmas:", err)
+      })
+
+void prismaBootstrap
+
+export const prisma = prismaBase
+
+export async function ensurePrismaReady() {
+  await prismaBootstrap
 }
 
 if (process.env.NODE_ENV !== "production") {
-  globalThis.prisma = prisma
+  globalThis.prismaBase = prismaBase
 }
-

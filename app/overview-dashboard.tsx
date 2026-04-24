@@ -22,28 +22,72 @@ const NetWorthChart = dynamic(
   { ssr: false, loading: () => <ChartSkeleton /> }
 )
 
-interface OverviewDashboardProps {
-  initialData: {
-    overview: any
-    categories: any
-    netWorth: any
-    transactions: any
-    recurring: any
-    bills: any
+type OverviewDashboardData = {
+  overview: {
+    fiat: {
+      netWorth: number
+      assets: number
+      investments: number
+    }
+    inflow: number
+    outflow: number
+    counts: {
+      investments: number
+    }
   }
+  categories: {
+    results: Array<{
+      categoryId: string | null
+      name: string
+      amount: number
+      sharePercent: number
+    }>
+  }
+  netWorth: {
+    points: Array<{
+      date: string
+      netWorth: number
+      assets?: number | null
+      liabilities?: number | null
+    }>
+  }
+  transactions: {
+    results: Array<{
+      id: string
+      description: string
+      amount: number
+      date: string
+      direction?: string
+      category: string
+      categoryId?: string | null
+      accountName: string
+      merchantName?: string | null
+    }>
+  }
+  recurring: {
+    rules: Array<{
+      id: string
+      description: string
+      amount: number
+      frequency: string
+      category: string
+      nextDate: string
+    }>
+    summary: {
+      totalMonthly: number
+    }
+  }
+}
+
+interface OverviewDashboardProps {
+  initialData: OverviewDashboardData
 }
 
 export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
   const periodState = usePeriod()
   const { format } = useCurrency()
 
-  const { overview, categories, netWorth, transactions, recurring, bills } = initialData
-
-  // Align transaction fields for RecentTransactions component
-  const mappedTransactions = transactions.results.map((tx: any) => ({
-    ...tx,
-    category: tx.categoryName
-  }))
+  const { overview, categories, netWorth, transactions, recurring } = initialData
 
   return (
     <div className="flex flex-col gap-8 pb-12">
@@ -109,7 +153,7 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
             <BarChart3 className="size-4" /> Gastos por Categoria
           </h2>
           <div className="flex flex-col gap-4">
-            {categories.results.slice(0, 5).map((cat: any) => (
+            {categories.results.map((cat) => (
               <div key={cat.categoryId} className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-medium truncate">{cat.name}</span>
@@ -130,7 +174,7 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
       {/* Transactions & Bills */}
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <RecentTransactions transactions={mappedTransactions} loading={false} />
+          <RecentTransactions transactions={transactions.results} loading={false} />
         </div>
         <div>
           <UpcomingExpenses rules={recurring.rules} totalMonthly={recurring.summary.totalMonthly} loading={false} />

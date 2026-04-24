@@ -1,33 +1,46 @@
 import { Prisma } from "@prisma/client"
 
-/**
- * Recursively serializes domain objects, converting Prisma.Decimal to number.
- * This ensures clean serialization between Server and Client components (Task 4.1).
- */
-export function serializeDomain<T>(data: T): T {
-  if (data === null || data === undefined) return data
+type SerializedDomain<T> =
+  T extends Prisma.Decimal ? number :
+  T extends Date ? string :
+  T extends Array<infer Item> ? SerializedDomain<Item>[] :
+  T extends object ? { [Key in keyof T]: SerializedDomain<T[Key]> } :
+  T
 
-  // Handle Decimal
-  if (data instanceof Prisma.Decimal) {
-    return data.toNumber() as unknown as T
+function serializeValue(value: unknown, seen: WeakSet<object>): unknown {
+  if (value === null || value === undefined) return value
+
+  if (value instanceof Prisma.Decimal) {
+    return value.toNumber()
   }
 
-  // Handle Array
-  if (Array.isArray(data)) {
-    return data.map(item => serializeDomain(item)) as unknown as T
+  if (value instanceof Date) {
+    return value.toISOString()
   }
 
-  // Handle Object
-  if (typeof data === "object") {
-    // Check if it's a Date
-    if (data instanceof Date) return data as unknown as T
+  if (Array.isArray(value)) {
+    return value.map((item) => serializeValue(item, seen))
+  }
 
-    const result: any = {}
-    for (const [key, value] of Object.entries(data)) {
-      result[key] = serializeDomain(value)
+  if (typeof value === "object") {
+    if (seen.has(value)) {
+      throw new TypeError("serializeDomain cannot serialize circular references")
     }
-    return result as T
+
+    seen.add(value)
+
+    const result: Record<string, unknown> = {}
+    for (const [key, nestedValue] of Object.entries(value)) {
+      result[key] = serializeValue(nestedValue, seen)
+    }
+
+    seen.delete(value)
+    return result
   }
 
-  return data
+  return value
+}
+
+export function serializeDomain<T>(data: T): SerializedDomain<T> {
+  return serializeValue(data, new WeakSet<object>()) as SerializedDomain<T>
 }
