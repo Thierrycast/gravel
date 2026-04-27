@@ -3,6 +3,48 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ accountId: string }> },
+) {
+  try {
+    const { accountId } = await params;
+    const body = await request.json();
+
+    const account = await prisma.domainAccount.findUnique({
+      where: { id: accountId },
+    });
+
+    if (!account) {
+      return jsonError(new Error("Conta não encontrada"), 404);
+    }
+
+    if (account.kind !== "CASH") {
+      return jsonError(
+        new Error("Ajuste de saldo manual permitido apenas para carteiras físicas"),
+        400,
+      );
+    }
+
+    const delta = Number(body.delta);
+    if (!Number.isFinite(delta) || delta === 0) {
+      return jsonError(new Error("Valor inválido para ajuste"), 400);
+    }
+
+    const current = Number(account.balance ?? 0);
+    const newBalance = current + delta;
+
+    const updated = await prisma.domainAccount.update({
+      where: { id: accountId },
+      data: { balance: newBalance },
+    });
+
+    return jsonOk({ results: updated });
+  } catch (error) {
+    return jsonError(error);
+  }
+}
+
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ accountId: string }> },

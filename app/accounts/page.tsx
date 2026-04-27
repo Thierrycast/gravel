@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Plus, Building2, CreditCard, Pencil } from "lucide-react";
+import { Plus, Minus, Building2, Pencil, Wallet } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import { usePeriod } from "@/hooks/use-period";
-import { formatPercent } from "@/lib/format";
+import { formatDateFull, formatPercent } from "@/lib/format";
 import { useCurrency } from "@/lib/currency-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,8 +54,14 @@ function getTypeLabel(kind: string): string {
     SAVINGS: "Poupança",
     CHECKING: "Conta Corrente",
     INVESTMENT: "Investimento",
+    CASH: "Carteira Física",
+    OTHER: "Outro",
   };
   return labels[kind] || kind;
+}
+
+function isCreditAccount(account: Account): boolean {
+  return account.kind === "CARD" || account.kind === "CREDIT";
 }
 
 function AccountCardSkeleton() {
@@ -98,6 +104,8 @@ export default function AccountsPage() {
   const [editingNickname, setEditingNickname] = useState(false);
   const [nicknameInput, setNicknameInput] = useState("");
   const [savingNickname, setSavingNickname] = useState(false);
+  const [cashInput, setCashInput] = useState("");
+  const [savingCash, setSavingCash] = useState(false);
 
   const loading = accountsLoading || allocationLoading;
 
@@ -121,23 +129,88 @@ export default function AccountsPage() {
   }
 
   const accounts = accountsData?.results ?? [];
-  const creditAccounts = accounts.filter(
-    (a) => a.kind === "CARD" || a.kind === "CREDIT",
-  );
-  const bankAccounts = accounts.filter(
-    (a) => a.kind !== "CARD" && a.kind !== "CREDIT",
-  );
-
-  const totalCredit = allocationData?.summary.byKind.CREDIT ?? 0;
-  const totalBank = allocationData?.summary.byKind.BANK ?? 0;
+  const totalCredit =
+    Math.abs(allocationData?.summary.byKind.CARD ?? 0) +
+    Math.abs(allocationData?.summary.byKind.CREDIT ?? 0);
+  const totalBank =
+    (allocationData?.summary.byKind.BANK ?? 0) +
+    (allocationData?.summary.byKind.CASH ?? 0) +
+    (allocationData?.summary.byKind.INVESTMENT ?? 0) +
+    (allocationData?.summary.byKind.OTHER ?? 0);
 
   const allocationMap = new Map(
     (allocationData?.results ?? []).map((r) => [r.accountId, r]),
   );
+  const institutionGroups = Array.from(
+    accounts
+      .reduce(
+        (groups, account) => {
+          const key = account.institution || "Sem instituição";
+          const current = groups.get(key) ?? {
+            institution: key,
+            logoUrl: account.imageUrl ?? null,
+            accounts: [] as Account[],
+            balance: 0,
+            creditDebt: 0,
+          };
+          current.accounts.push(account);
+          if (!current.logoUrl && account.imageUrl)
+            current.logoUrl = account.imageUrl;
+          if (isCreditAccount(account)) {
+            current.creditDebt += Math.abs(account.balance);
+          } else {
+            current.balance += account.balance;
+          }
+          groups.set(key, current);
+          return groups;
+        },
+        new Map<
+          string,
+          {
+            institution: string;
+            logoUrl: string | null;
+            accounts: Account[];
+            balance: number;
+            creditDebt: number;
+          }
+        >(),
+      )
+      .values(),
+  ).sort((left, right) => left.institution.localeCompare(right.institution));
 
   function handleAccountClick(account: Account) {
     setSelectedAccount(account);
+    setCashInput("");
     setSheetOpen(true);
+  }
+
+  async function handleCashAdjust(direction: "add" | "remove") {
+    if (!selectedAccount) return;
+    const amount = parseFloat(cashInput.replace(",", "."));
+    if (!isFinite(amount) || amount <= 0) return;
+    const delta = direction === "add" ? amount : -amount;
+    setSavingCash(true);
+    try {
+      const res = await fetch(
+        `/api/domain/accounts/${selectedAccount.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ delta }),
+        },
+      );
+      if (!res.ok) throw new Error("Erro ao ajustar saldo");
+      setSelectedAccount((prev) =>
+        prev ? { ...prev, balance: prev.balance + delta } : prev,
+      );
+      setCashInput("");
+      refetchAccounts();
+      refetchAllocation();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSavingCash(false);
+    }
   }
 
   return (
@@ -216,162 +289,124 @@ export default function AccountsPage() {
         </div>
       )}
 
-      {/* Credit Cards Section */}
-      {(creditAccounts.length > 0 || loading) && (
-        <div>
-          <div className="flex items-center gap-2 mb-4">
-            <CreditCard className="size-5 text-muted-foreground" />
-            <h2 className="text-xl font-semibold">Cartões de Crédito</h2>
-            {!loading && (
-              <Badge variant="secondary">{creditAccounts.length}</Badge>
-            )}
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {loading
-              ? Array.from({ length: 2 }).map((_, i) => (
-                  <AccountCardSkeleton key={i} />
-                ))
-              : creditAccounts.map((account) => {
-                  const allocation = allocationMap.get(account.id);
-                  return (
-                    <Card
-                      key={account.id}
-                      className="cursor-pointer transition-shadow hover:shadow-md"
-                      onClick={() => handleAccountClick(account)}
-                    >
-                      <CardHeader>
-                        <div className="flex items-center gap-3">
-                          <Avatar>
-                            <AvatarImage src={account.imageUrl || undefined} />
-                            <AvatarFallback>
-                              {getInitials(account.institution || account.name)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium truncate">
-                              {account.name}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {account.institution}
-                            </div>
-                          </div>
-                          <Badge variant="secondary" className="shrink-0">
-                            {getTypeLabel(account.subtype || account.kind)}
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <div>
-                          <div className="flex items-center justify-between text-sm mb-1">
-                            <span className="text-muted-foreground">
-                              Fatura Atual
-                            </span>
-                            <span
-                              className={`font-semibold ${account.balance > 0 ? "text-destructive" : "text-emerald-400"}`}
-                            >
-                              {format(Math.abs(account.balance))}
-                            </span>
-                          </div>
-                          <Progress
-                            value={
-                              allocation
-                                ? Math.min(allocation.percentage, 100)
-                                : 0
-                            }
-                          />
-                          {allocation && (
-                            <div className="text-xs text-muted-foreground mt-1">
-                              {formatPercent(allocation.percentage)} do total
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-          </div>
-
-          {!loading && creditAccounts.length > 0 && (
-            <div className="mt-3 text-right text-sm text-muted-foreground">
-              Total:{" "}
-              <span
-                className={`font-medium ${totalCredit > 0 ? "text-destructive" : "text-emerald-400"}`}
-              >
-                {format(totalCredit)}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Bank Accounts Section */}
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          <Building2 className="size-5 text-muted-foreground" />
-          <h2 className="text-xl font-semibold">Contas Bancárias</h2>
-          {!loading && <Badge variant="secondary">{bankAccounts.length}</Badge>}
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {loading
-            ? Array.from({ length: 3 }).map((_, i) => (
-                <AccountCardSkeleton key={i} />
-              ))
-            : bankAccounts.map((account) => {
-                const allocation = allocationMap.get(account.id);
-                return (
-                  <Card
-                    key={account.id}
-                    className="cursor-pointer transition-shadow hover:shadow-md"
-                    onClick={() => handleAccountClick(account)}
-                  >
-                    <CardHeader>
-                      <div className="flex items-center gap-3">
-                        <Avatar>
-                          <AvatarImage src={account.imageUrl || undefined} />
-                          <AvatarFallback>
-                            {getInitials(account.institution || account.name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium truncate">
-                            {account.name}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {account.institution}
-                          </div>
-                        </div>
-                        <Badge variant="outline" className="shrink-0">
-                          {getTypeLabel(account.subtype || account.kind)}
+      {/* Institution groups */}
+      <div className="space-y-6">
+        {loading
+          ? Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <AccountCardSkeleton />
+                <AccountCardSkeleton />
+                <AccountCardSkeleton />
+              </div>
+            ))
+          : institutionGroups.map((group) => (
+              <section key={group.institution} className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <Avatar>
+                      <AvatarImage src={group.logoUrl || undefined} />
+                      <AvatarFallback>
+                        {getInitials(group.institution)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <h2 className="text-xl font-semibold">
+                        {group.institution}
+                      </h2>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <Badge variant="secondary">
+                          {group.accounts.length}
                         </Badge>
+                        {group.balance !== 0 && (
+                          <span>Saldo {format(group.balance)}</span>
+                        )}
+                        {group.creditDebt > 0 && (
+                          <span className="text-destructive">
+                            Cartões {format(group.creditDebt)}
+                          </span>
+                        )}
                       </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">
-                          Saldo
-                        </span>
-                        <span className="text-lg font-semibold">
-                          {format(account.balance)}
-                        </span>
-                      </div>
-                      {allocation && (
-                        <div className="text-xs text-muted-foreground mt-1 text-right">
-                          {formatPercent(allocation.percentage)} do patrimônio
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })}
-        </div>
+                    </div>
+                  </div>
+                </div>
 
-        {!loading && bankAccounts.length > 0 && (
-          <div className="mt-3 text-right text-sm text-muted-foreground">
-            Total: <span className="font-medium">{format(totalBank)}</span>
-          </div>
-        )}
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {group.accounts.map((account) => {
+                    const allocation = allocationMap.get(account.id);
+                    const credit = isCreditAccount(account);
+                    return (
+                      <Card
+                        key={account.id}
+                        className="cursor-pointer transition-shadow hover:shadow-md"
+                        onClick={() => handleAccountClick(account)}
+                      >
+                        <CardHeader>
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              <AvatarImage
+                                src={account.imageUrl || undefined}
+                              />
+                              <AvatarFallback>
+                                {getInitials(
+                                  account.institution || account.name,
+                                )}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium truncate">
+                                {account.name}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {account.institution}
+                              </div>
+                            </div>
+                            <Badge
+                              variant={credit ? "secondary" : "outline"}
+                              className="shrink-0"
+                            >
+                              {getTypeLabel(account.subtype || account.kind)}
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div>
+                            <div className="flex items-center justify-between text-sm mb-1">
+                              <span className="text-muted-foreground">
+                                {credit ? "Fatura Atual" : "Saldo"}
+                              </span>
+                              <span
+                                className={`font-semibold ${
+                                  credit && account.balance > 0
+                                    ? "text-destructive"
+                                    : "text-foreground"
+                                }`}
+                              >
+                                {format(
+                                  credit
+                                    ? Math.abs(account.balance)
+                                    : account.balance,
+                                )}
+                              </span>
+                            </div>
+                            {allocation && (
+                              <>
+                                <Progress
+                                  value={Math.min(allocation.percentage, 100)}
+                                />
+                                <div className="text-xs text-muted-foreground mt-1 text-right">
+                                  {formatPercent(allocation.percentage)} do
+                                  patrimônio
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
       </div>
 
       {/* Empty State */}
@@ -529,11 +564,67 @@ export default function AccountsPage() {
                 </div>
                 {selectedAccount.number && (
                   <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">
-                      Número
-                    </span>
+                    <span className="text-sm text-muted-foreground">Final</span>
                     <span className="text-sm font-mono">
                       ****{selectedAccount.number.slice(-4)}
+                    </span>
+                  </div>
+                )}
+                {selectedAccount.ownerName && (
+                  <div className="flex justify-between gap-4">
+                    <span className="text-sm text-muted-foreground">
+                      Titular
+                    </span>
+                    <span className="max-w-[60%] text-right text-sm">
+                      {selectedAccount.ownerName}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    Transações
+                  </span>
+                  <span className="text-sm tabular-nums">
+                    {selectedAccount.transactionCount ?? 0}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    Total gasto
+                  </span>
+                  <span className="text-sm font-medium tabular-nums">
+                    {format(selectedAccount.totalSpent ?? 0)}
+                  </span>
+                </div>
+                {(selectedAccount.firstTransactionAt ||
+                  selectedAccount.createdAt) && (
+                  <div className="flex justify-between gap-4">
+                    <span className="text-sm text-muted-foreground">Desde</span>
+                    <span className="text-right text-sm">
+                      {formatDateFull(
+                        selectedAccount.firstTransactionAt ??
+                          selectedAccount.createdAt,
+                      )}
+                    </span>
+                  </div>
+                )}
+                {selectedAccount.lastTransactionAt && (
+                  <div className="flex justify-between gap-4">
+                    <span className="text-sm text-muted-foreground">
+                      Último uso
+                    </span>
+                    <span className="text-right text-sm">
+                      {formatDateFull(selectedAccount.lastTransactionAt)}
+                    </span>
+                  </div>
+                )}
+                {selectedAccount.sourceProvider && (
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">
+                      Origem
+                    </span>
+                    <span className="text-sm">
+                      {selectedAccount.sourceProvider}
                     </span>
                   </div>
                 )}
@@ -557,6 +648,53 @@ export default function AccountsPage() {
                   </div>
                 );
               })()}
+
+              {selectedAccount.kind === "CASH" && (
+                <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Wallet className="size-4 text-muted-foreground" />
+                    Ajustar saldo em dinheiro
+                  </div>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Valor (ex: 50.00)"
+                    value={cashInput}
+                    onChange={(e) => setCashInput(e.target.value)}
+                    className="h-8 text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                      disabled={
+                        savingCash ||
+                        !cashInput ||
+                        parseFloat(cashInput.replace(",", ".")) <= 0
+                      }
+                      onClick={() => handleCashAdjust("add")}
+                    >
+                      <Plus className="size-3.5 mr-1" />
+                      Adicionar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="flex-1"
+                      disabled={
+                        savingCash ||
+                        !cashInput ||
+                        parseFloat(cashInput.replace(",", ".")) <= 0
+                      }
+                      onClick={() => handleCashAdjust("remove")}
+                    >
+                      <Minus className="size-3.5 mr-1" />
+                      Remover
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               <Button variant="outline" asChild className="mt-2">
                 <Link
