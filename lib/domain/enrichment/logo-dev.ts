@@ -48,6 +48,11 @@ export function buildLogoDevUrl(domain: string) {
   return `${LOGO_DEV_CDN}/${encodeURIComponent(domain)}?${params.toString()}`
 }
 
+export function logoProxyUrl(domain: string): string {
+  const safe = domain.replace(/[^a-zA-Z0-9.\-]/g, "").toLowerCase()
+  return `/api/logos/${encodeURIComponent(safe)}`
+}
+
 export function buildLogoDevCryptoUrl(asset: string) {
   const token = getPublishableKey()
   if (!token) return null
@@ -148,11 +153,12 @@ export async function resolveMerchantLogoCache(options?: { limit?: number; descr
 
     try {
       const described = options?.describe ? await describeLogoDevDomain(domain) : null
-      const logoUrl = described?.logo ?? buildLogoDevUrl(domain)
+      const resolvedDomain = described?.domain ?? domain
+      const logoUrl = logoProxyUrl(resolvedDomain)
       await prisma.merchantEnrichment.upsert({
         where: { domainMerchantId: merchant.id },
         update: {
-          domain: described?.domain ?? domain,
+          domain: resolvedDomain,
           logoUrl,
           normalizedName: described?.name ?? normalizeMerchantName(merchant.displayName),
           description: described?.description ?? undefined,
@@ -165,7 +171,7 @@ export async function resolveMerchantLogoCache(options?: { limit?: number; descr
           errorMessage: null,
         },
         create: {
-          domain: described?.domain ?? domain,
+          domain: resolvedDomain,
           logoUrl,
           normalizedName: described?.name ?? normalizeMerchantName(merchant.displayName),
           description: described?.description,

@@ -24,7 +24,7 @@ export async function GET(request: Request) {
         pluggyItemIds.length > 0
           ? { pluggyItemId: { in: pluggyItemIds } }
           : { id: "__none__" },
-      select: { pluggyItemId: true, connectorName: true, imageUrl: true },
+      select: { pluggyItemId: true, connectorName: true },
     });
     const pluggyItemMap = new Map(
       pluggyItems.map((item) => [item.pluggyItemId, item]),
@@ -81,10 +81,15 @@ export async function GET(request: Request) {
       const pluggyItem = account.sourceParentId
         ? pluggyItemMap.get(account.sourceParentId)
         : null;
+      // connectorName is the real bank name (e.g. "Nubank", "Itaú").
+      // Never expose "PLUGGY" — it is our sync provider, not a financial institution.
+      const connectorName = pluggyItem?.connectorName ?? null;
       const institution =
-        pluggyItem?.connectorName ??
-        account.institutionName ??
-        account.sourceProvider;
+        connectorName ??
+        (account.institutionName !== "Pluggy"
+          ? account.institutionName
+          : null) ??
+        null;
 
       return {
         id: account.id,
@@ -104,10 +109,7 @@ export async function GET(request: Request) {
         sourceParentId: account.sourceParentId,
         ownerName: account.ownerName,
         nickname: account.nickname,
-        imageUrl:
-          account.imageUrl ??
-          pluggyItem?.imageUrl ??
-          getInstitutionLogo(institution ?? account.name),
+        imageUrl: getInstitutionLogo(institution ?? account.name),
         createdAt: account.createdAt,
         updatedAt: account.updatedAt,
         transactionCount: activityItem?._count ?? 0,
