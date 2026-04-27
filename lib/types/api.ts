@@ -51,6 +51,7 @@ export interface LookupResponse<T> {
 export interface CategoryLookup {
   id: string;
   name: string;
+  kind?: string;
 }
 
 export interface AccountLookup {
@@ -69,6 +70,7 @@ export interface MerchantLookup {
 export interface Account {
   id: string;
   name: string;
+  originalName?: string | null;
   kind: string;
   subtype: string;
   balance: number;
@@ -78,6 +80,15 @@ export interface Account {
   providerAccountId: string;
   nickname?: string | null;
   imageUrl?: string | null;
+  sourceProvider?: string;
+  sourceParentId?: string | null;
+  ownerName?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  transactionCount?: number;
+  totalSpent?: number;
+  firstTransactionAt?: string | null;
+  lastTransactionAt?: string | null;
 }
 
 export interface AccountsResponse {
@@ -157,6 +168,9 @@ export interface RecurringRule {
   isManual: boolean;
   origin: "detected" | "manual";
   isInstallment?: boolean;
+  currentInstallment?: number;
+  totalInstallments?: number;
+  installmentRemaining?: number;
 }
 
 export interface RecurringSummary {
