@@ -232,7 +232,10 @@ export async function runPluggyTransactionEnrichment(options?: {
     try {
       const results = await categorizePluggyTransactions({
         transactions: requestItems,
-        accountType: accountType === "UNKNOWN" ? undefined : accountType,
+        accountType:
+          accountType === "UNKNOWN"
+            ? undefined
+            : (accountType as "CREDIT_CARD" | "CHECKING"),
         isBusiness:
           businessScope === "BUSINESS"
             ? true

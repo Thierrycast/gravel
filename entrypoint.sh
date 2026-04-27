@@ -18,7 +18,7 @@ esac
 # Apply schema — ideal for homelab/personal use. For formal migrations, replace
 # with: prisma migrate deploy
 echo "[gravel] Applying database schema..."
-prisma db push --skip-generate --accept-data-loss=false
+prisma db push --skip-generate
 
 echo "[gravel] Starting Gravel Finance on :${PORT:-3000}..."
 exec node server.js
