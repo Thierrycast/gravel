@@ -21,10 +21,18 @@ import {
 
 import { PageError } from "@/components/page-error";
 import { PageHeader } from "@/components/page-header";
+import { LogoImage } from "@/components/logo-image";
 import { PeriodSwitcher } from "@/components/period-switcher";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -188,6 +196,10 @@ function TransactionsContent() {
   const [selectedTransaction, setSelectedTransaction] =
     useState<Transaction | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [draftCategoryId, setDraftCategoryId] = useState("");
+  const [draftMerchantName, setDraftMerchantName] = useState("");
+  const [draftDescription, setDraftDescription] = useState("");
+  const [savingOverride, setSavingOverride] = useState(false);
 
   const categories = useApi<LookupResponse<CategoryLookup>>(
     "/api/domain/categories",
@@ -234,6 +246,17 @@ function TransactionsContent() {
       ]),
     );
   }, [merchants.data?.results]);
+
+  const transferCategoryId = useMemo(() => {
+    const allCategories = categories.data?.results ?? [];
+    return (
+      allCategories.find((category) => category.kind === "TRANSFER")?.id ??
+      allCategories.find((category) =>
+        category.name.toLowerCase().includes("transfer"),
+      )?.id ??
+      null
+    );
+  }, [categories.data?.results]);
 
   const resolvedLegacyAccountId = useMemo(() => {
     if (accountId || !legacyAccountName) return accountId ?? null;
@@ -387,7 +410,41 @@ function TransactionsContent() {
 
   function openTransaction(transaction: Transaction) {
     setSelectedTransaction(transaction);
+    setDraftCategoryId(transaction.categoryId ?? "");
+    setDraftMerchantName(transaction.merchantName ?? "");
+    setDraftDescription(
+      transaction.rawDescription ?? transaction.description ?? "",
+    );
     setSheetOpen(true);
+  }
+
+  async function saveTransactionOverrides(extra?: Record<string, unknown>) {
+    if (!selectedTransaction) return;
+    setSavingOverride(true);
+    try {
+      const response = await fetch(
+        `/api/domain/transactions/${selectedTransaction.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            domainCategoryId: draftCategoryId || null,
+            merchantName: draftMerchantName.trim() || null,
+            description:
+              draftDescription.trim() || selectedTransaction.description,
+            ...extra,
+          }),
+        },
+      );
+      if (response.ok) {
+        setSheetOpen(false);
+        transactions.refetch();
+      }
+    } catch (error) {
+      console.error("Failed to save transaction overrides", error);
+    } finally {
+      setSavingOverride(false);
+    }
   }
 
   if (transactions.error) {
@@ -614,7 +671,7 @@ function TransactionsContent() {
             <Table>
               <TableHeader>
                 <TableRow className="border-border hover:bg-transparent">
-                  <TableHead className="font-mono text-sm tracking-wider text-muted-foreground uppercase whitespace-nowrap py-4">
+                  <TableHead className="font-mono text-sm tracking-wider text-muted-foreground uppercase whitespace-nowrap py-4 pl-4">
                     Data
                   </TableHead>
                   <TableHead className="font-mono text-sm tracking-wider text-muted-foreground uppercase py-4">
@@ -626,7 +683,7 @@ function TransactionsContent() {
                   <TableHead className="hidden sm:table-cell font-mono text-sm tracking-wider text-muted-foreground uppercase py-4">
                     Categoria
                   </TableHead>
-                  <TableHead className="text-right font-mono text-sm tracking-wider text-muted-foreground uppercase py-4">
+                  <TableHead className="text-right font-mono text-sm tracking-wider text-muted-foreground uppercase py-4 pr-4">
                     Valor
                   </TableHead>
                 </TableRow>
@@ -645,8 +702,7 @@ function TransactionsContent() {
                     transaction.merchantName !== title
                       ? transaction.merchantName
                       : null);
-                  const currentInstallmentLabel =
-                    installmentLabel(transaction);
+                  const currentInstallmentLabel = installmentLabel(transaction);
 
                   return (
                     <TableRow
@@ -654,7 +710,7 @@ function TransactionsContent() {
                       className="group cursor-pointer border-border hover:bg-muted/40 transition-colors"
                       onClick={() => openTransaction(transaction)}
                     >
-                      <TableCell className="whitespace-nowrap font-mono text-sm text-muted-foreground/80 py-4">
+                      <TableCell className="whitespace-nowrap font-mono text-sm text-muted-foreground/80 py-4 pl-4">
                         {formatDate(transaction.date)}
                       </TableCell>
                       <TableCell className="py-4">
@@ -671,7 +727,7 @@ function TransactionsContent() {
                           </span>
                           {transaction.merchantLogoUrl ? (
                             <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/50 bg-background p-1">
-                              <img
+                              <LogoImage
                                 src={transaction.merchantLogoUrl}
                                 alt={title}
                                 className="size-full object-contain"
@@ -702,7 +758,7 @@ function TransactionsContent() {
                         <div className="flex items-center gap-3">
                           {transaction.accountImageUrl ? (
                             <div className="shrink-0 size-7 rounded-lg border border-border/40 bg-muted/30 p-1 flex items-center justify-center overflow-hidden shadow-sm">
-                              <img
+                              <LogoImage
                                 src={transaction.accountImageUrl}
                                 alt={transaction.accountName}
                                 className="size-full object-contain"
@@ -741,6 +797,7 @@ function TransactionsContent() {
                       <TableCell
                         className={cn(
                           "text-right font-mono text-base font-bold tabular-nums py-4",
+                          "pr-4",
                           amountToneClass(signedAmount),
                         )}
                       >
@@ -853,7 +910,9 @@ function TransactionsContent() {
                   <span>
                     {selectedTransaction.direction === "INFLOW"
                       ? "Entrada"
-                      : "Saída"}
+                      : selectedTransaction.direction === "TRANSFER"
+                        ? "Transferência"
+                        : "Saída"}
                   </span>
                 </div>
                 {selectedTransaction.merchantName ? (
@@ -864,6 +923,79 @@ function TransactionsContent() {
                     </span>
                   </div>
                 ) : null}
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <span className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                    Categoria
+                  </span>
+                  <Select
+                    value={draftCategoryId || "__none__"}
+                    onValueChange={(value) =>
+                      setDraftCategoryId(value === "__none__" ? "" : value)
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Sem categoria" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Sem categoria</SelectItem>
+                      {(categories.data?.results ?? []).map((category) => (
+                        <SelectItem key={category.id} value={category.id}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <span className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                    Merchant
+                  </span>
+                  <Input
+                    value={draftMerchantName}
+                    onChange={(event) =>
+                      setDraftMerchantName(event.target.value)
+                    }
+                    placeholder="Nome do comerciante"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <span className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                    Descrição
+                  </span>
+                  <Input
+                    value={draftDescription}
+                    onChange={(event) =>
+                      setDraftDescription(event.target.value)
+                    }
+                    placeholder="Descrição da transação"
+                  />
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Button
+                    variant="outline"
+                    disabled={savingOverride}
+                    onClick={() => saveTransactionOverrides()}
+                  >
+                    {savingOverride ? "Salvando..." : "Salvar ajustes"}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    disabled={savingOverride}
+                    onClick={() =>
+                      saveTransactionOverrides({
+                        markInternalTransfer: true,
+                        domainCategoryId: transferCategoryId,
+                      })
+                    }
+                  >
+                    Transferência interna
+                  </Button>
+                </div>
               </div>
               <div className="mt-6 flex flex-col gap-2">
                 <Button
