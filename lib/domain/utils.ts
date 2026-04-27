@@ -1,6 +1,6 @@
 import {
   buildLogoDevCryptoUrl,
-  buildLogoDevUrl,
+  logoProxyUrl,
   resolveMerchantDomain,
 } from "@/lib/domain/enrichment/logo-dev";
 
@@ -36,21 +36,20 @@ export function getMerchantLogo(name: string): string | null {
   if (!normalized) return null;
 
   const domain = resolveMerchantDomain(name);
-  if (domain) return buildLogoDevUrl(domain);
+  if (domain) return logoProxyUrl(domain);
 
-  // Known patterns for common recurring services
-  if (normalized.includes("netflix")) return buildLogoDevUrl("netflix.com");
-  if (normalized.includes("spotify")) return buildLogoDevUrl("spotify.com");
+  if (normalized.includes("netflix")) return logoProxyUrl("netflix.com");
+  if (normalized.includes("spotify")) return logoProxyUrl("spotify.com");
   if (normalized.includes("amazon") || normalized.includes("prime"))
-    return buildLogoDevUrl("amazon.com");
+    return logoProxyUrl("amazon.com");
   if (normalized.includes("google") || normalized.includes("youtube"))
-    return buildLogoDevUrl("google.com");
+    return logoProxyUrl("google.com");
   if (normalized.includes("apple") || normalized.includes("icloud"))
-    return buildLogoDevUrl("apple.com");
+    return logoProxyUrl("apple.com");
   if (normalized.includes("microsoft") || normalized.includes("office"))
-    return buildLogoDevUrl("microsoft.com");
-  if (normalized.includes("adobe")) return buildLogoDevUrl("adobe.com");
-  if (normalized.includes("disney")) return buildLogoDevUrl("disney.com");
+    return logoProxyUrl("microsoft.com");
+  if (normalized.includes("adobe")) return logoProxyUrl("adobe.com");
+  if (normalized.includes("disney")) return logoProxyUrl("disney.com");
 
   // Generic fallback using Clearbit (free tier/public)
   // return `https://logo.clearbit.com/${normalized.replace(/\s+/g, '')}.com`
@@ -87,5 +86,5 @@ export function getInstitutionLogo(
   const match = knownInstitutions.find(([needle]) =>
     normalized.includes(needle),
   );
-  return match ? buildLogoDevUrl(match[1]) : null;
+  return match ? logoProxyUrl(match[1]) : null;
 }

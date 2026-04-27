@@ -48,9 +48,7 @@ export async function checkAndTriggerAutoSync() {
       console.log(`[auto-sync] Triggering automatic sync. Last sync: ${lastSyncAt?.toISOString() ?? "never"}. Interval: ${intervalHours}h`)
       
       // Fire-and-forget background sync
-      runFullOperationalSync({
-        scope: "auto-sync/daily",
-      }).catch((err) => {
+      runFullOperationalSync().catch((err) => {
         // Only log if it's not a lock error (which we already tried to avoid but race conditions exist)
         if (!(err instanceof Error && err.message.includes("Lock ativo"))) {
           console.error("[auto-sync] background sync failed:", err)

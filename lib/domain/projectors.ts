@@ -369,12 +369,15 @@ async function projectPluggyCategories() {
 async function projectPluggyAccounts() {
   const records = await prisma.pluggyAccountRecord.findMany();
   const items = await prisma.pluggyItem.findMany();
-  const itemMap = new Map(items.map((i) => [i.pluggyItemId, i.imageUrl]));
+  const itemMap = new Map(
+    items.map((i) => [i.pluggyItemId, { connectorName: i.connectorName }]),
+  );
   let projected = 0;
 
   await prisma.$transaction(async (tx) => {
     for (const record of records) {
-      const imageUrl = itemMap.get(record.itemExternalId);
+      const item = itemMap.get(record.itemExternalId);
+      const institutionName = item?.connectorName ?? null;
       const domainAccount = await tx.domainAccount.upsert({
         where: {
           sourceProvider_sourceExternalId: {
@@ -390,8 +393,8 @@ async function projectPluggyAccounts() {
           balance: record.balance ?? undefined,
           sourceParentId: record.itemExternalId,
           ownerName: record.owner ?? undefined,
-          institutionName: "Pluggy",
-          imageUrl: imageUrl ?? undefined,
+          institutionName: institutionName ?? undefined,
+          imageUrl: null,
           metadataJson: JSON.stringify({
             subtype: record.subtype,
             number: record.number,
@@ -408,8 +411,7 @@ async function projectPluggyAccounts() {
           sourceExternalId: record.externalId,
           sourceParentId: record.itemExternalId,
           ownerName: record.owner ?? undefined,
-          institutionName: "Pluggy",
-          imageUrl: imageUrl ?? undefined,
+          institutionName: institutionName ?? undefined,
           metadataJson: JSON.stringify({
             subtype: record.subtype,
             number: record.number,
