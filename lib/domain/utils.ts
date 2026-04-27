@@ -1,19 +1,16 @@
 import {
-  buildLogoDevCryptoUrl,
   logoProxyUrl,
   resolveMerchantDomain,
 } from "@/lib/domain/enrichment/logo-dev";
 
 /**
  * Resolves a reliable logo URL for a given cryptocurrency asset ticker.
+ * Routes through the local proxy for caching; falls back to spothq icons.
  */
 export function getCryptoLogo(asset: string): string {
-  const logoDevUrl = buildLogoDevCryptoUrl(asset);
-  if (logoDevUrl) return logoDevUrl;
-
-  const ticker = asset.toLowerCase();
-  // Reliable source for crypto icons from spothq/cryptocurrency-icons
-  return `https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/128/color/${ticker}.png`;
+  const ticker = asset.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (ticker) return `/api/logos/crypto/${encodeURIComponent(ticker)}`;
+  return `https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/128/color/${asset.toLowerCase()}.png`;
 }
 
 /**
@@ -56,6 +53,42 @@ export function getMerchantLogo(name: string): string | null {
   return null;
 }
 
+/**
+ * Derives the real financial institution brand name from a list of account names
+ * belonging to the same Pluggy item (same Open Finance connection).
+ *
+ * MeuPluggy (connectorId=200) is a proxy that aggregates all Brazilian banks under
+ * one connector. The only reliable source for the actual institution is the account
+ * names returned by that bank's own API.
+ */
+export function deriveInstitutionFromNames(names: string[]): string | null {
+  const haystack = names
+    .join(" ")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+
+  if (haystack.includes("nubank") || haystack.includes("nu pagamentos") || haystack.includes("nu financeira")) return "Nubank";
+  if (haystack.includes("itau") || haystack.includes("itau unibanco")) return "Itaú";
+  if (haystack.includes("bradesco")) return "Bradesco";
+  if (haystack.includes("santander")) return "Santander";
+  if (haystack.includes("banco do brasil") || haystack.includes("ourocard")) return "Banco do Brasil";
+  if (haystack.includes("caixa economica") || haystack.includes("caixa federal")) return "Caixa Econômica";
+  if (haystack.includes("banco inter") || haystack.includes("inter ") || haystack.includes(" inter")) return "Banco Inter";
+  if (haystack.includes("c6 bank") || haystack.includes("c6bank") || haystack.includes("bandeirado")) return "C6 Bank";
+  if (haystack.includes("mercado pago")) return "Mercado Pago";
+  if (haystack.includes("pagseguro") || haystack.includes("pagbank") || haystack.includes("pag")) return "PagBank";
+  if (haystack.includes("picpay")) return "PicPay";
+  if (haystack.includes("btg")) return "BTG Pactual";
+  if (haystack.includes("xp investimentos") || names.some((n) => n.trim().toUpperCase() === "XP")) return "XP";
+  if (haystack.includes("wise")) return "Wise";
+  if (haystack.includes("binance")) return "Binance";
+  if (haystack.includes("rico")) return "Rico";
+  if (haystack.includes("clear corretora") || haystack.includes("clear ")) return "Clear";
+
+  return null;
+}
+
 export function getInstitutionLogo(
   name: string | null | undefined,
 ): string | null {
@@ -64,23 +97,37 @@ export function getInstitutionLogo(
 
   const knownInstitutions: Array<[string, string]> = [
     ["nubank", "nubank.com.br"],
+    ["nu pagamentos", "nubank.com.br"],
+    ["nu financeira", "nubank.com.br"],
     ["itau", "itau.com.br"],
-    ["itaú", "itau.com.br"],
     ["bradesco", "bradesco.com.br"],
     ["santander", "santander.com.br"],
     ["banco do brasil", "bb.com.br"],
-    ["bb", "bb.com.br"],
+    ["ourocard", "bb.com.br"],
+    ["caixa economica", "caixa.gov.br"],
+    ["caixa federal", "caixa.gov.br"],
+    ["banco inter", "bancointer.com.br"],
+    ["c6 bank", "c6bank.com.br"],
+    ["c6bank", "c6bank.com.br"],
+    ["bandeirado", "c6bank.com.br"],
+    ["mercado pago", "mercadopago.com.br"],
+    ["pagseguro", "pagbank.com.br"],
+    ["pagbank", "pagbank.com.br"],
+    ["picpay", "picpay.com"],
+    ["btg pactual", "btgpactual.com"],
+    ["xp investimentos", "xpinc.com"],
+    ["rico", "rico.com.vc"],
+    ["clear corretora", "clear.com.br"],
+    ["wise", "wise.com"],
+    ["binance", "binance.com"],
+    // Short/ambiguous matches last to avoid false positives
     ["caixa", "caixa.gov.br"],
     ["inter", "bancointer.com.br"],
     ["c6", "c6bank.com.br"],
     ["btg", "btgpactual.com"],
     ["xp", "xpinc.com"],
-    ["rico", "rico.com.vc"],
     ["clear", "clear.com.br"],
-    ["mercado pago", "mercadopago.com.br"],
-    ["picpay", "picpay.com"],
-    ["wise", "wise.com"],
-    ["binance", "binance.com"],
+    ["bb", "bb.com.br"],
   ];
 
   const match = knownInstitutions.find(([needle]) =>
