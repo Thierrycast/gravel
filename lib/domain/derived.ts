@@ -7,6 +7,7 @@ import {
   getOverviewMetrics,
   isInternalTransfer,
 } from "@/lib/domain/analytics";
+import { getUserSettings } from "@/lib/domain/queries";
 import { prisma } from "@/lib/prisma";
 
 const ZERO = new Prisma.Decimal(0);
@@ -137,7 +138,8 @@ export async function refreshRecurringDerived(options?: {
   const groups = new Map<string, typeof transactions>();
 
   for (const transaction of transactions) {
-    if (transaction.installmentGroupId || transaction.installmentTotal) continue;
+    if (transaction.installmentGroupId || transaction.installmentTotal)
+      continue;
 
     const category = transaction.domainCategoryId
       ? categoryMap.get(transaction.domainCategoryId)
@@ -371,31 +373,39 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
     Math.max(parseNumberParam(searchParams?.get("months") ?? null, 6) ?? 6, 1),
     24,
   );
+  const includeVariableExpenses =
+    searchParams?.get("includeVariableExpenses") !== "false";
 
   const now = new Date();
   const lookbackFrom = new Date(now.getTime() - 90 * MS_IN_DAY);
 
-  const [overview, recurringRules, bills, pastTransactions, categories] =
-    await Promise.all([
-      getOverviewMetrics(new URLSearchParams("period=all")),
-      getRecurringPayload(),
-      prisma.domainBill.findMany({
-        where: {
-          dueDate: {
-            gte: now,
-          },
+  const [
+    overview,
+    recurringRules,
+    bills,
+    pastTransactions,
+    categories,
+    settings,
+  ] = await Promise.all([
+    getOverviewMetrics(new URLSearchParams("period=all")),
+    getRecurringPayload(),
+    prisma.domainBill.findMany({
+      where: {
+        dueDate: {
+          gte: now,
         },
-        orderBy: [{ dueDate: "asc" }],
-      }),
-      prisma.domainTransaction.findMany({
-        where: {
-          ignored: false,
-          direction: DomainTransactionDirection.OUTFLOW,
-          occurredAt: { gte: lookbackFrom },
-        },
-      }),
-      prisma.domainCategory.findMany(),
-    ]);
+      },
+      orderBy: [{ dueDate: "asc" }],
+    }),
+    prisma.domainTransaction.findMany({
+      where: {
+        ignored: false,
+        occurredAt: { gte: lookbackFrom },
+      },
+    }),
+    prisma.domainCategory.findMany(),
+    getUserSettings(searchParams),
+  ]);
 
   // Variable (non-recurring) expenses: exclude internal transfers and known recurring rules
   const categoryMap = new Map<string, (typeof categories)[number]>(
@@ -409,6 +419,7 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
   ]);
 
   const variableTransactions = pastTransactions.filter((tx) => {
+    if (tx.direction !== DomainTransactionDirection.OUTFLOW) return false;
     if (tx.installmentGroupId || tx.installmentTotal) return false;
 
     const cat = tx.domainCategoryId
@@ -438,7 +449,9 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
   const totalVariableOutflow = sumDecimals(
     variableTransactions.map((tx) => tx.amount.abs()),
   );
-  const avgVariableExpenses = safeNumber(totalVariableOutflow.div(3)); // 3-month average
+  const avgVariableExpenses = includeVariableExpenses
+    ? safeNumber(totalVariableOutflow.div(3))
+    : 0; // 3-month average
 
   let currentBalance = overview.accountBalance;
   const monthsData = [] as Array<{
@@ -472,6 +485,8 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
 
       if (rule.type === "INCOME") {
         recurringInflow = recurringInflow.plus(decimal(rule.amount));
+      } else if (!settings.showFutureAccounts) {
+        continue;
       } else if (rule.isInstallment) {
         installmentsOutflow = installmentsOutflow.plus(
           decimal(rule.amount).abs(),
@@ -482,12 +497,14 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
     }
 
     // 2. Bills
-    const monthlyBills = bills.filter(
-      (bill) =>
-        bill.dueDate &&
-        bill.dueDate >= pointDate &&
-        bill.dueDate <= pointMonthEnd,
-    );
+    const monthlyBills = settings.showFutureAccounts
+      ? bills.filter(
+          (bill) =>
+            bill.dueDate &&
+            bill.dueDate >= pointDate &&
+            bill.dueDate <= pointMonthEnd,
+        )
+      : [];
     const billsOutflow = sumDecimals(
       monthlyBills.map((bill) => bill.totalAmount),
     ).abs();
@@ -498,24 +515,27 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
     );
 
     // 3. Smart Installment Detection (from persisted installment fields).
-    const detectedInstallments = pastTransactions.filter((tx) => {
-      if (tx.domainAccountId && billAccountIds.has(tx.domainAccountId)) {
-        return false;
-      }
-      const current = tx.installmentNumber ?? null;
-      const total = tx.installmentTotal ?? null;
-      if (!current || !total) return false;
-      if (current >= total) return false;
+    const detectedInstallments = settings.showFutureAccounts
+      ? pastTransactions.filter((tx) => {
+          if (tx.direction !== DomainTransactionDirection.OUTFLOW) return false;
+          if (tx.domainAccountId && billAccountIds.has(tx.domainAccountId)) {
+            return false;
+          }
+          const current = tx.installmentNumber ?? null;
+          const total = tx.installmentTotal ?? null;
+          if (!current || !total) return false;
+          if (current >= total) return false;
 
-      // Calculate if this installment should fall into the current projection month
-      const txDate = new Date(tx.occurredAt);
-      const monthsSinceTx =
-        (pointDate.getUTCFullYear() - txDate.getUTCFullYear()) * 12 +
-        (pointDate.getUTCMonth() - txDate.getUTCMonth());
+          // Calculate if this installment should fall into the current projection month
+          const txDate = new Date(tx.occurredAt);
+          const monthsSinceTx =
+            (pointDate.getUTCFullYear() - txDate.getUTCFullYear()) * 12 +
+            (pointDate.getUTCMonth() - txDate.getUTCMonth());
 
-      const projectedInstallmentNumber = current + monthsSinceTx;
-      return projectedInstallmentNumber <= total;
-    });
+          const projectedInstallmentNumber = current + monthsSinceTx;
+          return projectedInstallmentNumber <= total;
+        })
+      : [];
 
     const smartInstallmentsOutflow = sumDecimals(
       detectedInstallments.map((tx) => tx.amount.abs()),
@@ -540,7 +560,13 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
         .map((tx) => tx.amount.abs()),
     );
 
-    const income = safeNumber(recurringInflow.plus(futureInflow));
+    const salaryIncome =
+      settings.showFutureSalary && settings.monthlySalary > 0
+        ? new Prisma.Decimal(settings.monthlySalary)
+        : ZERO;
+    const income = safeNumber(
+      recurringInflow.plus(futureInflow).plus(salaryIncome),
+    );
     const recurringExpenses = safeNumber(recurringOutflow);
     const installments = safeNumber(
       installmentsOutflow.plus(billsOutflow).plus(smartInstallmentsOutflow),
@@ -569,13 +595,17 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
   }
 
   const averageMonthlyIncome =
-    monthsData.reduce((sum, m) => sum + m.income, 0) / monthsData.length;
+    monthsData.length > 0
+      ? monthsData.reduce((sum, m) => sum + m.income, 0) / monthsData.length
+      : 0;
   const averageMonthlyExpenses =
-    monthsData.reduce(
-      (sum, m) =>
-        sum + m.recurringExpenses + m.installments + m.variableExpenses,
-      0,
-    ) / monthsData.length;
+    monthsData.length > 0
+      ? monthsData.reduce(
+          (sum, m) =>
+            sum + m.recurringExpenses + m.installments + m.variableExpenses,
+          0,
+        ) / monthsData.length
+      : 0;
 
   return {
     summary: {

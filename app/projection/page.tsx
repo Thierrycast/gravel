@@ -1,6 +1,6 @@
-"use client"
+"use client";
 
-import { useState, useMemo } from "react"
+import { useState, useMemo } from "react";
 import {
   ComposedChart,
   Bar,
@@ -8,19 +8,21 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-} from "recharts"
-import { Lightbulb, ChevronDown, ChevronUp } from "lucide-react"
-import { useApi } from "@/hooks/use-api"
-import { useCurrency } from "@/lib/currency-context"
+} from "recharts";
+import { Lightbulb, ChevronDown, ChevronUp } from "lucide-react";
+import { useApi } from "@/hooks/use-api";
+import { useCurrency } from "@/lib/currency-context";
 import {
   Card,
   CardHeader,
   CardTitle,
   CardDescription,
   CardContent,
-} from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableHeader,
@@ -28,7 +30,7 @@ import {
   TableBody,
   TableRow,
   TableCell,
-} from "@/components/ui/table"
+} from "@/components/ui/table";
 import {
   ChartContainer,
   ChartTooltip,
@@ -36,37 +38,37 @@ import {
   ChartLegend,
   ChartLegendContent,
   type ChartConfig,
-} from "@/components/ui/chart"
-import { PageError } from "@/components/page-error"
+} from "@/components/ui/chart";
+import { PageError } from "@/components/page-error";
 
 interface ProjectionMonth {
-  month: number
-  year: number
-  label: string
-  income: number
-  recurringExpenses: number
-  installments: number
-  variableExpenses: number
-  projected: number
-  balance: number
+  month: number;
+  year: number;
+  label: string;
+  income: number;
+  recurringExpenses: number;
+  installments: number;
+  variableExpenses: number;
+  projected: number;
+  balance: number;
 }
 
 interface ProjectionSummary {
-  averageMonthlyIncome: number
-  averageMonthlyExpenses: number
-  projectedSavings: number
+  averageMonthlyIncome: number;
+  averageMonthlyExpenses: number;
+  projectedSavings: number;
 }
 
 interface ProjectionData {
-  months: ProjectionMonth[]
-  summary: ProjectionSummary
+  months: ProjectionMonth[];
+  summary: ProjectionSummary;
 }
 
 const horizons = [
   { label: "3M", value: "3" },
   { label: "6M", value: "6" },
   { label: "12M", value: "12" },
-]
+];
 
 const chartConfig: ChartConfig = {
   income: {
@@ -89,62 +91,83 @@ const chartConfig: ChartConfig = {
     label: "Saldo Projetado",
     color: "#3b82f6",
   },
-}
+};
 
 export default function ProjectionPage() {
-  const { format } = useCurrency()
-  const [months, setMonths] = useState("6")
-  const [expandedMonth, setExpandedMonth] = useState<string | null>(null)
+  const { format } = useCurrency();
+  const [months, setMonths] = useState("6");
+  const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
+  const [includeSalary, setIncludeSalary] = useState(true);
+  const [includeInstallments, setIncludeInstallments] = useState(true);
+  const [includeVariableExpenses, setIncludeVariableExpenses] = useState(true);
 
-  const { data, loading, error, refetch } = useApi<ProjectionData>("/api/projection", {
-    months,
-  })
+  const { data, loading, error, refetch } = useApi<ProjectionData>(
+    "/api/projection",
+    {
+      months,
+      showFutureSalary: String(includeSalary),
+      showFutureAccounts: String(includeInstallments),
+      includeVariableExpenses: String(includeVariableExpenses),
+    },
+  );
 
   const insights = useMemo(() => {
-    const monthsData = data?.months ?? []
-    const summary = data?.summary
-    if (monthsData.length === 0) return []
-    const result: { title: string; variant: "default" | "destructive" | "secondary" }[] = []
+    const monthsData = data?.months ?? [];
+    const summary = data?.summary;
+    if (monthsData.length === 0) return [];
+    const result: {
+      title: string;
+      variant: "default" | "destructive" | "secondary";
+    }[] = [];
 
-    const installmentMonths = monthsData.filter((m) => m.installments > 0)
-    if (installmentMonths.length > 0 && installmentMonths.length < monthsData.length) {
+    const installmentMonths = monthsData.filter((m) => m.installments > 0);
+    if (
+      installmentMonths.length > 0 &&
+      installmentMonths.length < monthsData.length
+    ) {
       result.push({
         title: `Parcelamentos terminam em ${installmentMonths.length} meses`,
         variant: "secondary",
-      })
+      });
     }
 
     const overBudget = monthsData.filter(
       (m) =>
-        m.recurringExpenses + m.installments + m.variableExpenses > m.income
-    )
+        m.recurringExpenses + m.installments + m.variableExpenses > m.income,
+    );
     if (overBudget.length > 0) {
-      const pct = Math.round(
-        ((overBudget[0].recurringExpenses +
-          overBudget[0].installments +
-          overBudget[0].variableExpenses -
-          overBudget[0].income) /
-          overBudget[0].income) *
-          100
-      )
+      const excess =
+        overBudget[0].recurringExpenses +
+        overBudget[0].installments +
+        overBudget[0].variableExpenses -
+        overBudget[0].income;
+      const rawPct =
+        overBudget[0].income > 0
+          ? Math.round((excess / overBudget[0].income) * 100)
+          : null;
+      const pct =
+        rawPct != null && isFinite(rawPct) ? Math.min(rawPct, 9999) : null;
       result.push({
-        title: `Despesas excedem receita por ${pct}% em ${overBudget.length} mês(es)`,
+        title:
+          pct == null
+            ? `Despesas excedem receitas em ${overBudget.length} mês(es)`
+            : `Despesas excedem receita por ${pct}% em ${overBudget.length} mês(es)`,
         variant: "destructive",
-      })
+      });
     }
 
     if ((summary?.projectedSavings ?? 0) > 0) {
       result.push({
         title: `Economia projetada de ${format(summary?.projectedSavings ?? 0)} no período`,
         variant: "default",
-      })
+      });
     }
 
-    return result.slice(0, 3)
-  }, [data, format])
+    return result.slice(0, 3);
+  }, [data, format]);
 
   if (error) {
-    return <PageError message="Erro ao carregar projeções" refetch={refetch} />
+    return <PageError message="Erro ao carregar projeções" refetch={refetch} />;
   }
 
   if (loading) {
@@ -159,7 +182,7 @@ export default function ProjectionPage() {
         <Skeleton className="h-80" />
         <Skeleton className="h-64" />
       </div>
-    )
+    );
   }
 
   return (
@@ -183,6 +206,42 @@ export default function ProjectionPage() {
               {h.label}
             </button>
           ))}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4 rounded-xl border bg-card px-4 py-3">
+        <div className="flex items-center gap-2">
+          <Switch
+            id="projection-salary"
+            checked={includeSalary}
+            onCheckedChange={setIncludeSalary}
+          />
+          <Label htmlFor="projection-salary" className="text-xs font-medium">
+            Salário
+          </Label>
+        </div>
+        <div className="flex items-center gap-2">
+          <Switch
+            id="projection-installments"
+            checked={includeInstallments}
+            onCheckedChange={setIncludeInstallments}
+          />
+          <Label
+            htmlFor="projection-installments"
+            className="text-xs font-medium"
+          >
+            Parcelas
+          </Label>
+        </div>
+        <div className="flex items-center gap-2">
+          <Switch
+            id="projection-variable"
+            checked={includeVariableExpenses}
+            onCheckedChange={setIncludeVariableExpenses}
+          />
+          <Label htmlFor="projection-variable" className="text-xs font-medium">
+            Subcategorias
+          </Label>
         </div>
       </div>
 
@@ -247,7 +306,9 @@ export default function ProjectionPage() {
               <CartesianGrid vertical={false} />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis
-                tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`}
+                tickFormatter={(v) =>
+                  !isFinite(v) ? "—" : `R$${(v / 1000).toFixed(0)}k`
+                }
                 tickLine={false}
                 axisLine={false}
               />
@@ -308,12 +369,12 @@ export default function ProjectionPage() {
         <CardContent>
           <div className="flex flex-col gap-2">
             {(data?.months ?? []).map((m, idx) => {
-              const isExpanded = expandedMonth === m.label
+              const isExpanded = expandedMonth === m.label;
               const prevBalance =
-                idx > 0 ? (data?.months?.[idx - 1]?.balance ?? 0) : 0
+                idx > 0 ? (data?.months?.[idx - 1]?.balance ?? 0) : 0;
               const totalExpenses =
-                m.recurringExpenses + m.installments + m.variableExpenses
-              const result = m.income - totalExpenses
+                m.recurringExpenses + m.installments + m.variableExpenses;
+              const result = m.income - totalExpenses;
 
               return (
                 <div key={m.label} className="rounded-lg border">
@@ -336,9 +397,7 @@ export default function ProjectionPage() {
                     <div className="flex items-center gap-4">
                       <span
                         className={`text-sm font-semibold ${
-                          m.balance >= 0
-                            ? "text-emerald-400"
-                            : "text-red-400"
+                          m.balance >= 0 ? "text-emerald-400" : "text-red-400"
                         }`}
                       >
                         {format(m.balance)}
@@ -409,11 +468,11 @@ export default function ProjectionPage() {
                     </div>
                   )}
                 </div>
-              )
+              );
             })}
           </div>
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
