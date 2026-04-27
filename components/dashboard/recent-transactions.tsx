@@ -1,52 +1,64 @@
-"use client"
+"use client";
 
-import { useMemo } from "react"
-import { Card, CardContent, CardHeader, CardTitle, CardAction } from "@/components/ui/card"
-import { Skeleton } from "@/components/ui/skeleton"
-import { formatDate } from "@/lib/format"
-import { useCurrency } from "@/lib/currency-context"
-import Link from "next/link"
-import { ArrowRight } from "lucide-react"
+import { useMemo } from "react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardAction,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { formatDate } from "@/lib/format";
+import { useCurrency } from "@/lib/currency-context";
+import { LogoImage } from "@/components/logo-image";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
 interface Transaction {
-  id: string
-  description: string
-  amount: number
-  date: string
-  direction?: string
-  category: string
-  categoryId?: string | null
-  accountName: string
-  accountImageUrl?: string | null
-  merchantName?: string | null
+  id: string;
+  description: string;
+  amount: number;
+  date: string;
+  direction?: string;
+  category: string;
+  categoryId?: string | null;
+  accountName: string;
+  accountImageUrl?: string | null;
+  merchantName?: string | null;
 }
 
 interface RecentTransactionsProps {
-  transactions: Transaction[] | null
-  loading: boolean
+  transactions: Transaction[] | null;
+  loading: boolean;
 }
 
-export function RecentTransactions({ transactions, loading }: RecentTransactionsProps) {
-  const { format } = useCurrency()
+export function RecentTransactions({
+  transactions,
+  loading,
+}: RecentTransactionsProps) {
+  const { format } = useCurrency();
   const grouped = useMemo(() => {
-    if (!transactions) return []
+    if (!transactions) return [];
     // Limit to only the latest 5 transactions for the dashboard view
-    const latestTxs = transactions.slice(0, 5)
-    const map = new Map<string, Transaction[]>()
+    const latestTxs = transactions.slice(0, 5);
+    const map = new Map<string, Transaction[]>();
     for (const tx of latestTxs) {
-      const dateKey = tx.date ? tx.date.split("T")[0] : "sem-data"
-      if (!map.has(dateKey)) map.set(dateKey, [])
-      map.get(dateKey)!.push(tx)
+      const dateKey = tx.date ? tx.date.split("T")[0] : "sem-data";
+      if (!map.has(dateKey)) map.set(dateKey, []);
+      map.get(dateKey)!.push(tx);
     }
     return Array.from(map.entries()).sort(
-      (a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime()
-    )
-  }, [transactions])
+      (a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime(),
+    );
+  }, [transactions]);
 
   return (
     <Card className="col-span-full lg:col-span-2 rounded-none border-border h-full flex flex-col">
       <CardHeader className="pb-3 px-6">
-        <CardTitle className="text-sm font-bold tracking-widest uppercase text-muted-foreground/80">Movimentações recentes</CardTitle>
+        <CardTitle className="text-sm font-bold tracking-widest uppercase text-muted-foreground/80">
+          Movimentações recentes
+        </CardTitle>
         <CardAction>
           <Link
             href="/transactions"
@@ -91,16 +103,24 @@ export function RecentTransactions({ transactions, loading }: RecentTransactions
                               : "text-rose-500"
                           }`}
                         >
-                          {tx.direction === "INFLOW" || Number(tx.amount) > 0 ? "+" : "−"}
+                          {tx.direction === "INFLOW" || Number(tx.amount) > 0
+                            ? "+"
+                            : "−"}
                         </span>
                         <div className="flex items-center gap-3.5 min-w-0">
                           {tx.accountImageUrl ? (
                             <div className="shrink-0 size-10 rounded-xl border border-border/40 bg-muted/30 p-1.5 flex items-center justify-center shadow-sm overflow-hidden">
-                              <img src={tx.accountImageUrl} alt={tx.accountName} className="size-full object-contain" />
+                              <LogoImage
+                                src={tx.accountImageUrl}
+                                alt={tx.accountName}
+                                className="size-full object-contain"
+                              />
                             </div>
                           ) : (
                             <div className="shrink-0 size-10 rounded-xl border border-border/40 bg-muted/50 flex items-center justify-center shadow-sm">
-                              <span className="text-xs font-mono font-bold text-muted-foreground uppercase">{tx.accountName.slice(0, 2)}</span>
+                              <span className="text-xs font-mono font-bold text-muted-foreground uppercase">
+                                {tx.accountName.slice(0, 2)}
+                              </span>
                             </div>
                           )}
                           <div className="min-w-0">
@@ -136,5 +156,5 @@ export function RecentTransactions({ transactions, loading }: RecentTransactions
         )}
       </CardContent>
     </Card>
-  )
+  );
 }
