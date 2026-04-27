@@ -1,18 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
-import { Repeat, CreditCard, ChevronLeft, ChevronRight } from "lucide-react";
+import { Repeat, CreditCard, LayoutList } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import { useCurrency } from "@/lib/currency-context";
+import { LogoImage } from "@/components/logo-image";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
 
 import { type RecurringData } from "@/lib/types/api";
 
@@ -24,53 +18,10 @@ const frequencyLabel: Record<string, string> = {
   QUARTERLY: "Trimestral",
 };
 
-const chartConfig: ChartConfig = {
-  fixed: {
-    label: "Contas fixas",
-    color: "#f59e0b",
-  },
-  installments: {
-    label: "Parcelas",
-    color: "#3b82f6",
-  },
-};
-
-const MONTHS = [
-  "Jan",
-  "Fev",
-  "Mar",
-  "Abr",
-  "Mai",
-  "Jun",
-  "Jul",
-  "Ago",
-  "Set",
-  "Out",
-  "Nov",
-  "Dez",
-];
-
-const MONTH_FULL = [
-  "Janeiro",
-  "Fevereiro",
-  "Março",
-  "Abril",
-  "Maio",
-  "Junho",
-  "Julho",
-  "Agosto",
-  "Setembro",
-  "Outubro",
-  "Novembro",
-  "Dezembro",
-];
 
 export default function RecurringPage() {
   const { format } = useCurrency();
-  const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth();
-  const [year, setYear] = useState(currentYear);
-  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+  const year = new Date().getFullYear();
 
   const { data, loading } = useApi<RecurringData>("/api/recurring", {
     year: String(year),
@@ -107,14 +58,21 @@ export default function RecurringPage() {
   );
   const totalMonthly = fixedMonthly + installmentMonthly;
 
-  const chartData = useMemo(() => {
+  const categoryBreakdown = useMemo(() => {
     if (!data) return [];
-    return MONTHS.map((month) => ({
-      month,
-      fixed: fixedMonthly,
-      installments: installmentMonthly,
-    }));
-  }, [data, fixedMonthly, installmentMonthly]);
+    const map = new Map<string, { count: number; total: number }>();
+    for (const rule of data.rules.filter((r) => r.type === "EXPENSE")) {
+      const cat = rule.category ?? "Outros";
+      const prev = map.get(cat) ?? { count: 0, total: 0 };
+      map.set(cat, {
+        count: prev.count + 1,
+        total: prev.total + Math.abs(Number(rule.amount)),
+      });
+    }
+    return [...map.entries()]
+      .sort((a, b) => b[1].total - a[1].total)
+      .map(([name, stats]) => ({ name, ...stats }));
+  }, [data]);
 
   if (loading) {
     return (
@@ -152,157 +110,42 @@ export default function RecurringPage() {
         </div>
       </div>
 
-      {/* Chart Card */}
-      <div className="rounded-xl border bg-card p-6">
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-            Este ano / {year}
+      {/* Monthly summary cards */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div className="rounded-xl border bg-card p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-1">
+            Total mensal estimado
           </p>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <div className="size-2.5 rounded-full bg-amber-500" />
-              <span className="text-xs text-muted-foreground">
-                Contas fixas
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="size-2.5 rounded-full bg-blue-500" />
-              <span className="text-xs text-muted-foreground">Parcelas</span>
-            </div>
-          </div>
+          <p className="text-2xl font-bold tabular-nums text-pink-400">
+            {format(totalMonthly)}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {data?.summary.count ?? 0} recorr&ecirc;ncias ativas
+          </p>
         </div>
-
-        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
-          <div className="flex-1 min-w-0">
-            <ChartContainer
-              config={chartConfig}
-              className="h-56 sm:h-64 w-full"
-            >
-              <BarChart data={chartData} accessibilityLayer>
-                <CartesianGrid vertical={false} strokeOpacity={0.1} />
-                <XAxis
-                  dataKey="month"
-                  tickLine={false}
-                  axisLine={false}
-                  tick={{ fontSize: 11 }}
-                />
-                <YAxis
-                  tickFormatter={(v) =>
-                    v >= 1000 ? `R$${(v / 1000).toFixed(0)}k` : `R$${v}`
-                  }
-                  tickLine={false}
-                  axisLine={false}
-                  tick={{ fontSize: 10 }}
-                  width={50}
-                />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value, name) => (
-                        <span>
-                          {chartConfig[name as keyof typeof chartConfig]?.label}
-                          : {format(Number(value))}
-                        </span>
-                      )}
-                    />
-                  }
-                />
-                <Bar
-                  dataKey="installments"
-                  stackId="a"
-                  fill="#f59e0b"
-                  radius={[0, 0, 0, 0]}
-                />
-                <Bar
-                  dataKey="fixed"
-                  stackId="a"
-                  fill="#3b82f6"
-                  radius={[4, 4, 0, 0]}
-                />
-              </BarChart>
-            </ChartContainer>
-          </div>
-
-          {/* Month summary tooltip */}
-          <div className="w-48 rounded-lg border bg-popover p-4 shrink-0 hidden lg:block">
-            <div className="flex items-center justify-between mb-3">
-              <button
-                onClick={() => {
-                  if (selectedMonth === 0) {
-                    setSelectedMonth(11);
-                    setYear(year - 1);
-                  } else {
-                    setSelectedMonth(selectedMonth - 1);
-                  }
-                }}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <ChevronLeft className="size-4" />
-              </button>
-              <span className="text-sm font-semibold">
-                {MONTH_FULL[selectedMonth]}
-              </span>
-              <button
-                onClick={() => {
-                  if (selectedMonth === 11) {
-                    setSelectedMonth(0);
-                    setYear(year + 1);
-                  } else {
-                    setSelectedMonth(selectedMonth + 1);
-                  }
-                }}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <ChevronRight className="size-4" />
-              </button>
-            </div>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <div className="size-2 rounded-full bg-amber-500" />
-                  <span className="text-muted-foreground">Parcelas</span>
-                </div>
-                <span className="font-semibold tabular-nums">
-                  {format(installmentMonthly)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <div className="size-2 rounded-full bg-blue-500" />
-                  <span className="text-muted-foreground">Contas fixas</span>
-                </div>
-                <span className="font-semibold tabular-nums">
-                  {format(fixedMonthly)}
-                </span>
-              </div>
-              <div className="border-t pt-2 flex justify-between">
-                <span className="font-semibold">Total</span>
-                <span className="font-bold tabular-nums">
-                  {format(totalMonthly)}
-                </span>
-              </div>
-            </div>
-          </div>
+        <div className="rounded-xl border bg-card p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-1">
+            Contas fixas
+          </p>
+          <p className="text-2xl font-bold tabular-nums text-blue-400">
+            {format(fixedMonthly)}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {fixedExpenses.length} item{fixedExpenses.length !== 1 ? "s" : ""}
+          </p>
         </div>
-      </div>
-
-      {/* Tab navigation */}
-      <div className="flex items-center gap-6 border-b">
-        <button className="pb-2 text-sm font-medium border-b-2 border-foreground">
-          Recorr&ecirc;ncias
-        </button>
-        <Link
-          href="/recurring/expenses"
-          className="pb-2 text-sm text-muted-foreground hover:text-foreground"
-        >
-          Gasto por conta
-        </Link>
-        <Link
-          href="/categories"
-          className="pb-2 text-sm text-muted-foreground hover:text-foreground"
-        >
-          Gastos por categoria
-        </Link>
+        <div className="rounded-xl border bg-card p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-1">
+            Parcelas
+          </p>
+          <p className="text-2xl font-bold tabular-nums text-amber-400">
+            {format(installmentMonthly)}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {installmentItems.length} item
+            {installmentItems.length !== 1 ? "s" : ""}
+          </p>
+        </div>
       </div>
 
       {/* Two columns: Fixed & Installments */}
@@ -323,20 +166,26 @@ export default function RecurringPage() {
               </p>
             )}
             {installmentItems.map((rule) => {
-              const total = rule.occurrences > 0 ? rule.occurrences : 12;
-              const remaining =
-                rule.nextDate && rule.lastDate
+              const total =
+                rule.totalInstallments ??
+                (rule.occurrences > 0 ? rule.occurrences : 12);
+              const current =
+                rule.currentInstallment ??
+                (rule.nextDate && rule.lastDate
                   ? Math.max(
-                      1,
-                      Math.ceil(
-                        (new Date(rule.lastDate).getTime() -
-                          new Date(rule.nextDate).getTime()) /
-                          (1000 * 60 * 60 * 24 * 30),
-                      ),
+                      0,
+                      total -
+                        Math.max(
+                          1,
+                          Math.ceil(
+                            (new Date(rule.lastDate).getTime() -
+                              new Date(rule.nextDate).getTime()) /
+                              (1000 * 60 * 60 * 24 * 30),
+                          ),
+                        ),
                     )
-                  : total;
-              const current = Math.max(0, total - remaining);
-              const progressValue = (current / total) * 100;
+                  : 0);
+              const progressValue = total > 0 ? (current / total) * 100 : 0;
 
               return (
                 <div
@@ -346,7 +195,7 @@ export default function RecurringPage() {
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     {rule.logoUrl ? (
                       <div className="shrink-0 size-8 rounded-lg border border-border/40 bg-muted/30 p-1 flex items-center justify-center overflow-hidden">
-                        <img
+                        <LogoImage
                           src={rule.logoUrl}
                           alt={rule.description}
                           className="size-full object-contain"
@@ -413,7 +262,7 @@ export default function RecurringPage() {
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   {rule.logoUrl ? (
                     <div className="shrink-0 size-8 rounded-lg border border-border/40 bg-muted/30 p-1 flex items-center justify-center overflow-hidden">
-                      <img
+                      <LogoImage
                         src={rule.logoUrl}
                         alt={rule.description}
                         className="size-full object-contain"
@@ -448,6 +297,48 @@ export default function RecurringPage() {
           </div>
         </div>
       </div>
+
+      {/* Category breakdown */}
+      {categoryBreakdown.length > 0 && (
+        <div className="rounded-xl border bg-card p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <LayoutList className="size-4 text-muted-foreground" />
+            <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+              Resumo por categoria
+            </h3>
+          </div>
+          <div className="space-y-2">
+            {categoryBreakdown.map(({ name, count, total }) => {
+              const pct = totalMonthly > 0 ? (total / totalMonthly) * 100 : 0;
+              return (
+                <div key={name} className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-muted-foreground truncate">
+                        {name}
+                      </span>
+                      <div className="flex items-center gap-2 ml-2 shrink-0">
+                        <span className="text-[10px] text-muted-foreground">
+                          {count}×
+                        </span>
+                        <span className="text-xs font-semibold tabular-nums text-pink-400">
+                          {format(total)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="h-1 rounded-full bg-muted/40 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-pink-500/60"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
