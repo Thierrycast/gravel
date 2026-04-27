@@ -2,41 +2,23 @@ import { DomainTransactionDirection } from "@prisma/client";
 
 import { jsonError, jsonOk } from "@/lib/core/http";
 import { getDomainAccounts } from "@/lib/domain/queries";
-import { getInstitutionLogo } from "@/lib/domain/utils";
+import { deriveInstitutionFromNames, getInstitutionLogo } from "@/lib/domain/utils";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
+
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const payload = await getDomainAccounts(searchParams);
     const accountIds = payload.results.map((account) => account.id);
-    const pluggyItemIds = Array.from(
-      new Set(
-        payload.results
-          .map((account) => account.sourceParentId)
-          .filter((value): value is string => Boolean(value)),
-      ),
-    );
-    const pluggyItems = await prisma.pluggyItem.findMany({
-      where:
-        pluggyItemIds.length > 0
-          ? { pluggyItemId: { in: pluggyItemIds } }
-          : { id: "__none__" },
-      select: { pluggyItemId: true, connectorName: true },
-    });
-    const pluggyItemMap = new Map(
-      pluggyItems.map((item) => [item.pluggyItemId, item]),
-    );
+
     const activity = await prisma.domainTransaction.groupBy({
       by: ["domainAccountId"],
       where:
         accountIds.length > 0
-          ? {
-              domainAccountId: { in: accountIds },
-              ignored: false,
-            }
+          ? { domainAccountId: { in: accountIds }, ignored: false }
           : { id: "__none__" },
       _count: true,
       _sum: { amount: true },
@@ -66,30 +48,42 @@ export async function GET(request: Request) {
         .filter((item) => item.domainAccountId)
         .map((item) => [item.domainAccountId, item]),
     );
+
+    // Group accounts by sourceParentId to derive the real institution name.
+    // Each Pluggy item corresponds to one real bank connection, so all accounts
+    // under the same item belong to the same institution.
+    const groupNames = new Map<string, string[]>();
+    for (const account of payload.results) {
+      if (!account.sourceParentId) continue;
+      const bucket = groupNames.get(account.sourceParentId) ?? [];
+      bucket.push(account.name);
+      groupNames.set(account.sourceParentId, bucket);
+    }
+    const groupInstitution = new Map<string, string | null>();
+    for (const [parentId, names] of groupNames.entries()) {
+      groupInstitution.set(parentId, deriveInstitutionFromNames(names));
+    }
+
     const results = payload.results.map((account) => {
       let metadata: Record<string, unknown> = {};
       if (account.metadataJson) {
         try {
-          metadata = JSON.parse(account.metadataJson) as Record<
-            string,
-            unknown
-          >;
+          metadata = JSON.parse(account.metadataJson) as Record<string, unknown>;
         } catch {}
       }
       const activityItem = activityMap.get(account.id);
       const spentItem = spentMap.get(account.id);
-      const pluggyItem = account.sourceParentId
-        ? pluggyItemMap.get(account.sourceParentId)
+
+      // Prefer group-derived brand name; fall back to stored institutionName
+      // (only if it's not a Pluggy internal name).
+      const groupName = account.sourceParentId
+        ? (groupInstitution.get(account.sourceParentId) ?? null)
         : null;
-      // connectorName is the real bank name (e.g. "Nubank", "Itaú").
-      // Never expose "PLUGGY" — it is our sync provider, not a financial institution.
-      const connectorName = pluggyItem?.connectorName ?? null;
-      const institution =
-        connectorName ??
-        (account.institutionName !== "Pluggy"
+      const storedName =
+        account.institutionName && !["Pluggy", "MeuPluggy", "PLUGGY"].includes(account.institutionName)
           ? account.institutionName
-          : null) ??
-        null;
+          : null;
+      const institution = groupName ?? storedName ?? null;
 
       return {
         id: account.id,
@@ -97,9 +91,7 @@ export async function GET(request: Request) {
         originalName: account.name,
         kind: account.kind,
         subtype:
-          typeof metadata.subtype === "string"
-            ? metadata.subtype
-            : account.kind,
+          typeof metadata.subtype === "string" ? metadata.subtype : account.kind,
         balance: account.balance ?? 0,
         currencyCode: account.currencyCode,
         institution,
@@ -120,14 +112,9 @@ export async function GET(request: Request) {
     });
 
     return jsonOk({
-      summary: {
-        total: payload.total,
-      },
+      summary: { total: payload.total },
       results,
-      meta: {
-        page: payload.page,
-        pageSize: payload.pageSize,
-      },
+      meta: { page: payload.page, pageSize: payload.pageSize },
     });
   } catch (error) {
     return jsonError(error);

@@ -58,3 +58,6 @@ skills-lock.json
 /scratch/
 /check_inflows.js
 /cleanup_recurring.js
+
+# cached logos (served from local proxy, generated at runtime)
+/data/

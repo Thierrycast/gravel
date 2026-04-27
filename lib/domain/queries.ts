@@ -8,6 +8,7 @@ import {
   parseNumberParam,
 } from "@/lib/core/filters"
 import { buildTransactionDisplay } from "@/lib/domain/enrichment/display"
+import { deriveInstitutionFromNames, getInstitutionLogo } from "@/lib/domain/utils"
 import { prisma } from "@/lib/prisma"
 
 /** Resolves a period shorthand into a start Date. Must stay in sync with analytics.ts resolvePeriodStart. */
@@ -359,7 +360,7 @@ export async function getDashboardTransactions(searchParams: URLSearchParams) {
     }),
     prisma.domainAccount.findMany({
       where: accountIds.length > 0 ? { id: { in: accountIds } } : { id: "__none__" },
-      select: { id: true, name: true, imageUrl: true },
+      select: { id: true, name: true, institutionName: true, sourceParentId: true },
     }),
     prisma.domainMerchant.findMany({
       where: merchantIds.length > 0 ? { id: { in: merchantIds } } : { id: "__none__" },
@@ -376,7 +377,26 @@ export async function getDashboardTransactions(searchParams: URLSearchParams) {
   ])
 
   const categoryMap = new Map(categories.map((c) => [c.id, c]))
-  const accountMap = new Map(accounts.map((a) => [a.id, { name: a.name, imageUrl: a.imageUrl }]))
+
+  // Derive real institution names from grouped account names (MeuPluggy proxy has no brand)
+  const accountNamesByParent = new Map<string, string[]>()
+  for (const a of accounts) {
+    if (!a.sourceParentId) continue
+    const bucket = accountNamesByParent.get(a.sourceParentId) ?? []
+    bucket.push(a.name)
+    accountNamesByParent.set(a.sourceParentId, bucket)
+  }
+  const institutionByParent = new Map<string, string | null>()
+  for (const [parentId, names] of accountNamesByParent.entries()) {
+    institutionByParent.set(parentId, deriveInstitutionFromNames(names))
+  }
+  const accountMap = new Map(accounts.map((a) => {
+    const groupInstitution = a.sourceParentId ? (institutionByParent.get(a.sourceParentId) ?? null) : null
+    const storedName = a.institutionName && !["Pluggy", "MeuPluggy", "PLUGGY"].includes(a.institutionName) ? a.institutionName : null
+    const institution = groupInstitution ?? storedName ?? null
+    return [a.id, { name: a.name, imageUrl: getInstitutionLogo(institution ?? a.name) }]
+  }))
+
   const merchantMap = new Map(merchants.map((m) => [m.id, m]))
   const merchantEnrichmentMap = new Map(merchantEnrichments.map((item) => [item.domainMerchantId, item]))
   const transactionEnrichmentMap = new Map(transactionEnrichments.map((item) => [item.domainTransactionId, item]))

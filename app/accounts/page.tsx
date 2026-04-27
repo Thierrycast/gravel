@@ -56,6 +56,12 @@ function getTypeLabel(kind: string): string {
     INVESTMENT: "Investimento",
     CASH: "Carteira Física",
     OTHER: "Outro",
+    // Pluggy raw subtype values
+    CHECKING_ACCOUNT: "Conta Corrente",
+    CREDIT_CARD: "Cartão de Crédito",
+    SAVINGS_ACCOUNT: "Poupança",
+    PAYMENT_ACCOUNT: "Conta de Pagamento",
+    CASH_MANAGEMENT: "Gestão de Caixa",
   };
   return labels[kind] || kind;
 }
