@@ -37,12 +37,18 @@ import { Toaster } from "sonner";
 import { ModeToggle } from "@/components/mode-toggle";
 import { VaultProvider } from "@/components/vault-provider";
 import { NEXT_THEMES_REGISTRY } from "@/lib/theme";
+import { checkAndTriggerAutoSync } from "@/lib/ingestion/auto-sync";
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Trigger auto-sync check on server-side load (fire-and-forget background check)
+  // We don't await it to avoid blocking the initial render, but since it's just a few DB queries, 
+  // it's fast. Actually, we should probably just call it and let it run.
+  checkAndTriggerAutoSync().catch(err => console.error("[layout] auto-sync check failed", err));
+
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <body className="antialiased">
