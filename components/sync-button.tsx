@@ -6,25 +6,9 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 const SYNC_STORAGE_KEY = "gravel:lastSyncAt"
-const AUTO_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000 // 24 hours
 const POLL_INTERVAL_MS = 5_000 // poll status every 5s while syncing
 
 type SyncStatus = "idle" | "syncing" | "done" | "error"
-
-function getLastSyncAt(): Date | null {
-  try {
-    const stored = localStorage.getItem(SYNC_STORAGE_KEY)
-    return stored ? new Date(stored) : null
-  } catch {
-    return null
-  }
-}
-
-function setLastSyncAt(date: Date) {
-  try {
-    localStorage.setItem(SYNC_STORAGE_KEY, date.toISOString())
-  } catch {}
-}
 
 function formatRelativeTime(date: Date | null): string {
   if (!date) return "nunca"
@@ -42,31 +26,39 @@ export function SyncButton() {
   const [status, setStatus] = useState<SyncStatus>("idle")
   const [lastSyncAt, setLastSyncAtState] = useState<Date | null>(null)
   const [clockTick, setClockTick] = useState(0)
+  const [syncIntervalHours, setSyncIntervalHours] = useState(24)
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pollCountRef = useRef(0)
   const autoSyncFiredRef = useRef(false)
-  const MAX_POLLS = 24 // 2 minutes at 5s intervals
+  const MAX_POLLS = 60 // 5 minutes at 5s intervals (full sync can take time)
 
-  // Fetch actual last sync time from server on mount
-  useEffect(() => {
-    fetch("/api/sync/trigger")
-      .then((r) => r.json())
-      .then((data) => {
-        const serverDate = data.results?.lastSyncAt
-          ? new Date(data.results.lastSyncAt)
+  // Fetch actual last sync time and settings from server on mount
+  const refreshSyncState = useCallback(() => {
+    Promise.all([
+      fetch("/api/sync/trigger").then(r => r.json()),
+      fetch("/api/settings").then(r => r.json())
+    ])
+      .then(([syncData, settingsData]) => {
+        const serverDate = syncData.results?.lastSyncAt
+          ? new Date(syncData.results.lastSyncAt)
           : null
-        const localDate = getLastSyncAt()
-        // Use whichever is more recent
-        const best =
-          serverDate && localDate
-            ? serverDate > localDate
-              ? serverDate
-              : localDate
-            : serverDate ?? localDate
-        setLastSyncAtState(best)
+        setLastSyncAtState(serverDate)
+        
+        if (settingsData.syncIntervalHours) {
+          setSyncIntervalHours(settingsData.syncIntervalHours)
+        }
+
+        // If server says it's currently running, start polling
+        if (syncData.results?.syncStatus === "RUNNING") {
+          startPolling()
+        }
       })
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    refreshSyncState()
+  }, [refreshSyncState])
 
   // Tick every minute so relativeTime re-derives without setState-in-effect
   useEffect(() => {
@@ -78,10 +70,11 @@ export function SyncButton() {
   void clockTick
   const relativeTime = formatRelativeTime(lastSyncAt)
 
-  const triggerSync = useCallback(async () => {
+  const startPolling = useCallback(() => {
     if (status === "syncing") return
     setStatus("syncing")
-
+    pollCountRef.current = 0
+    
     const finishPolling = (nextStatus: Exclude<SyncStatus, "syncing">) => {
       if (pollTimerRef.current) {
         clearTimeout(pollTimerRef.current)
@@ -89,21 +82,9 @@ export function SyncButton() {
       }
       setStatus(nextStatus)
       setTimeout(() => setStatus("idle"), 3_000)
+      refreshSyncState() // Final refresh to get exact lastSyncAt
     }
 
-    try {
-      const res = await fetch("/api/sync/trigger", { method: "POST" })
-      if (!res.ok) {
-        finishPolling("error")
-        return
-      }
-    } catch {
-      finishPolling("error")
-      return
-    }
-
-    // Poll until the server reports a completed run (max 2 min)
-    pollCountRef.current = 0
     const poll = () => {
       if (pollCountRef.current >= MAX_POLLS) {
         finishPolling("error")
@@ -114,17 +95,16 @@ export function SyncButton() {
         try {
           const res = await fetch("/api/sync/trigger")
           if (!res.ok) {
-            finishPolling("error")
+            poll() // retry
             return
           }
           const data = await res.json()
           const serverStatus = data.results?.syncStatus as string | null
 
-          if (serverStatus === "SUCCESS" || serverStatus === "ERROR") {
-            const syncedAt = new Date()
-            setLastSyncAtState(syncedAt)
-            setLastSyncAt(syncedAt)
-            finishPolling(serverStatus === "SUCCESS" ? "done" : "error")
+          if (serverStatus === "SUCCESS") {
+            finishPolling("done")
+          } else if (serverStatus === "ERROR") {
+            finishPolling("error")
           } else {
             poll()
           }
@@ -135,20 +115,44 @@ export function SyncButton() {
     }
 
     poll()
-  }, [status])
+  }, [status, refreshSyncState])
 
-  // Auto-sync once per day
+  const triggerSync = useCallback(async () => {
+    if (status === "syncing") return
+    setStatus("syncing")
+
+    try {
+      const res = await fetch("/api/sync/trigger", { 
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ full: true }) 
+      })
+      if (!res.ok) {
+        setStatus("error")
+        setTimeout(() => setStatus("idle"), 3_000)
+        return
+      }
+      startPolling()
+    } catch {
+      setStatus("error")
+      setTimeout(() => setStatus("idle"), 3_000)
+    }
+  }, [status, startPolling])
+
+  // Auto-sync check (client-side fallback if tab stays open)
   useEffect(() => {
-    if (autoSyncFiredRef.current) return
-    const last = getLastSyncAt()
-    const needsSync = !last || Date.now() - last.getTime() > AUTO_SYNC_INTERVAL_MS
+    if (autoSyncFiredRef.current || !lastSyncAt) return
+    
+    const intervalMs = syncIntervalHours * 60 * 60 * 1000
+    const needsSync = Date.now() - lastSyncAt.getTime() > intervalMs
+    
     if (needsSync) {
       autoSyncFiredRef.current = true
       // Small delay so the page has time to load first
-      const t = setTimeout(() => triggerSync(), 3_000)
+      const t = setTimeout(() => triggerSync(), 5_000)
       return () => clearTimeout(t)
     }
-  }, [triggerSync])
+  }, [lastSyncAt, syncIntervalHours, triggerSync])
 
   // Cleanup on unmount
   useEffect(() => {
