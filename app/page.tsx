@@ -1,4 +1,5 @@
 import {
+  getCashFlowMetrics,
   getOverviewMetrics,
   getSpendingByCategoryMetrics,
   getNetWorthMetrics,
@@ -31,16 +32,29 @@ export default async function Page({
   await ensurePrismaReady();
 
   // Parallel fetch everything directly from the domain layer (bypassing internal API)
-  const [overview, categories, netWorth, transactions, recurring, usdBrlRate] =
-    await Promise.all([
-      getOverviewMetrics(urlParams),
-      getSpendingByCategoryMetrics(urlParams),
-      getNetWorthMetrics(urlParams),
-      getDashboardTransactions(urlParams),
-      getDashboardRecurring(),
-      getUsdBrlRate(),
-    ]);
-  const cryptoTotalBrl = overview.cryptoTotal.mul(new Prisma.Decimal(usdBrlRate));
+  const cashFlowParams = new URLSearchParams(urlParams);
+  cashFlowParams.set("groupBy", "day");
+
+  const [
+    overview,
+    categories,
+    netWorth,
+    cashFlow,
+    transactions,
+    recurring,
+    usdBrlRate,
+  ] = await Promise.all([
+    getOverviewMetrics(urlParams),
+    getSpendingByCategoryMetrics(urlParams),
+    getNetWorthMetrics(urlParams),
+    getCashFlowMetrics(cashFlowParams),
+    getDashboardTransactions(urlParams),
+    getDashboardRecurring(),
+    getUsdBrlRate(),
+  ]);
+  const cryptoTotalBrl = overview.cryptoTotal.mul(
+    new Prisma.Decimal(usdBrlRate),
+  );
 
   const initialData = serializeDomain({
     overview: {
@@ -61,6 +75,15 @@ export default async function Page({
     netWorth: {
       points: netWorth.points,
     },
+    cashFlow: {
+      results: cashFlow.map((point) => ({
+        date: point.period,
+        income: point.inflow,
+        expense: point.outflow,
+        investments: point.investments,
+        net: point.net,
+      })),
+    },
     transactions: {
       results: transactions.results.slice(0, 5).map((transaction) => ({
         ...transaction,
@@ -76,7 +99,9 @@ export default async function Page({
         category: rule.category,
         nextDate: rule.nextDate,
         merchantName: rule.merchantName,
-        logoUrl: rule.logoUrl ?? getMerchantLogo(rule.merchantName || rule.description),
+        logoUrl:
+          rule.logoUrl ??
+          getMerchantLogo(rule.merchantName || rule.description),
       })),
       summary: {
         totalMonthly: recurring.summary.totalMonthly,
