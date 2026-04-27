@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import { useState, useMemo } from "react"
-import Link from "next/link"
+import { useState, useMemo } from "react";
+import Link from "next/link";
 import {
   ChevronLeft,
   ChevronRight,
@@ -10,54 +10,51 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
-} from "lucide-react"
-import { useApi } from "@/hooks/use-api"
-import { useCurrency } from "@/lib/currency-context"
-import {
-  formatDate,
-  daysUntil,
-  daysUntilLabel,
-} from "@/lib/format"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
-import { cn } from "@/lib/utils"
-import { PageError } from "@/components/page-error"
+} from "lucide-react";
+import { useApi } from "@/hooks/use-api";
+import { useCurrency } from "@/lib/currency-context";
+import { formatDate, daysUntil, daysUntilLabel } from "@/lib/format";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+import { PageError } from "@/components/page-error";
 
 interface Bill {
-  id: string
-  accountId: string | null
-  accountName: string
-  dueDate: string
-  totalAmount: number
-  minimumPayment: number
-  status: string
-  closingDate: string
+  id: string;
+  accountId: string | null;
+  accountName: string;
+  dueDate: string;
+  totalAmount: number;
+  minimumPayment: number;
+  status: string;
+  paidAt?: string | null;
+  closingDate: string;
 }
 
 interface BillsSummary {
-  totalOpen: number
-  totalOverdue: number
-  totalPaid: number
+  totalOpen: number;
+  totalOverdue: number;
+  totalPaid: number;
   counts: {
-    total: number
-    open: number
-    overdue: number
-    paid: number
-  }
-  upcoming: Bill[]
+    total: number;
+    open: number;
+    overdue: number;
+    paid: number;
+  };
+  upcoming: Bill[];
 }
 
 interface BillsResponse {
-  results: Bill[]
+  results: Bill[];
 }
 
 interface BillsSummaryResponse {
-  summary: BillsSummary
+  summary: BillsSummary;
 }
 
 function getStatusConfig(status: string, dueDate: string) {
-  const days = daysUntil(dueDate)
+  const days = daysUntil(dueDate);
 
   if (status === "PAID") {
     return {
@@ -65,23 +62,23 @@ function getStatusConfig(status: string, dueDate: string) {
       className: "bg-blue-400/10 text-blue-400 border-blue-400/20",
       icon: CheckCircle2,
       dotColor: "bg-blue-400",
-    }
+    };
   }
-  if (status === "OVERDUE" || days < 0) {
-    return {
-      label: "Vencida",
-      className: "bg-red-400/10 text-red-400 border-red-400/20",
-      icon: AlertCircle,
-      dotColor: "bg-red-400",
-    }
-  }
-  if (status === "CLOSED" || days <= 0) {
+  if (status === "CLOSED") {
     return {
       label: "Fechada",
       className: "bg-emerald-400/10 text-emerald-400 border-emerald-400/20",
       icon: CheckCircle2,
       dotColor: "bg-emerald-400",
-    }
+    };
+  }
+  if (days < 0) {
+    return {
+      label: "Vencida",
+      className: "bg-red-400/10 text-red-400 border-red-400/20",
+      icon: AlertCircle,
+      dotColor: "bg-red-400",
+    };
   }
   if (days <= 7) {
     return {
@@ -89,25 +86,25 @@ function getStatusConfig(status: string, dueDate: string) {
       className: "bg-amber-400/10 text-amber-400 border-amber-400/20",
       icon: Clock,
       dotColor: "bg-amber-400",
-    }
+    };
   }
   return {
     label: "Aberta",
     className: "bg-zinc-400/10 text-zinc-400 border-zinc-400/20",
     icon: Calendar,
     dotColor: "bg-zinc-400",
-  }
+  };
 }
 
 function getInitials(name?: string): string {
-  if (!name) return "?"
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (!parts.length) return "?"
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
   return parts
     .map((w) => w[0])
     .slice(0, 2)
     .join("")
-    .toUpperCase()
+    .toUpperCase();
 }
 
 const monthNames = [
@@ -123,86 +120,113 @@ const monthNames = [
   "Outubro",
   "Novembro",
   "Dezembro",
-]
+];
 
 export default function BillsPage() {
-  const { format } = useCurrency()
-  const now = new Date()
-  const [selectedMonth, setSelectedMonth] = useState(now.getMonth())
-  const [selectedYear, setSelectedYear] = useState(now.getFullYear())
+  const { format } = useCurrency();
+  const now = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [payingBillId, setPayingBillId] = useState<string | null>(null);
 
-  const monthParam = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`
+  const monthParam = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
 
-  const { data: billsData, loading: billsLoading, error: billsError, refetch: refetchBills } =
-    useApi<BillsResponse>("/api/domain/bills", { month: monthParam })
+  const {
+    data: billsData,
+    loading: billsLoading,
+    error: billsError,
+    refetch: refetchBills,
+  } = useApi<BillsResponse>("/api/domain/bills", { month: monthParam });
 
-  const { data: summaryData, loading: summaryLoading, error: summaryError, refetch: refetchSummary } =
-    useApi<BillsSummaryResponse>("/api/domain/metrics/bills/summary", {
-      month: monthParam,
-    })
+  const {
+    data: summaryData,
+    loading: summaryLoading,
+    error: summaryError,
+    refetch: refetchSummary,
+  } = useApi<BillsSummaryResponse>("/api/domain/metrics/bills/summary", {
+    month: monthParam,
+  });
 
-  const loading = billsLoading || summaryLoading
+  const loading = billsLoading || summaryLoading;
 
-  const bills = billsData?.results
-  const summary = summaryData?.summary
+  const bills = billsData?.results;
+  const summary = summaryData?.summary;
 
   const sortedBills = useMemo(() => {
-    const list = bills ?? []
+    const list = bills ?? [];
     return [...list].sort((a, b) => {
       const statusOrder: Record<string, number> = {
         OVERDUE: 0,
         OPEN: 1,
         CLOSED: 2,
         PAID: 3,
-      }
-      const aOrder = statusOrder[a.status] ?? 1
-      const bOrder = statusOrder[b.status] ?? 1
-      if (aOrder !== bOrder) return aOrder - bOrder
-      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
-    })
-  }, [bills])
+      };
+      const aOrder = statusOrder[a.status] ?? 1;
+      const bOrder = statusOrder[b.status] ?? 1;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    });
+  }, [bills]);
 
   if (billsError || summaryError) {
     return (
       <PageError
         message="Erro ao carregar faturas"
         refetch={() => {
-          refetchBills()
-          refetchSummary()
+          refetchBills();
+          refetchSummary();
         }}
       />
-    )
+    );
   }
 
   const totalAmount = summary
     ? summary.totalOpen + summary.totalOverdue + summary.totalPaid
-    : 0
+    : 0;
 
   function handlePrevMonth() {
     if (selectedMonth === 0) {
-      setSelectedMonth(11)
-      setSelectedYear((y) => y - 1)
+      setSelectedMonth(11);
+      setSelectedYear((y) => y - 1);
     } else {
-      setSelectedMonth((m) => m - 1)
+      setSelectedMonth((m) => m - 1);
     }
   }
 
   function handleNextMonth() {
     if (selectedMonth === 11) {
-      setSelectedMonth(0)
-      setSelectedYear((y) => y + 1)
+      setSelectedMonth(0);
+      setSelectedYear((y) => y + 1);
     } else {
-      setSelectedMonth((m) => m + 1)
+      setSelectedMonth((m) => m + 1);
     }
   }
 
   function handleGoToToday() {
-    setSelectedMonth(now.getMonth())
-    setSelectedYear(now.getFullYear())
+    setSelectedMonth(now.getMonth());
+    setSelectedYear(now.getFullYear());
+  }
+
+  async function markBillAsPaid(billId: string) {
+    setPayingBillId(billId);
+    try {
+      const response = await fetch(`/api/domain/bills/${billId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paidAt: new Date().toISOString() }),
+      });
+      if (!response.ok) throw new Error("Falha ao marcar fatura como paga");
+      refetchBills();
+      refetchSummary();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setPayingBillId(null);
+    }
   }
 
   const isCurrentMonth =
-    selectedMonth === now.getMonth() && selectedYear === now.getFullYear()
+    selectedMonth === now.getMonth() && selectedYear === now.getFullYear();
 
   return (
     <div className="flex flex-col gap-6 p-4 sm:p-6 lg:p-10 max-w-5xl mx-auto w-full">
@@ -399,9 +423,9 @@ export default function BillsPage() {
         ) : (
           <div className="space-y-2">
             {sortedBills.map((bill) => {
-              const statusConfig = getStatusConfig(bill.status, bill.dueDate)
-              const StatusIcon = statusConfig.icon
-              const days = daysUntil(bill.dueDate)
+              const statusConfig = getStatusConfig(bill.status, bill.dueDate);
+              const StatusIcon = statusConfig.icon;
+              const days = daysUntil(bill.dueDate);
 
               return (
                 <div
@@ -424,7 +448,7 @@ export default function BillsPage() {
                           variant="outline"
                           className={cn(
                             "shrink-0 rounded-full border px-2 py-0 text-xs font-semibold uppercase tracking-wider",
-                            statusConfig.className
+                            statusConfig.className,
                           )}
                         >
                           <StatusIcon className="mr-1 size-2.5" />
@@ -443,7 +467,7 @@ export default function BillsPage() {
                               ? "text-red-400"
                               : days <= 3
                                 ? "text-amber-400"
-                                : "text-muted-foreground"
+                                : "text-muted-foreground",
                           )}
                         >
                           {bill.status === "PAID"
@@ -465,15 +489,37 @@ export default function BillsPage() {
                       </div>
                     </div>
 
+                    {bill.status !== "PAID" && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                        disabled={payingBillId === bill.id}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          markBillAsPaid(bill.id);
+                        }}
+                      >
+                        <CheckCircle2 className="size-3.5" />
+                        {payingBillId === bill.id ? "..." : "Paga"}
+                      </Button>
+                    )}
+
                     <Link
-                      href={bill.accountId ? `/transactions?accountId=${bill.accountId}` : "/transactions"}
+                      href={
+                        bill.accountId
+                          ? `/transactions?accountId=${bill.accountId}`
+                          : "/transactions"
+                      }
                       className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
                     >
                       <ChevronRight className="size-4" />
                     </Link>
                   </div>
                 </div>
-              )
+              );
             })}
           </div>
         )}
@@ -485,9 +531,7 @@ export default function BillsPage() {
           <div className="rounded-2xl bg-muted p-5 mb-5">
             <CreditCard className="size-8 text-muted-foreground" />
           </div>
-          <h3 className="text-lg font-bold mb-1">
-            Nenhuma fatura encontrada
-          </h3>
+          <h3 className="text-lg font-bold mb-1">Nenhuma fatura encontrada</h3>
           <p className="text-sm text-muted-foreground max-w-xs">
             Nao identificamos registros de faturas para o periodo de{" "}
             {monthNames[selectedMonth]} de {selectedYear}.
@@ -503,7 +547,7 @@ export default function BillsPage() {
           </p>
           <div className="rounded-xl border bg-card divide-y">
             {summary.upcoming.map((bill) => {
-              const statusConfig = getStatusConfig(bill.status, bill.dueDate)
+              const statusConfig = getStatusConfig(bill.status, bill.dueDate);
               return (
                 <div
                   key={bill.id}
@@ -527,7 +571,7 @@ export default function BillsPage() {
                     <p
                       className={cn(
                         "text-xs font-semibold uppercase tracking-wider",
-                        statusConfig.className.split(" ")[1]
+                        statusConfig.className.split(" ")[1],
                       )}
                     >
                       {statusConfig.label}
@@ -536,15 +580,15 @@ export default function BillsPage() {
                   <span
                     className={cn(
                       "size-2 shrink-0 rounded-full",
-                      statusConfig.dotColor
+                      statusConfig.dotColor,
                     )}
                   />
                 </div>
-              )
+              );
             })}
           </div>
         </div>
       )}
     </div>
-  )
+  );
 }
