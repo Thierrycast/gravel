@@ -57,11 +57,11 @@ export async function GET() {
   }
 
   const categories = await prisma.domainCategory.findMany();
-  const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
+  const categoryMap = new Map(categories.map((cat) => [cat.id, cat.name]));
 
   const merchantIds = Array.from(
     new Set([
-      ...rules.map((r) => r.merchantId).filter(Boolean),
+      ...rules.map((rule) => rule.merchantId).filter(Boolean),
       ...installmentTransactions
         .map((transaction) => transaction.domainMerchantId)
         .filter(Boolean),
@@ -71,7 +71,7 @@ export async function GET() {
     where: { id: { in: merchantIds } },
     select: { id: true, displayName: true },
   });
-  const merchantMap = new Map(merchants.map((m) => [m.id, m.displayName]));
+  const merchantMap = new Map(merchants.map((merchant) => [merchant.id, merchant.displayName]));
   const merchantEnrichments = await prisma.merchantEnrichment.findMany({
     where:
       merchantIds.length > 0
@@ -84,29 +84,29 @@ export async function GET() {
   );
 
   // Map to UI-expected field names
-  const mapped: RecurringRule[] = rules.map((r) => {
-    const merchantName = r.merchantId ? merchantMap.get(r.merchantId) : null;
+  const mapped: RecurringRule[] = rules.map((rule) => {
+    const merchantName = rule.merchantId ? merchantMap.get(rule.merchantId) : null;
     return {
-      id: r.id,
-      description: r.title,
-      amount: Number(r.amount),
-      frequency: r.interval,
-      category: r.categoryId
-        ? (categoryMap.get(r.categoryId) ?? "Sem categoria")
+      id: rule.id,
+      description: rule.title,
+      amount: Number(rule.amount),
+      frequency: rule.interval,
+      category: rule.categoryId
+        ? (categoryMap.get(rule.categoryId) ?? "Sem categoria")
         : "Sem categoria",
-      categoryId: r.categoryId,
-      nextDate: r.nextDate.toISOString(),
-      type: r.type,
-      occurrences: r.occurrences ?? 0,
-      lastDate: r.lastOccurrenceAt?.toISOString() ?? null,
-      confidence: r.confidence ?? 0,
-      isManual: r.origin === "manual",
-      origin: r.origin as "detected" | "manual",
+      categoryId: rule.categoryId,
+      nextDate: rule.nextDate.toISOString(),
+      type: rule.type,
+      occurrences: rule.occurrences ?? 0,
+      lastDate: rule.lastOccurrenceAt?.toISOString() ?? null,
+      confidence: rule.confidence ?? 0,
+      isManual: rule.origin === "manual",
+      origin: rule.origin as "detected" | "manual",
       merchantName: merchantName ?? null,
       logoUrl:
-        (r.merchantId ? merchantLogoMap.get(r.merchantId) : null) ??
-        getMerchantLogo(merchantName || r.title),
-      isInstallment: r.isInstallment ?? false,
+        (rule.merchantId ? merchantLogoMap.get(rule.merchantId) : null) ??
+        getMerchantLogo(merchantName || rule.title),
+      isInstallment: rule.isInstallment ?? false,
     };
   });
 
@@ -198,17 +198,17 @@ export async function GET() {
   const summary = {
     totalMonthlyExpenses:
       rules
-        .filter((r) => r.type === "EXPENSE")
+        .filter((rule) => rule.type === "EXPENSE")
         .reduce(
-          (sum, r) =>
-            sum + normalizeMonthlyAmount(Number(r.amount), r.interval),
+          (sum, rule) =>
+            sum + normalizeMonthlyAmount(Number(rule.amount), rule.interval),
           0,
         ) +
       installmentMapped.reduce((sum, item) => sum + Math.abs(item.amount), 0),
     totalMonthlyIncome: rules
-      .filter((r) => r.type === "INCOME")
+      .filter((rule) => rule.type === "INCOME")
       .reduce(
-        (sum, r) => sum + normalizeMonthlyAmount(Number(r.amount), r.interval),
+        (sum, rule) => sum + normalizeMonthlyAmount(Number(rule.amount), rule.interval),
         0,
       ),
     count: mapped.length + installmentMapped.length,

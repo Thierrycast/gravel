@@ -109,15 +109,15 @@ export async function rebuildAccountAnchors(accountId: string) {
   const endMonth = now.getUTCMonth() + 1
 
   const ordered: MonthlyBucket[] = []
-  let y = startYear
-  let m = startMonth
-  while (y < endYear || (y === endYear && m <= endMonth)) {
-    const key = `${y}-${m}`
-    ordered.push(buckets.get(key) ?? { year: y, month: m, delta: ZERO, count: 0 })
-    m += 1
-    if (m > 12) {
-      m = 1
-      y += 1
+  let year = startYear
+  let month = startMonth
+  while (year < endYear || (year === endYear && month <= endMonth)) {
+    const key = `${year}-${month}`
+    ordered.push(buckets.get(key) ?? { year, month, delta: ZERO, count: 0 })
+    month += 1
+    if (month > 12) {
+      month = 1
+      year += 1
     }
   }
 

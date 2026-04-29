@@ -331,7 +331,7 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
     },
     select: { id: true },
   });
-  const excludedIds = excludedCategories.map((c) => c.id);
+  const excludedIds = excludedCategories.map((category) => category.id);
 
   const [inflowAgg, outflowAgg] = await Promise.all([
     prisma.domainTransaction.aggregate({
@@ -491,7 +491,7 @@ export async function getCashFlowMetrics(searchParams: URLSearchParams) {
     prisma.domainCategory.findMany(),
   ]);
 
-  const categoryMap = new Map(categories.map((c) => [c.id, c]));
+  const categoryMap = new Map(categories.map((category) => [category.id, category]));
 
   const buckets = new Map<
     string,
@@ -589,7 +589,7 @@ export async function getNetWorthMetrics(searchParams?: URLSearchParams) {
 
   // Pending lends are money we HAVE but is currently with others.
   // For net worth purposes, it's an asset.
-  const totalPendingLends = sumDecimals(pendingLends.map((l) => l.amount));
+  const totalPendingLends = sumDecimals(pendingLends.map((lend) => lend.amount));
 
   const grossAssets = overview.fiatAssets
     .plus(cryptoAssets)
@@ -662,9 +662,9 @@ export async function getNetWorthMetrics(searchParams?: URLSearchParams) {
       scenarioNW = projectedNW;
 
       // Apply Scenarios (Hypothetical)
-      const monthScenarios = activeScenarios.filter((s) => {
-        const d = new Date(s.date);
-        return d >= monthStart && d <= monthEnd;
+      const monthScenarios = activeScenarios.filter((scenario) => {
+        const date = new Date(scenario.date);
+        return date >= monthStart && date <= monthEnd;
       });
 
       for (const scenario of monthScenarios) {
@@ -896,7 +896,7 @@ export async function getSpendingByCategoryMetrics(
     },
     select: { id: true },
   });
-  const excludedIds = excludedCategories.map((c) => c.id);
+  const excludedIds = excludedCategories.map((category) => category.id);
 
   const grouped = await prisma.domainTransaction.groupBy({
     by: ["domainCategoryId"],
@@ -910,13 +910,13 @@ export async function getSpendingByCategoryMetrics(
   });
 
   const categoryIds = grouped
-    .map((g) => g.domainCategoryId)
+    .map((group) => group.domainCategoryId)
     .filter((id): id is string => Boolean(id));
 
   const categoryDetails = await prisma.domainCategory.findMany({
     where: { id: { in: categoryIds } },
   });
-  const categoryMap = new Map(categoryDetails.map((c) => [c.id, c]));
+  const categoryMap = new Map(categoryDetails.map((category) => [category.id, category]));
 
   const groups = grouped.map((group) => {
     const category = group.domainCategoryId

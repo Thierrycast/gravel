@@ -376,28 +376,28 @@ export async function getDashboardTransactions(searchParams: URLSearchParams) {
     }),
   ])
 
-  const categoryMap = new Map(categories.map((c) => [c.id, c]))
+  const categoryMap = new Map(categories.map((category) => [category.id, category]))
 
   // Derive real institution names from grouped account names (MeuPluggy proxy has no brand)
   const accountNamesByParent = new Map<string, string[]>()
-  for (const a of accounts) {
-    if (!a.sourceParentId) continue
-    const bucket = accountNamesByParent.get(a.sourceParentId) ?? []
-    bucket.push(a.name)
-    accountNamesByParent.set(a.sourceParentId, bucket)
+  for (const account of accounts) {
+    if (!account.sourceParentId) continue
+    const bucket = accountNamesByParent.get(account.sourceParentId) ?? []
+    bucket.push(account.name)
+    accountNamesByParent.set(account.sourceParentId, bucket)
   }
   const institutionByParent = new Map<string, string | null>()
   for (const [parentId, names] of accountNamesByParent.entries()) {
     institutionByParent.set(parentId, deriveInstitutionFromNames(names))
   }
-  const accountMap = new Map(accounts.map((a) => {
-    const groupInstitution = a.sourceParentId ? (institutionByParent.get(a.sourceParentId) ?? null) : null
-    const storedName = a.institutionName && !["Pluggy", "MeuPluggy", "PLUGGY"].includes(a.institutionName) ? a.institutionName : null
+  const accountMap = new Map(accounts.map((account) => {
+    const groupInstitution = account.sourceParentId ? (institutionByParent.get(account.sourceParentId) ?? null) : null
+    const storedName = account.institutionName && !["Pluggy", "MeuPluggy", "PLUGGY"].includes(account.institutionName) ? account.institutionName : null
     const institution = groupInstitution ?? storedName ?? null
-    return [a.id, { name: a.name, imageUrl: getInstitutionLogo(institution ?? a.name) }]
+    return [account.id, { name: account.name, imageUrl: getInstitutionLogo(institution ?? account.name) }]
   }))
 
-  const merchantMap = new Map(merchants.map((m) => [m.id, m]))
+  const merchantMap = new Map(merchants.map((merchant) => [merchant.id, merchant]))
   const merchantEnrichmentMap = new Map(merchantEnrichments.map((item) => [item.domainMerchantId, item]))
   const transactionEnrichmentMap = new Map(transactionEnrichments.map((item) => [item.domainTransactionId, item]))
 
