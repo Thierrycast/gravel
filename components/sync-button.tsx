@@ -5,7 +5,6 @@ import { RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
-const SYNC_STORAGE_KEY = "gravel:lastSyncAt"
 const POLL_INTERVAL_MS = 5_000 // poll status every 5s while syncing
 
 type SyncStatus = "idle" | "syncing" | "done" | "error"
@@ -30,6 +29,7 @@ export function SyncButton() {
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pollCountRef = useRef(0)
   const autoSyncFiredRef = useRef(false)
+  const startPollingRef = useRef<() => void>(() => {})
   const MAX_POLLS = 60 // 5 minutes at 5s intervals (full sync can take time)
 
   // Fetch actual last sync time and settings from server on mount
@@ -50,25 +50,11 @@ export function SyncButton() {
 
         // If server says it's currently running, start polling
         if (syncData.results?.syncStatus === "RUNNING") {
-          startPolling()
+          startPollingRef.current()
         }
       })
       .catch(() => {})
   }, [])
-
-  useEffect(() => {
-    refreshSyncState()
-  }, [refreshSyncState])
-
-  // Tick every minute so relativeTime re-derives without setState-in-effect
-  useEffect(() => {
-    const interval = setInterval(() => setClockTick((t) => t + 1), 60_000)
-    return () => clearInterval(interval)
-  }, [])
-
-  // clockTick intentionally triggers re-render; formatRelativeTime reads Date.now()
-  void clockTick
-  const relativeTime = formatRelativeTime(lastSyncAt)
 
   const startPolling = useCallback(() => {
     if (status === "syncing") return
@@ -116,6 +102,25 @@ export function SyncButton() {
 
     poll()
   }, [status, refreshSyncState])
+
+  // Keep ref updated
+  useEffect(() => {
+    startPollingRef.current = startPolling
+  }, [startPolling])
+
+  useEffect(() => {
+    refreshSyncState()
+  }, [refreshSyncState])
+
+  // Tick every minute so relativeTime re-derives without setState-in-effect
+  useEffect(() => {
+    const interval = setInterval(() => setClockTick((t) => t + 1), 60_000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // clockTick intentionally triggers re-render; formatRelativeTime reads Date.now()
+  void clockTick
+  const relativeTime = formatRelativeTime(lastSyncAt)
 
   const triggerSync = useCallback(async () => {
     if (status === "syncing") return
