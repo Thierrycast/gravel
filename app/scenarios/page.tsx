@@ -69,7 +69,7 @@ export default function ScenariosPage() {
     description: "",
   })
 
-  async function handleAddScenario() {
+  async function createScenario() {
     if (!scenarioForm.title || !scenarioForm.amount) return
     try {
       const res = await fetch("/api/scenarios", {
@@ -85,7 +85,7 @@ export default function ScenariosPage() {
     }
   }
 
-  async function handleDeleteScenario(id: string) {
+  async function deleteScenario(id: string) {
     try {
       await fetch(`/api/scenarios?id=${id}`, { method: "DELETE" })
       toast.success("Cenário removido")
@@ -95,7 +95,7 @@ export default function ScenariosPage() {
     }
   }
 
-  async function handleAddLend() {
+  async function registerLend() {
     if (!lendForm.friendName || !lendForm.amount) return
     try {
       const res = await fetch("/api/lends", {
@@ -111,7 +111,7 @@ export default function ScenariosPage() {
     }
   }
 
-  async function handleMarkLendAsPaid(id: string) {
+  async function markLendAsPaid(id: string) {
     try {
       await fetch("/api/lends", {
         method: "PATCH",
@@ -192,7 +192,7 @@ export default function ScenariosPage() {
                     </PopoverContent>
                   </Popover>
                 </div>
-                <Button className="w-full gap-2" onClick={handleAddScenario}>
+                <Button className="w-full gap-2" onClick={createScenario}>
                   <Plus className="size-4" />
                   Adicionar Simulação
                 </Button>
@@ -210,17 +210,17 @@ export default function ScenariosPage() {
                 ) : (
                   <div className="space-y-4">
                     {scenarios?.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">Nenhum cenário simulado ainda.</p>}
-                    {scenarios?.map((s) => (
-                      <div key={s.id} className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+                    {scenarios?.map((scenario) => (
+                      <div key={scenario.id} className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
                         <div className="flex flex-col">
-                          <span className="font-medium">{s.title}</span>
-                          <span className="text-xs text-muted-foreground">{format(new Date(s.date), "dd MMM yyyy", { locale: ptBR })}</span>
+                          <span className="font-medium">{scenario.title}</span>
+                          <span className="text-xs text-muted-foreground">{format(new Date(scenario.date), "dd MMM yyyy", { locale: ptBR })}</span>
                         </div>
                         <div className="flex items-center gap-4">
-                          <span className={cn("font-mono font-bold", s.amount < 0 ? "text-red-400" : "text-emerald-400")}>
-                            {formatCurrency(s.amount)}
+                          <span className={cn("font-mono font-bold", scenario.amount < 0 ? "text-red-400" : "text-emerald-400")}>
+                            {formatCurrency(scenario.amount)}
                           </span>
-                          <Button variant="ghost" size="icon" onClick={() => handleDeleteScenario(s.id)}>
+                          <Button variant="ghost" size="icon" onClick={() => deleteScenario(scenario.id)}>
                             <Trash2 className="size-4 text-muted-foreground hover:text-red-400" />
                           </Button>
                         </div>
@@ -288,7 +288,7 @@ export default function ScenariosPage() {
                     onChange={(e) => setLendForm({ ...lendForm, description: e.target.value })}
                   />
                 </div>
-                <Button className="w-full gap-2 bg-amber-600 hover:bg-amber-700" onClick={handleAddLend}>
+                <Button className="w-full gap-2 bg-amber-600 hover:bg-amber-700" onClick={registerLend}>
                   <Users className="size-4" />
                   Registrar no Cofre
                 </Button>
@@ -305,30 +305,30 @@ export default function ScenariosPage() {
                   <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>
                 ) : (
                   <div className="space-y-4">
-                    {lends?.filter(l => l.status === "PENDING").length === 0 && (
+                    {lends?.filter(lend => lend.status === "PENDING").length === 0 && (
                       <div className="text-center py-12 border-2 border-dashed rounded-xl border-muted/20">
                          <CheckCircle2 className="size-12 text-emerald-500/20 mx-auto mb-4" />
                          <p className="text-sm text-muted-foreground">Tudo em dia! Nenhum amigo devendo por enquanto.</p>
                       </div>
                     )}
-                    {lends?.filter(l => l.status === "PENDING").map((l) => (
-                      <div key={l.id} className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 border rounded-xl bg-amber-500/5 border-amber-500/10 hover:border-amber-500/30 transition-all">
+                    {lends?.filter(lend => lend.status === "PENDING").map((lend) => (
+                      <div key={lend.id} className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 border rounded-xl bg-amber-500/5 border-amber-500/10 hover:border-amber-500/30 transition-all">
                         <div className="flex items-start gap-4">
                           <div className="size-10 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-500 font-bold">
-                            {l.friendName.slice(0, 1).toUpperCase()}
+                            {lend.friendName.slice(0, 1).toUpperCase()}
                           </div>
                           <div className="flex flex-col">
-                            <span className="font-bold">{l.friendName}</span>
+                            <span className="font-bold">{lend.friendName}</span>
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Info className="size-3" /> {l.description || "Sem descrição"}
+                              <Info className="size-3" /> {lend.description || "Sem descrição"}
                             </span>
                             <div className="flex items-center gap-3 mt-1">
-                              <span className="text-[10px] text-amber-600 font-mono flex items-center gap-1 uppercase tracking-tighter">
-                                <Clock className="size-3" /> Vence em {format(new Date(l.dueDate), "dd/MM")}
+                              <span className="text-xs text-amber-600 font-mono flex items-center gap-1 uppercase tracking-tighter">
+                                <Clock className="size-3" /> Vence em {format(new Date(lend.dueDate), "dd/MM")}
                               </span>
-                              {l.friendPhone && (
-                                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                                  <Phone className="size-3" /> {l.friendPhone}
+                              {lend.friendPhone && (
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Phone className="size-3" /> {lend.friendPhone}
                                 </span>
                               )}
                             </div>
@@ -336,24 +336,24 @@ export default function ScenariosPage() {
                         </div>
                         <div className="flex items-center gap-4 mt-4 sm:mt-0 ml-14 sm:ml-0">
                           <span className="text-lg font-mono font-bold text-amber-500">
-                            {formatCurrency(l.amount)}
+                            {formatCurrency(lend.amount)}
                           </span>
-                          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8" onClick={() => handleMarkLendAsPaid(l.id)}>
+                          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8" onClick={() => markLendAsPaid(lend.id)}>
                             Pago
                           </Button>
                         </div>
                       </div>
                     ))}
 
-                    {lends?.some(l => l.status === "PAID") && (
+                    {lends?.some(lend => lend.status === "PAID") && (
                       <>
                         <Separator className="my-6" />
                         <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-4">Histórico Recente (Pagos)</h4>
                         <div className="space-y-2 opacity-60">
-                           {lends.filter(l => l.status === "PAID").slice(0, 5).map(l => (
-                              <div key={l.id} className="flex items-center justify-between p-2 border rounded-lg text-sm italic grayscale">
-                                 <span>{l.friendName}</span>
-                                 <span className="line-through">{formatCurrency(l.amount)}</span>
+                           {lends.filter(lend => lend.status === "PAID").slice(0, 5).map(lend => (
+                              <div key={lend.id} className="flex items-center justify-between p-2 border rounded-lg text-sm italic grayscale">
+                                 <span>{lend.friendName}</span>
+                                 <span className="line-through">{formatCurrency(lend.amount)}</span>
                               </div>
                            ))}
                         </div>

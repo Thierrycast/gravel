@@ -292,7 +292,7 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
               ))}
             </div>
           </div>
-          <div className="h-[300px] w-full">
+          <div className="h-80 w-full">
             {chartMode === "netWorth" && (
               <NetWorthChart
                 history={netWorth.points}

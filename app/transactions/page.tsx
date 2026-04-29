@@ -292,7 +292,7 @@ function TransactionsContent() {
     transactionParams,
   );
 
-  function handleExport() {
+  function exportTransactions() {
     const params = new URLSearchParams(transactionParams);
     window.location.href = `/api/domain/transactions/export?${params.toString()}`;
   }
@@ -567,7 +567,7 @@ function TransactionsContent() {
               variant="outline"
               size="sm"
               className="gap-2"
-              onClick={handleExport}
+              onClick={exportTransactions}
               disabled={transactions.loading || total === 0}
               title="Exportar transações do período (CSV)"
             >
@@ -766,12 +766,12 @@ function TransactionsContent() {
                             </div>
                           ) : (
                             <div className="shrink-0 size-7 rounded-lg border border-border/40 bg-muted/50 flex items-center justify-center shadow-sm">
-                              <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase">
+                              <span className="text-xs font-mono font-bold text-muted-foreground uppercase">
                                 {transaction.accountName.slice(0, 2)}
                               </span>
                             </div>
                           )}
-                          <span className="text-sm font-semibold text-muted-foreground/80 font-mono truncate max-w-[140px]">
+                          <span className="text-sm font-semibold text-muted-foreground/80 font-mono truncate max-w-32">
                             {transaction.accountName || "—"}
                           </span>
                         </div>
@@ -789,7 +789,7 @@ function TransactionsContent() {
                           <span aria-hidden className="text-base">
                             {getCategoryEmoji(transaction.categoryName)}
                           </span>
-                          <span className="max-w-[140px] truncate font-medium">
+                          <span className="max-w-32 truncate font-medium">
                             {transaction.categoryName}
                           </span>
                         </Badge>

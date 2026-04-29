@@ -205,7 +205,7 @@ export function SankeyChart({
                 onValueChange={(val: number[]) => setUserHeight(val[0])}
               />
             </div>
-            <span className="font-mono text-xs text-muted-foreground min-w-[32px]">{userHeight}px</span>
+            <span className="font-mono text-xs text-muted-foreground min-w-8">{userHeight}px</span>
           </div>
 
           <div className="flex items-center gap-3">
@@ -219,7 +219,7 @@ export function SankeyChart({
                 onValueChange={(val: number[]) => setNodePadding(val[0])}
               />
             </div>
-            <span className="font-mono text-xs text-muted-foreground min-w-[32px]">{nodePadding}</span>
+            <span className="font-mono text-xs text-muted-foreground min-w-8">{nodePadding}</span>
           </div>
 
           <div className="flex items-center gap-3">
@@ -233,7 +233,7 @@ export function SankeyChart({
                 onValueChange={(val: number[]) => setNodeWidth(val[0])}
               />
             </div>
-            <span className="font-mono text-xs text-muted-foreground min-w-[32px]">{nodeWidth}px</span>
+            <span className="font-mono text-xs text-muted-foreground min-w-8">{nodeWidth}px</span>
           </div>
 
           <div className="flex items-center gap-3">
@@ -247,7 +247,7 @@ export function SankeyChart({
                 onValueChange={(val: number[]) => setCurvature(val[0] / 100)}
               />
             </div>
-            <span className="font-mono text-xs text-muted-foreground min-w-[32px]">{Math.round(curvature * 100)}%</span>
+            <span className="font-mono text-xs text-muted-foreground min-w-8">{Math.round(curvature * 100)}%</span>
           </div>
 
           <button
