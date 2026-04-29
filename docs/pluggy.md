@@ -1,20 +1,20 @@
-# Pluggy - Integracao
+# Pluggy - Integração
 
 ## Objetivo atual
 - Usar `Pluggy Connect` em `/connect` para autenticar no MeuPluggy com Google.
 - Salvar cada `itemId` retornado pelo widget na base local.
-- Agregar todos os itens salvos nas rotas de consulta de item, contas e transacoes.
+- Agregar todos os itens salvos nas rotas de consulta de item, contas e transações.
 
-## Variaveis de ambiente
+## Variáveis de ambiente
 - `PLUGGY_CLIENT_ID`
 - `PLUGGY_CLIENT_SECRET`
-- `PLUGGY_API_BASE` (padrao: `https://api.pluggy.ai`)
-- `PLUGGY_API_KEY_HEADER` (padrao: `X-API-KEY`)
-- `PLUGGY_AUTH_PATH` (padrao: `/auth`)
-- `PLUGGY_CONNECT_TOKEN_PATH` (padrao: `/connect_token`)
-- `PLUGGY_API_KEY_TTL_SECONDS` (padrao: `7200`)
-- `PLUGGY_ENRICHMENT_API_BASE` (padrao: `https://enrichment-api.pluggy.ai`)
-- `GRAVEL_CLIENT_USER_ID` (opcional; usado no Pluggy Enrichment, padrao local)
+- `PLUGGY_API_BASE` (padrão: `https://api.pluggy.ai`)
+- `PLUGGY_API_KEY_HEADER` (padrão: `X-API-KEY`)
+- `PLUGGY_AUTH_PATH` (padrão: `/auth`)
+- `PLUGGY_CONNECT_TOKEN_PATH` (padrão: `/connect_token`)
+- `PLUGGY_API_KEY_TTL_SECONDS` (padrão: `7200`)
+- `PLUGGY_ENRICHMENT_API_BASE` (padrão: `https://enrichment-api.pluggy.ai`)
+- `GRAVEL_CLIENT_USER_ID` (opcional; usado no Pluggy Enrichment, padrão local)
 - `LOGO_DEV_PUBLISHABLE_KEY` (opcional; usado para URLs CDN de logos)
 - `LOGO_DEV_SECRET_KEY` (opcional; somente backend para Logo.dev Describe)
 - `LOGO_DEV_DOMAIN_OVERRIDES_JSON` (opcional; mapa JSON `{"merchant normalizado":"dominio.com"}`)
@@ -28,14 +28,14 @@
   - Salva ou atualiza um `itemId` retornado pelo widget.
 - `GET /api/pluggy/item?itemId=...`
   - Busca detalhes do item no Pluggy.
-  - Se `itemId` nao for enviado, retorna todos os itens salvos.
+  - Se `itemId` não for enviado, retorna todos os itens salvos.
 - `GET /api/pluggy/accounts?itemId=...`
   - Busca contas do item.
-  - Se `itemId` nao for enviado, agrega contas de todos os itens salvos.
+  - Se `itemId` não for enviado, agrega contas de todos os itens salvos.
   - Retorna `items`, `totalItems`, `readyItems`, `totalAccounts`, `results` e `pagesByItem`.
 - `GET /api/pluggy/transactions?itemId=...&page=1&pageSize=100`
-  - Busca transacoes do item.
-  - Se `itemId` nao for enviado, agrega transacoes de todos os itens salvos.
+  - Busca transações do item.
+  - Se `itemId` não for enviado, agrega transações de todos os itens salvos.
   - Retorna `items`, `totalItems`, `readyItems`, `totalAccounts`, `totalTransactions`, `results` e `pagesByAccount`.
 - `GET /api/pluggy/accounts/:accountId`
   - Busca o detalhe de uma conta.
@@ -48,7 +48,7 @@
 - `GET /api/pluggy/investments/:investmentId`
   - Busca o detalhe de um investimento.
 - `GET /api/pluggy/loans`
-  - Agrega emprestimos de todos os itens salvos.
+  - Agrega empréstimos de todos os itens salvos.
 - `GET /api/pluggy/loans/:loanId`
   - Busca o detalhe de um emprestimo.
 - `GET /api/pluggy/bills`
@@ -81,10 +81,10 @@
 
 ## Observacoes
 - O projeto agora assume multiplos itens no MeuPluggy.
-- O `itemId` nao fica mais no `.env`.
-- A listagem de itens usada pelo app e local, porque o widget devolve o `itemId` no sucesso e esse identificador precisa ser mantido pela aplicacao.
+- O `itemId` não fica mais no `.env`.
+- A listagem de itens usada pelo app e local, porque o widget devolve o `itemId` no sucesso e esse identificador precisa ser mantido pela aplicação.
 - O `connectToken` e limitado ao widget. Dados de produtos continuam sendo buscados no backend com API key.
-- No Pluggy atual deste projeto, `transactions` exige `accountId`, entao a API local primeiro resolve as contas e depois agrega as transacoes por conta.
+- No Pluggy atual deste projeto, `transactions` exige `accountId`, entao a API local primeiro resolve as contas e depois agrega as transações por conta.
 - O plano de persistencia esta em `docs/pluggy-persistencia.md`.
 - Pluggy Categorize e uma camada complementar: regras locais continuam tendo precedencia sobre categorias/merchant enriquecidos.
 - O endpoint de enrichment pode estar indisponivel em contas sem feature premium; nesse caso o erro fica cacheado e a UI segue usando raw/provider/fallback.

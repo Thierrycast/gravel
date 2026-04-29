@@ -12,10 +12,6 @@
 
 # testing
 /coverage
-/playwright-report/
-/test-results/
-/screenshots/
-/.playwright-cli/
 
 # next.js
 /.next/
@@ -55,11 +51,6 @@ next-env.d.ts
 skills-lock.json
 AGENTS.md
 /.agents/logs/
-
-# local maintenance scratchpads
-/scratch/
-/check_inflows.js
-/cleanup_recurring.js
 
 # cached logos (served from local proxy, generated at runtime)
 /data/

@@ -1,33 +1,45 @@
 # Gravel Finance
 
-Dashboard financeiro pessoal com agregacao de dados bancarios (Pluggy Open Finance) e crypto (Binance). Construido com Next.js 16, React 19, Prisma e SQLite — local-first, sem dependencias de serviços SaaS além dos provedores de dados.
+✨ Um dashboard financeiro pessoal com agregação de dados bancários (Pluggy Open Finance) e crypto (Binance).
 
-## Stack
+Construído com **Next.js 16**, **React 19**, **Prisma** e **SQLite** — uma arquitetura *local-first*, sem dependências de serviços SaaS externos além dos provedores de dados. Ideal para homelab e uso pessoal com controle total sobre sua privacidade financeira.
+
+---
+
+## 🚀 Tech Stack
 
 - **Frontend**: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, shadcn/ui, Recharts, d3-sankey
 - **Backend**: Next.js API Routes, Prisma ORM
-- **Banco**: SQLite (arquivo único — ideal para homelab / uso pessoal)
+- **Banco de Dados**: SQLite (arquivo único, zero dor de cabeça)
 - **Integrações**: Pluggy (Open Finance BR), Binance (Crypto)
-- **Testes**: Vitest (unit) + Playwright (E2E smoke)
-- **Deploy**: Dockerfile multi-stage (imagem standalone ~470MB)
+- **Testes**: Vitest (Unit)
+- **Deploy**: Dockerfile multi-stage (imagem autossuficiente ~470MB)
 
-## Setup
+---
 
-```bash
-# Dependências
-pnpm install
+## 🛠️ Setup Rápido
 
-# Banco local
-cp .env.example .env   # preencher variáveis
-pnpm db:push
+1. **Instale as dependências:**
+   ```bash
+   pnpm install
+   ```
 
-# Dev
-pnpm dev
-```
+2. **Configure o banco local:**
+   ```bash
+   cp .env.example .env   # preencha as variáveis necessárias
+   pnpm db:push
+   ```
 
-## Variáveis de Ambiente
+3. **Inicie o servidor de desenvolvimento:**
+   ```bash
+   pnpm dev
+   ```
 
-Veja `.env.example`. Resumo:
+---
+
+## ⚙️ Variáveis de Ambiente
+
+Consulte o arquivo `.env.example`. Um resumo das principais configurações:
 
 ```env
 DATABASE_URL="file:./dev.db"
@@ -40,37 +52,42 @@ PLUGGY_CLIENT_SECRET=
 BINANCE_API_KEY=
 BINANCE_API_SECRET=
 
-# Protege os endpoints em /api/admin/*
+# Protege os endpoints internos em /api/admin/*
 INTERNAL_API_KEY=
 ```
 
-## Scripts
+---
+
+## 📜 Comandos Disponíveis
 
 | Comando | Descrição |
 |---------|-----------|
-| `pnpm dev` | Servidor de desenvolvimento |
-| `pnpm build` | Build de produção (standalone) |
-| `pnpm start` | Serve o build de produção |
-| `pnpm lint` | ESLint |
-| `pnpm test` | Unit tests (Vitest) |
-| `pnpm test:watch` | Vitest em watch mode |
-| `pnpm test:e2e` | Smoke tests do Playwright (sobe `pnpm dev` automaticamente) |
-| `pnpm db:push` | Sincroniza o schema com o banco |
-| `pnpm db:migrate` | Cria uma migration |
-| `pnpm gravel` | CLI do Gravel (`doctor`, `snapshot`, `diff`, `sync`) |
+| `pnpm dev` | Servidor de desenvolvimento. |
+| `pnpm build` | Build de produção (modo standalone). |
+| `pnpm start` | Inicia o build de produção. |
+| `pnpm lint` | Executa o ESLint. |
+| `pnpm test` | Testes unitários (Vitest). |
+| `pnpm test:watch` | Testes em modo watch. |
+| `pnpm db:push` | Sincroniza o schema do Prisma com o SQLite. |
+| `pnpm db:migrate` | Gera uma migration do banco de dados. |
+| `pnpm gravel` | Ferramenta de CLI local (`doctor`, `snapshot`, `diff`, `sync`). |
 
-## Documentação
+---
 
-- [Funcionalidades](docs/features.md) — descrição completa de todas as telas e recursos
-- [Arquitetura](docs/architecture.md) — camadas, banco de dados e fluxo de dados
-- [API Reference](docs/api-reference.md) — todos os endpoints com exemplos
-- [Pluggy](docs/pluggy.md) — integração Open Finance
-- [Binance](docs/binance.md) — integração crypto
-- [CLI](docs/cli.md) — guia completo da linha de comando
+## 📚 Documentação
 
-## Gravel CLI (IA / Agentes)
+- 🌟 [Funcionalidades](docs/features.md) — Visão detalhada de todas as telas e recursos.
+- 🏗️ [Arquitetura](docs/architecture.md) — Camadas, esquema de dados e fluxo da aplicação.
+- 📖 [API Reference](docs/api-reference.md) — Endpoints e exemplos de requisição.
+- 🔌 [Integração Pluggy](docs/pluggy.md) — Detalhes do Open Finance.
+- 🪙 [Integração Binance](docs/binance.md) — Detalhes da sincronização de criptomoedas.
+- 🖥️ [CLI](docs/cli.md) — Guia da linha de comando do Gravel.
 
-CLI nativa para diagnóstico e para empacotar dados financeiros de forma estrita para consumo por LLMs.
+---
+
+## 🤖 Gravel CLI (Integração de IA)
+
+Uma CLI nativa desenvolvida para diagnóstico e empacotamento de dados financeiros para consumo rápido e estrito por LLMs (ChatGPT/Claude).
 
 ```bash
 # Diagnóstico de saúde do sistema
@@ -83,21 +100,25 @@ pnpm gravel snapshot finance --for-llm
 pnpm gravel diff ./before ./after
 ```
 
-Veja o [Guia da CLI](docs/cli.md) para todos os comandos.
+Para mais comandos, consulte o [Guia da CLI](docs/cli.md).
 
-## Docker
+---
 
-O Gravel possui Dockerfile multi-stage usando o modo `standalone` do Next.js. A imagem final carrega o Prisma CLI para aplicar o schema no primeiro boot.
+## 🐳 Docker (Deploy Homelab)
 
-### Docker Compose (recomendado)
+O projeto utiliza um Dockerfile multi-stage baseado no modo `standalone` do Next.js. O Prisma CLI é embarcado na imagem para aplicar schemas no primeiro boot.
+
+### Docker Compose (Recomendado)
+
+A maneira mais rápida de rodar a aplicação em produção:
 
 ```bash
 docker compose up --build -d
 ```
 
-O `docker-compose.yml` já cria um volume nomeado (`gravel_data`) para o SQLite, define healthcheck HTTP, e aponta o `DATABASE_URL` para `/app/data/prod.db`.
+O `docker-compose.yml` criará um volume nomeado (`gravel_data`) para proteger o arquivo SQLite, definirá healthchecks HTTP e setará o banco em `/app/data/prod.db`.
 
-### Docker puro
+### Docker Puro
 
 ```bash
 docker build -t gravel .
@@ -112,18 +133,22 @@ docker run -p 3000:3000 \
   gravel
 ```
 
-> **Dica:** se preferir bind mount (`-v ./data:/app/data`), garanta que o diretório do host pertença ao UID 1001 ou use chmod antes, pois o container roda como usuário não-root.
+> **Dica de Permissões:** Caso opte por um bind mount local (`-v ./data:/app/data`), certifique-se de que o diretório pertence ao usuário de ID `1001` (aplicando um `chmod`), uma vez que o container roda usando um usuário não-root por segurança.
 
-## Status do build
+---
+
+## 📈 Status do Build
 
 - `pnpm lint` — ✅ 0 erros, 0 avisos
-- `pnpm test` — ✅ 53 testes passando
-- `pnpm build` — ✅ standalone gerado
-- `docker build` — ✅ imagem ~470 MB
+- `pnpm test` — ✅ Testes rodando 100% OK
+- `pnpm build` — ✅ Artefato standalone com sucesso
+- `docker build` — ✅ Imagem otimizada (~470 MB)
 
-## Funcionalidades Recentes
+---
 
-- **Export CSV na UI**: botão "Exportar" no header de Transações que respeita os filtros ativos.
-- **Detalhamento Crypto**: páginas individuais por ativo com gráficos históricos e PnL.
-- **Sankey Chart Inteligente**: controle de curvatura, altura e modo privacidade.
-- **Snapshot para IA**: CLI otimizada para gerar pacotes de dados para análise por Claude/GPT.
+## ✨ Destaques Recentes
+
+- 📊 **Exportação de CSV Direta na UI**: Botão no cabeçalho das Transações respeitando todos os filtros ativos.
+- 📈 **Detalhamento Cripto Profundo**: Gráficos históricos, visão de PnL por ativo e custo médio móvel real.
+- 🌊 **Sankey Chart Inteligente**: Visualização moderna do fluxo do seu dinheiro, com modo privacidade e curvatura controlada.
+- 🧠 **Snapshot de IA**: Pipeline otimizada para "alimentar" sua IA com as métricas essenciais e gerar insights poderosos sobre seu dinheiro.
