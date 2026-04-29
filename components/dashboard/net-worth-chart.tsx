@@ -10,6 +10,7 @@ interface NetWorthChartProps {
   history: Array<{
     date: string
     netWorth: number
+    scenarioNetWorth?: number
     assets?: number | null
     liabilities?: number | null
   }>
@@ -20,6 +21,10 @@ const chartConfig = {
   netWorth: {
     label: "Patrimônio",
     color: "oklch(0.70 0.20 150)",
+  },
+  scenarioNetWorth: {
+    label: "Simulado",
+    color: "oklch(0.85 0.15 200)",
   },
   assets: {
     label: "Ativos",
@@ -55,25 +60,28 @@ export function NetWorthChart({ history, period }: NetWorthChartProps) {
   )
 
   return (
-    <ChartContainer config={chartConfig} className="aspect-[2/1] w-full">
+    <ChartContainer config={chartConfig} className="h-full w-full overflow-hidden">
       <AreaChart
         data={filteredData}
-        margin={{ top: 5, right: 10, left: 10, bottom: 0 }}
+        margin={{ top: 20, right: 20, left: 0, bottom: 60 }}
       >
         <defs>
           <linearGradient id="netWorthGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="var(--color-netWorth)" stopOpacity={0.15} />
+            <stop offset="5%" stopColor="var(--color-netWorth)" stopOpacity={0.3} />
             <stop offset="95%" stopColor="var(--color-netWorth)" stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="oklch(0.25 0 0)" />
+        <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="oklch(0.25 0 0)" />
         <XAxis
           dataKey="date"
           tickLine={false}
           axisLine={false}
           tick={{ fontSize: 10, fontFamily: "monospace", fill: "oklch(0.55 0 0)" }}
-          tickFormatter={(v) => formatDate(v)}
-          interval="preserveStartEnd"
+          tickFormatter={(value) => {
+            const date = new Date(value)
+            return date.toLocaleDateString("pt-BR", { month: "short", day: "numeric" })
+          }}
+          minTickGap={30}
         />
         <YAxis
           tickLine={false}
@@ -81,6 +89,10 @@ export function NetWorthChart({ history, period }: NetWorthChartProps) {
           tick={{ fontSize: 10, fontFamily: "monospace", fill: "oklch(0.55 0 0)" }}
           tickFormatter={(v) => formatCompact(v)}
           width={60}
+          domain={[
+            (dataMin: number) => dataMin - Math.abs(dataMin) * 0.25,
+            (dataMax: number) => dataMax + Math.abs(dataMax) * 0.25,
+          ]}
         />
         <ChartTooltip
           content={
@@ -100,29 +112,43 @@ export function NetWorthChart({ history, period }: NetWorthChartProps) {
           }
         />
         <Area
-          type="monotone"
           dataKey="netWorth"
+          type="linear"
+          fill="url(#netWorthGradient)"
           stroke="var(--color-netWorth)"
           strokeWidth={2}
-          fill="url(#netWorthGradient)"
+          isAnimationActive={false}
         />
+        {filteredData.some(d => d.scenarioNetWorth != null) && (
+          <Line
+            dataKey="scenarioNetWorth"
+            type="linear"
+            stroke="var(--color-scenarioNetWorth)"
+            strokeWidth={2}
+            strokeDasharray="5 5"
+            dot={false}
+            isAnimationActive={false}
+          />
+        )}
         {hasAssetValuation && (
           <>
             <Line
-              type="monotone"
+              type="linear"
               dataKey="assets"
               stroke="var(--color-assets)"
               strokeWidth={1.75}
               dot={{ r: 3 }}
               connectNulls
+              isAnimationActive={false}
             />
             <Line
-              type="monotone"
+              type="linear"
               dataKey="liabilities"
               stroke="var(--color-liabilities)"
               strokeWidth={1.75}
               dot={{ r: 3 }}
               connectNulls
+              isAnimationActive={false}
             />
           </>
         )}

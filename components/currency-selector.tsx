@@ -7,7 +7,7 @@ export function CurrencySelector() {
   const { currency, setCurrency } = useCurrency()
 
   return (
-    <div className="flex items-center gap-1 rounded-md border border-border/60 bg-muted/30 p-0.5 font-mono text-[10px] font-bold tracking-tighter">
+    <div className="flex items-center gap-1 rounded-md border border-border/60 bg-muted/30 p-0.5 font-mono text-xs font-bold tracking-tighter">
       {(["BRL", "USD"] as Currency[]).map((c) => (
         <button
           key={c}

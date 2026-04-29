@@ -1,24 +1,28 @@
-"use client"
+"use client";
 
-import { useState, useMemo, Suspense } from "react"
-import Link from "next/link"
-import { Search, Store, Users, DollarSign } from "lucide-react"
-import { useApi } from "@/hooks/use-api"
-import { usePeriod } from "@/hooks/use-period"
-import { useCurrency } from "@/lib/currency-context"
-import { PageHeader } from "@/components/page-header"
-import { PeriodSwitcher } from "@/components/period-switcher"
-import { PageError } from "@/components/page-error"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
+import { useState, useMemo, Suspense } from "react";
+import Link from "next/link";
+import { Search, Store, Users, DollarSign } from "lucide-react";
+import { useApi } from "@/hooks/use-api";
+import { usePeriod } from "@/hooks/use-period";
+import { useCurrency } from "@/lib/currency-context";
+import { PageHeader } from "@/components/page-header";
+import { PeriodSwitcher } from "@/components/period-switcher";
+import { PageError } from "@/components/page-error";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { useRouter, useSearchParams } from "next/navigation";
+
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
   CardDescription,
-} from "@/components/ui/card"
+} from "@/components/ui/card";
 import {
   Table,
   TableHeader,
@@ -26,47 +30,47 @@ import {
   TableBody,
   TableRow,
   TableCell,
-} from "@/components/ui/table"
+} from "@/components/ui/table";
 
 interface MerchantSpending {
-  merchant: string
-  merchantId: string
-  total: number
-  percentage: number
-  transactionCount: number
+  merchant: string;
+  merchantId: string;
+  total: number;
+  percentage: number;
+  transactionCount: number;
 }
 
 interface SpendingResponse {
-  summary: { total: number }
-  results: MerchantSpending[]
+  summary: { total: number };
+  results: MerchantSpending[];
 }
 
 interface Merchant {
-  id: string
-  displayName: string
-  normalizedName: string
-  cnpj: string | null
+  id: string;
+  displayName: string;
+  normalizedName: string;
+  cnpj: string | null;
 }
 
 interface MerchantsResponse {
-  summary: { total: number }
-  results: Merchant[]
+  summary: { total: number };
+  results: Merchant[];
 }
 
 function formatCnpj(cnpj: string | null): string {
-  if (!cnpj) return "-"
+  if (!cnpj) return "-";
 
-  const digits = cnpj.replace(/\D/g, "")
+  const digits = cnpj.replace(/\D/g, "");
 
   if (digits.length === 14) {
-    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12, 14)}`
+    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12, 14)}`;
   }
 
   if (digits.length >= 6) {
-    return `${digits.slice(0, 6)}***`
+    return `${digits.slice(0, 6)}***`;
   }
 
-  return cnpj
+  return cnpj;
 }
 
 function TableSkeleton() {
@@ -82,7 +86,7 @@ function TableSkeleton() {
         </div>
       ))}
     </div>
-  )
+  );
 }
 
 function SummarySkeleton() {
@@ -97,7 +101,7 @@ function SummarySkeleton() {
         </Card>
       ))}
     </div>
-  )
+  );
 }
 
 export default function MerchantsPage() {
@@ -112,74 +116,100 @@ export default function MerchantsPage() {
     >
       <MerchantsContent />
     </Suspense>
-  )
+  );
 }
 
 function MerchantsContent() {
-  const { format } = useCurrency()
-  const [searchQuery, setSearchQuery] = useState("")
-  const period = usePeriod("mtd")
+  const { format } = useCurrency();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState("");
+  const period = usePeriod("mtd");
 
-  const { data: spendingData, loading: spendingLoading, error: spendingError, refetch: refetchSpending } =
-    useApi<SpendingResponse>("/api/domain/metrics/spending/merchants", period.params)
-  const { data: merchantsData, loading: merchantsLoading, error: merchantsError, refetch: refetchMerchants } =
-    useApi<MerchantsResponse>("/api/domain/merchants")
+  const [showSalary, setShowSalary] = useState(
+    searchParams.get("showFutureSalary") !== "false",
+  );
+  const [showFuture, setShowFuture] = useState(
+    searchParams.get("showFutureAccounts") !== "false",
+  );
 
-  const loading = spendingLoading || merchantsLoading
-  const error = spendingError || merchantsError
+  const updateParam = (key: string, value: boolean) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set(key, String(value));
+    router.push(`?${params.toString()}`, { scroll: false });
+  };
+
+  const {
+    data: spendingData,
+    loading: spendingLoading,
+    error: spendingError,
+    refetch: refetchSpending,
+  } = useApi<SpendingResponse>(
+    "/api/domain/metrics/spending/merchants",
+    period.params,
+  );
+  const {
+    data: merchantsData,
+    loading: merchantsLoading,
+    error: merchantsError,
+    refetch: refetchMerchants,
+  } = useApi<MerchantsResponse>("/api/domain/merchants");
+
+  const loading = spendingLoading || merchantsLoading;
+  const error = spendingError || merchantsError;
 
   const merchantsMap = useMemo(() => {
-    const map = new Map<string, Merchant>()
+    const map = new Map<string, Merchant>();
     if (merchantsData?.results) {
       for (const m of merchantsData.results) {
-        map.set(m.id, m)
+        map.set(m.id, m);
       }
     }
-    return map
-  }, [merchantsData])
+    return map;
+  }, [merchantsData]);
 
   const enrichedMerchants = useMemo(() => {
-    if (!spendingData?.results) return []
+    if (!spendingData?.results) return [];
 
     return spendingData.results.map((item) => {
-      const merchantDetails = merchantsMap.get(item.merchantId)
+      const merchantDetails = merchantsMap.get(item.merchantId);
       return {
         ...item,
         cnpj: merchantDetails?.cnpj ?? null,
         displayName: merchantDetails?.displayName ?? item.merchant,
-      }
-    })
-  }, [spendingData, merchantsMap])
+      };
+    });
+  }, [spendingData, merchantsMap]);
 
   const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return enrichedMerchants
+    if (!searchQuery.trim()) return enrichedMerchants;
 
-    const q = searchQuery.toLowerCase().trim()
+    const query = searchQuery.toLowerCase().trim();
     return enrichedMerchants.filter(
-      (m) =>
-        m.displayName.toLowerCase().includes(q) ||
-        m.merchant.toLowerCase().includes(q) ||
-        (m.cnpj && m.cnpj.includes(q))
-    )
-  }, [enrichedMerchants, searchQuery])
+      (merchant) =>
+        merchant.displayName.toLowerCase().includes(query) ||
+        merchant.merchant.toLowerCase().includes(query) ||
+        (merchant.cnpj && merchant.cnpj.includes(query)),
+    );
+  }, [enrichedMerchants, searchQuery]);
 
-  const totalSpent = spendingData?.summary?.total ?? 0
-  const totalMerchants = enrichedMerchants.length
+  const totalSpent = spendingData?.summary?.total ?? 0;
+  const totalMerchants = enrichedMerchants.length;
   const totalTransactions = enrichedMerchants.reduce(
     (sum, m) => sum + m.transactionCount,
-    0
-  )
+    0,
+  );
 
   if (error) {
     return (
       <PageError
         message="Erro ao carregar estabelecimentos"
         refetch={() => {
-          refetchSpending()
-          refetchMerchants()
+          refetchSpending();
+          refetchMerchants();
         }}
       />
-    )
+    );
   }
 
   return (
@@ -188,7 +218,45 @@ function MerchantsContent() {
         eyebrow="Comerciantes"
         title="Comerciantes e gastos"
         description="Veja os estabelecimentos que mais concentram despesas e abra o drill-down já filtrado."
-        actions={<PeriodSwitcher state={period} />}
+        actions={
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-4 border-r pr-6 border-border/60">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="show-salary"
+                  checked={showSalary}
+                  onCheckedChange={(val) => {
+                    setShowSalary(val);
+                    updateParam("showFutureSalary", val);
+                  }}
+                />
+                <Label
+                  htmlFor="show-salary"
+                  className="text-xs font-medium cursor-pointer"
+                >
+                  Salários
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="show-future"
+                  checked={showFuture}
+                  onCheckedChange={(val) => {
+                    setShowFuture(val);
+                    updateParam("showFutureAccounts", val);
+                  }}
+                />
+                <Label
+                  htmlFor="show-future"
+                  className="text-xs font-medium cursor-pointer"
+                >
+                  Parcelas
+                </Label>
+              </div>
+            </div>
+            <PeriodSwitcher state={period} />
+          </div>
+        }
       />
 
       {/* Summary */}
@@ -271,7 +339,10 @@ function MerchantsContent() {
               </TableHeader>
               <TableBody>
                 {filtered.map((merchant) => (
-                  <TableRow key={merchant.merchantId} className="cursor-pointer">
+                  <TableRow
+                    key={merchant.merchantId}
+                    className="cursor-pointer"
+                  >
                     <TableCell>
                       <Link
                         href={`/transactions?merchantId=${encodeURIComponent(merchant.merchantId)}`}
@@ -292,7 +363,11 @@ function MerchantsContent() {
                       {format(merchant.total)}
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">
-                      {(Number.isFinite(merchant.percentage) ? merchant.percentage : 0).toFixed(1)}%
+                      {(Number.isFinite(merchant.percentage)
+                        ? merchant.percentage
+                        : 0
+                      ).toFixed(1)}
+                      %
                     </TableCell>
                   </TableRow>
                 ))}
@@ -302,5 +377,5 @@ function MerchantsContent() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

@@ -188,34 +188,41 @@ export async function runFullOperationalSync(input?: {
 
   try {
     const errors: Array<{ provider: "pluggy" | "binance"; message: string }> = []
-    let pluggy: Awaited<ReturnType<typeof runPluggySync>> | null = null
-    let binance: Awaited<ReturnType<typeof runBinanceSync>> | null = null
-
-    try {
-      pluggy = await runPluggySync({
+    
+    // Run Pluggy and Binance in parallel
+    const [pluggyResult, binanceResult] = await Promise.allSettled([
+      runPluggySync({
         scope: "admin/full/pluggy",
         resource: "full",
         itemId: input?.pluggy?.itemId,
         pageSize: input?.pluggy?.pageSize,
-      })
-    } catch (error) {
-      errors.push({
-        provider: "pluggy",
-        message: error instanceof Error ? error.message : "Erro desconhecido",
-      })
-    }
-
-    try {
-      binance = await runBinanceSync({
+      }),
+      runBinanceSync({
         scope: "admin/full/binance",
         resource: "full",
         symbols: input?.binance?.symbols,
         includeZeroBalances: input?.binance?.includeZeroBalances,
       })
-    } catch (error) {
+    ])
+
+    let pluggy: Awaited<ReturnType<typeof runPluggySync>> | null = null
+    let binance: Awaited<ReturnType<typeof runBinanceSync>> | null = null
+
+    if (pluggyResult.status === "fulfilled") {
+      pluggy = pluggyResult.value
+    } else {
+      errors.push({
+        provider: "pluggy",
+        message: pluggyResult.reason instanceof Error ? pluggyResult.reason.message : "Erro desconhecido",
+      })
+    }
+
+    if (binanceResult.status === "fulfilled") {
+      binance = binanceResult.value
+    } else {
       errors.push({
         provider: "binance",
-        message: error instanceof Error ? error.message : "Erro desconhecido",
+        message: binanceResult.reason instanceof Error ? binanceResult.reason.message : "Erro desconhecido",
       })
     }
 

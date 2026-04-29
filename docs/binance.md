@@ -1,28 +1,28 @@
-# Binance - Integracao
+# Binance - Integração
 
 ## Objetivo atual
 - Ler Spot account, ativos e trades da Binance.
-- Persistir ativos, trades e snapshots de preco no banco local.
-- Atualizar o preco atual dos ativos que voce possui.
+- Persistir ativos, trades e snapshots de preço no banco local.
+- Atualizar o preço atual dos ativos que voce possui.
 
-## Variaveis de ambiente
+## Variáveis de ambiente
 - `BINANCE_API_KEY`
 - `BINANCE_API_SECRET`
-- `BINANCE_API_BASE` (padrao: `https://api.binance.com`)
-- `BINANCE_RECV_WINDOW` (padrao: `5000`)
+- `BINANCE_API_BASE` (padrão: `https://api.binance.com`)
+- `BINANCE_RECV_WINDOW` (padrão: `5000`)
 
 ## Endpoints Binance implementados
 - `GET /api/binance/account`
   - Busca a conta Spot ao vivo na Binance.
 - `GET /api/binance/assets`
-  - Retorna os ativos persistidos no banco com ultimo saldo e ultimo preco.
+  - Retorna os ativos persistidos no banco com ultimo saldo e ultimo preço.
 - `GET /api/binance/trades`
   - Retorna trades persistidos.
   - Filtros: `symbol`, `asset`, `take`
 - `GET /api/binance/symbols`
   - Retorna os simbolos rastreados para coleta de trades.
 - `GET /api/binance/prices/update`
-  - Atualiza o preco atual dos ativos possuidos.
+  - Atualiza o preço atual dos ativos possuidos.
 - `GET /api/binance/sync`
   - Mostra o resumo persistido no banco.
 - `POST /api/binance/sync`
@@ -40,16 +40,16 @@
 - `BinanceAssetBalanceSnapshot`
   - Snapshot insert-only de saldo por ativo
 - `BinanceAssetPriceSnapshot`
-  - Snapshot insert-only do preco atual por ativo
+  - Snapshot insert-only do preço atual por ativo
 - `BinanceTradeRecord`
   - Trades persistidos por `symbol + tradeId`
 - `BinanceSyncRun`
-  - Historico das sincronizacoes
+  - Histórico das sincronizacoes
 
 ## Importante sobre trades
-- A Binance Spot nao oferece um endpoint global de trades de toda a conta.
+- A Binance Spot não oferece um endpoint global de trades de toda a conta.
 - O endpoint oficial `GET /api/v3/myTrades` exige `symbol`.
-- Por isso a integracao usa simbolos rastreados:
+- Por isso a integração usa simbolos rastreados:
   - pares inferidos a partir dos ativos possuidos
   - pares ja vistos nos trades persistidos
   - simbolos enviados manualmente no `POST /api/binance/sync`
@@ -79,7 +79,7 @@ curl http://localhost:3000/api/binance/prices/update
 
 ## Calculos de dominio ja preparados
 - `GET /api/domain/metrics/crypto/assets`
-  - custo medio movel por ativo, PnL realizado e nao realizado, filtros por periodo e ativo
+  - custo medio móvel por ativo, PnL realizado e não realizado, filtros por periodo e ativo
 - `GET /api/domain/metrics/crypto/overview`
   - resumo consolidado da carteira cripto, alocacao, melhor e pior ativo
 

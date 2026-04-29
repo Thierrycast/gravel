@@ -1,38 +1,41 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { Plus, Building2, CreditCard } from "lucide-react"
-import { useApi } from "@/hooks/use-api"
-import { formatPercent } from "@/lib/format"
-import { useCurrency } from "@/lib/currency-context"
-import { Button } from "@/components/ui/button"
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { Plus, Minus, Building2, Pencil, Wallet } from "lucide-react";
+import { useApi } from "@/hooks/use-api";
+import { usePeriod } from "@/hooks/use-period";
+import { formatDateFull, formatPercent } from "@/lib/format";
+import { useCurrency } from "@/lib/currency-context";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
   CardDescription,
-} from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Progress } from "@/components/ui/progress"
-import { Separator } from "@/components/ui/separator"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { PageError } from "@/components/page-error"
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { PageError } from "@/components/page-error";
+import { PeriodSwitcher } from "@/components/period-switcher";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
   SheetDescription,
-} from "@/components/ui/sheet"
+} from "@/components/ui/sheet";
 
 import {
   type Account,
   type AccountsResponse,
   type AllocationResponse,
-} from "@/lib/types/api"
+} from "@/lib/types/api";
 
 function getInitials(name: string): string {
   return name
@@ -40,7 +43,7 @@ function getInitials(name: string): string {
     .map((w) => w[0])
     .slice(0, 2)
     .join("")
-    .toUpperCase()
+    .toUpperCase();
 }
 
 function getTypeLabel(kind: string): string {
@@ -51,8 +54,20 @@ function getTypeLabel(kind: string): string {
     SAVINGS: "Poupança",
     CHECKING: "Conta Corrente",
     INVESTMENT: "Investimento",
-  }
-  return labels[kind] || kind
+    CASH: "Carteira Física",
+    OTHER: "Outro",
+    // Pluggy raw subtype values
+    CHECKING_ACCOUNT: "Conta Corrente",
+    CREDIT_CARD: "Cartão de Crédito",
+    SAVINGS_ACCOUNT: "Poupança",
+    PAYMENT_ACCOUNT: "Conta de Pagamento",
+    CASH_MANAGEMENT: "Gestão de Caixa",
+  };
+  return labels[kind] || kind;
+}
+
+function isCreditAccount(account: Account): boolean {
+  return account.kind === "CARD" || account.kind === "CREDIT";
 }
 
 function AccountCardSkeleton() {
@@ -71,47 +86,137 @@ function AccountCardSkeleton() {
         <Skeleton className="h-6 w-28" />
       </CardContent>
     </Card>
-  )
+  );
 }
 
 export default function AccountsPage() {
-  const { format } = useCurrency()
-  const { data: accountsData, loading: accountsLoading, error: accountsError, refetch: refetchAccounts } =
-    useApi<AccountsResponse>("/api/domain/accounts")
-  const { data: allocationData, loading: allocationLoading, error: allocationError, refetch: refetchAllocation } =
-    useApi<AllocationResponse>("/api/domain/metrics/accounts/allocation")
+  const { format } = useCurrency();
+  const period = usePeriod("mtd");
+  const {
+    data: accountsData,
+    loading: accountsLoading,
+    error: accountsError,
+    refetch: refetchAccounts,
+  } = useApi<AccountsResponse>("/api/domain/accounts");
+  const {
+    data: allocationData,
+    loading: allocationLoading,
+    error: allocationError,
+    refetch: refetchAllocation,
+  } = useApi<AllocationResponse>("/api/domain/metrics/accounts/allocation");
 
-  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
-  const [sheetOpen, setSheetOpen] = useState(false)
+  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [editingNickname, setEditingNickname] = useState(false);
+  const [nicknameInput, setNicknameInput] = useState("");
+  const [savingNickname, setSavingNickname] = useState(false);
+  const [cashInput, setCashInput] = useState("");
+  const [savingCash, setSavingCash] = useState(false);
 
-  const loading = accountsLoading || allocationLoading
+  const loading = accountsLoading || allocationLoading;
+
+  // Reset nickname editing state when account changes
+  useEffect(() => {
+    if (selectedAccount) {
+      setNicknameInput(selectedAccount.nickname || selectedAccount.name || "");
+    }
+  }, [selectedAccount]);
 
   if (accountsError || allocationError) {
     return (
       <PageError
         message="Erro ao carregar contas e saldos"
         refetch={() => {
-          refetchAccounts()
-          refetchAllocation()
+          refetchAccounts();
+          refetchAllocation();
         }}
       />
-    )
+    );
   }
 
-  const accounts = accountsData?.results ?? []
-  const creditAccounts = accounts.filter((a) => a.kind === "CARD" || a.kind === "CREDIT")
-  const bankAccounts = accounts.filter((a) => a.kind !== "CARD" && a.kind !== "CREDIT")
-
-  const totalCredit = allocationData?.summary.byKind.CREDIT ?? 0
-  const totalBank = allocationData?.summary.byKind.BANK ?? 0
+  const accounts = accountsData?.results ?? [];
+  const totalCredit =
+    Math.abs(allocationData?.summary.byKind.CARD ?? 0) +
+    Math.abs(allocationData?.summary.byKind.CREDIT ?? 0);
+  const totalBank =
+    (allocationData?.summary.byKind.BANK ?? 0) +
+    (allocationData?.summary.byKind.CASH ?? 0) +
+    (allocationData?.summary.byKind.INVESTMENT ?? 0) +
+    (allocationData?.summary.byKind.OTHER ?? 0);
 
   const allocationMap = new Map(
-    (allocationData?.results ?? []).map((r) => [r.accountId, r])
-  )
+    (allocationData?.results ?? []).map((r) => [r.accountId, r]),
+  );
+  const institutionGroups = Array.from(
+    accounts
+      .reduce(
+        (groups, account) => {
+          const key = account.institution || "Sem instituição";
+          const current = groups.get(key) ?? {
+            institution: key,
+            logoUrl: account.imageUrl ?? null,
+            accounts: [] as Account[],
+            balance: 0,
+            creditDebt: 0,
+          };
+          current.accounts.push(account);
+          if (!current.logoUrl && account.imageUrl)
+            current.logoUrl = account.imageUrl;
+          if (isCreditAccount(account)) {
+            current.creditDebt += Math.abs(account.balance);
+          } else {
+            current.balance += account.balance;
+          }
+          groups.set(key, current);
+          return groups;
+        },
+        new Map<
+          string,
+          {
+            institution: string;
+            logoUrl: string | null;
+            accounts: Account[];
+            balance: number;
+            creditDebt: number;
+          }
+        >(),
+      )
+      .values(),
+  ).sort((left, right) => left.institution.localeCompare(right.institution));
 
   function handleAccountClick(account: Account) {
-    setSelectedAccount(account)
-    setSheetOpen(true)
+    setSelectedAccount(account);
+    setCashInput("");
+    setSheetOpen(true);
+  }
+
+  async function handleCashAdjust(direction: "add" | "remove") {
+    if (!selectedAccount) return;
+    const amount = parseFloat(cashInput.replace(",", "."));
+    if (!isFinite(amount) || amount <= 0) return;
+    const delta = direction === "add" ? amount : -amount;
+    setSavingCash(true);
+    try {
+      const res = await fetch(
+        `/api/domain/accounts/${selectedAccount.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ delta }),
+        },
+      );
+      if (!res.ok) throw new Error("Erro ao ajustar saldo");
+      setSelectedAccount((prev) =>
+        prev ? { ...prev, balance: prev.balance + delta } : prev,
+      );
+      setCashInput("");
+      refetchAccounts();
+      refetchAllocation();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSavingCash(false);
+    }
   }
 
   return (
@@ -119,7 +224,9 @@ export default function AccountsPage() {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Contas</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            Contas
+          </h1>
           <p className="text-muted-foreground">
             Bancos, carteiras e saldos atuais
           </p>
@@ -130,6 +237,11 @@ export default function AccountsPage() {
             Adicionar Conta
           </Link>
         </Button>
+      </div>
+
+      {/* Period Selector */}
+      <div className="flex justify-end">
+        <PeriodSwitcher state={period} />
       </div>
 
       {/* Summary Cards */}
@@ -160,7 +272,9 @@ export default function AccountsPage() {
           <Card>
             <CardHeader>
               <CardDescription>Dívida em Cartões</CardDescription>
-              <CardTitle className={`text-2xl font-mono ${totalCredit > 0 ? "text-destructive" : "text-emerald-400"}`}>
+              <CardTitle
+                className={`text-2xl font-mono ${totalCredit > 0 ? "text-destructive" : "text-emerald-400"}`}
+              >
                 {format(totalCredit)}
               </CardTitle>
             </CardHeader>
@@ -181,155 +295,124 @@ export default function AccountsPage() {
         </div>
       )}
 
-      {/* Credit Cards Section */}
-      {(creditAccounts.length > 0 || loading) && (
-        <div>
-          <div className="flex items-center gap-2 mb-4">
-            <CreditCard className="size-5 text-muted-foreground" />
-            <h2 className="text-xl font-semibold">Cartões de Crédito</h2>
-            {!loading && (
-              <Badge variant="secondary">{creditAccounts.length}</Badge>
-            )}
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {loading
-              ? Array.from({ length: 2 }).map((_, i) => (
-                  <AccountCardSkeleton key={i} />
-                ))
-              : creditAccounts.map((account) => {
-                  const allocation = allocationMap.get(account.id)
-                  return (
-                    <Card
-                      key={account.id}
-                      className="cursor-pointer transition-shadow hover:shadow-md"
-                      onClick={() => handleAccountClick(account)}
-                    >
-                      <CardHeader>
-                        <div className="flex items-center gap-3">
-                          <Avatar>
-                            <AvatarFallback>
-                              {getInitials(account.institution || account.name)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium truncate">
-                              {account.name}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {account.institution}
-                            </div>
-                          </div>
-                          <Badge variant="secondary" className="shrink-0">
-                            {getTypeLabel(account.subtype || account.kind)}
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <div>
-                          <div className="flex items-center justify-between text-sm mb-1">
-                            <span className="text-muted-foreground">
-                              Fatura Atual
-                            </span>
-                            <span className={`font-semibold ${account.balance > 0 ? "text-destructive" : "text-emerald-400"}`}>
-                              {format(Math.abs(account.balance))}
-                            </span>
-                          </div>
-                          <Progress
-                            value={
-                              allocation
-                                ? Math.min(allocation.percentage, 100)
-                                : 0
-                            }
-                          />
-                          {allocation && (
-                            <div className="text-xs text-muted-foreground mt-1">
-                              {formatPercent(allocation.percentage)} do total
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )
-                })}
-          </div>
-
-          {!loading && creditAccounts.length > 0 && (
-            <div className="mt-3 text-right text-sm text-muted-foreground">
-              Total: <span className={`font-medium ${totalCredit > 0 ? "text-destructive" : "text-emerald-400"}`}>{format(totalCredit)}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Bank Accounts Section */}
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          <Building2 className="size-5 text-muted-foreground" />
-          <h2 className="text-xl font-semibold">Contas Bancárias</h2>
-          {!loading && (
-            <Badge variant="secondary">{bankAccounts.length}</Badge>
-          )}
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {loading
-            ? Array.from({ length: 3 }).map((_, i) => (
-                <AccountCardSkeleton key={i} />
-              ))
-            : bankAccounts.map((account) => {
-                const allocation = allocationMap.get(account.id)
-                return (
-                  <Card
-                    key={account.id}
-                    className="cursor-pointer transition-shadow hover:shadow-md"
-                    onClick={() => handleAccountClick(account)}
-                  >
-                    <CardHeader>
-                      <div className="flex items-center gap-3">
-                        <Avatar>
-                          <AvatarFallback>
-                            {getInitials(account.institution || account.name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium truncate">
-                            {account.name}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {account.institution}
-                          </div>
-                        </div>
-                        <Badge variant="outline" className="shrink-0">
-                          {getTypeLabel(account.subtype || account.kind)}
+      {/* Institution groups */}
+      <div className="space-y-6">
+        {loading
+          ? Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <AccountCardSkeleton />
+                <AccountCardSkeleton />
+                <AccountCardSkeleton />
+              </div>
+            ))
+          : institutionGroups.map((group) => (
+              <section key={group.institution} className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <Avatar>
+                      <AvatarImage src={group.logoUrl || undefined} />
+                      <AvatarFallback>
+                        {getInitials(group.institution)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <h2 className="text-xl font-semibold">
+                        {group.institution}
+                      </h2>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <Badge variant="secondary">
+                          {group.accounts.length}
                         </Badge>
+                        {group.balance !== 0 && (
+                          <span>Saldo {format(group.balance)}</span>
+                        )}
+                        {group.creditDebt > 0 && (
+                          <span className="text-destructive">
+                            Cartões {format(group.creditDebt)}
+                          </span>
+                        )}
                       </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">
-                          Saldo
-                        </span>
-                        <span className="text-lg font-semibold">
-                          {format(account.balance)}
-                        </span>
-                      </div>
-                      {allocation && (
-                        <div className="text-xs text-muted-foreground mt-1 text-right">
-                          {formatPercent(allocation.percentage)} do patrimônio
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                )
-              })}
-        </div>
+                    </div>
+                  </div>
+                </div>
 
-        {!loading && bankAccounts.length > 0 && (
-          <div className="mt-3 text-right text-sm text-muted-foreground">
-            Total: <span className="font-medium">{format(totalBank)}</span>
-          </div>
-        )}
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {group.accounts.map((account) => {
+                    const allocation = allocationMap.get(account.id);
+                    const credit = isCreditAccount(account);
+                    return (
+                      <Card
+                        key={account.id}
+                        className="cursor-pointer transition-shadow hover:shadow-md"
+                        onClick={() => handleAccountClick(account)}
+                      >
+                        <CardHeader>
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              <AvatarImage
+                                src={account.imageUrl || undefined}
+                              />
+                              <AvatarFallback>
+                                {getInitials(
+                                  account.institution || account.name,
+                                )}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium truncate">
+                                {account.name}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {account.institution}
+                              </div>
+                            </div>
+                            <Badge
+                              variant={credit ? "secondary" : "outline"}
+                              className="shrink-0"
+                            >
+                              {getTypeLabel(account.subtype || account.kind)}
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div>
+                            <div className="flex items-center justify-between text-sm mb-1">
+                              <span className="text-muted-foreground">
+                                {credit ? "Fatura Atual" : "Saldo"}
+                              </span>
+                              <span
+                                className={`font-semibold ${
+                                  credit && account.balance > 0
+                                    ? "text-destructive"
+                                    : "text-foreground"
+                                }`}
+                              >
+                                {format(
+                                  credit
+                                    ? Math.abs(account.balance)
+                                    : account.balance,
+                                )}
+                              </span>
+                            </div>
+                            {allocation && (
+                              <>
+                                <Progress
+                                  value={Math.min(allocation.percentage, 100)}
+                                />
+                                <div className="text-xs text-muted-foreground mt-1 text-right">
+                                  {formatPercent(allocation.percentage)} do
+                                  patrimônio
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
       </div>
 
       {/* Empty State */}
@@ -337,9 +420,12 @@ export default function AccountsPage() {
         <Card className="py-12">
           <CardContent className="flex flex-col items-center text-center">
             <Building2 className="size-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">Nenhuma conta conectada</h3>
+            <h3 className="text-lg font-medium mb-2">
+              Nenhuma conta conectada
+            </h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Conecte suas contas bancárias para começar a acompanhar suas finanças.
+              Conecte suas contas bancárias para começar a acompanhar suas
+              finanças.
             </p>
             <Button asChild>
               <Link href="/connect">
@@ -356,17 +442,16 @@ export default function AccountsPage() {
         <SheetContent>
           <SheetHeader>
             <SheetTitle>{selectedAccount?.name}</SheetTitle>
-            <SheetDescription>
-              {selectedAccount?.institution}
-            </SheetDescription>
+            <SheetDescription>{selectedAccount?.institution}</SheetDescription>
           </SheetHeader>
           {selectedAccount && (
             <div className="flex flex-col gap-4 px-4 pb-4">
               <div className="flex items-center gap-3">
                 <Avatar size="lg">
+                  <AvatarImage src={selectedAccount.imageUrl || undefined} />
                   <AvatarFallback>
                     {getInitials(
-                      selectedAccount.institution || selectedAccount.name
+                      selectedAccount.institution || selectedAccount.name,
                     )}
                   </AvatarFallback>
                 </Avatar>
@@ -384,36 +469,168 @@ export default function AccountsPage() {
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Tipo</span>
                   <Badge variant="outline">
-                    {getTypeLabel(selectedAccount.subtype || selectedAccount.kind)}
+                    {getTypeLabel(
+                      selectedAccount.subtype || selectedAccount.kind,
+                    )}
                   </Badge>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Apelido</span>
+                  {editingNickname ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={nicknameInput}
+                        onChange={(e) => setNicknameInput(e.target.value)}
+                        className="w-32 h-7 text-sm"
+                        autoFocus
+                      />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={async () => {
+                          setSavingNickname(true);
+                          try {
+                            const res = await fetch(
+                              `/api/domain/accounts/${selectedAccount.id}`,
+                              {
+                                method: "PUT",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  nickname: nicknameInput.trim() || null,
+                                }),
+                              },
+                            );
+                            if (res.ok) {
+                              setEditingNickname(false);
+                              refetchAccounts();
+                            }
+                          } catch (error) {
+                            console.error("Failed to update nickname", error);
+                          } finally {
+                            setSavingNickname(false);
+                          }
+                        }}
+                        disabled={savingNickname}
+                      >
+                        {savingNickname ? "..." : "Salvar"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setEditingNickname(false)}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">
+                        {selectedAccount.nickname || selectedAccount.name}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => {
+                          setEditingNickname(true);
+                          setNicknameInput(
+                            selectedAccount.nickname ||
+                              selectedAccount.name ||
+                              "",
+                          );
+                        }}
+                      >
+                        <Pencil className="size-3" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Saldo</span>
                   <span
                     className={`font-semibold ${
-                      selectedAccount.kind === "CARD" || selectedAccount.kind === "CREDIT"
+                      selectedAccount.kind === "CARD" ||
+                      selectedAccount.kind === "CREDIT"
                         ? "text-destructive"
                         : ""
                     }`}
                   >
                     {format(
-                      selectedAccount.kind === "CARD" || selectedAccount.kind === "CREDIT"
+                      selectedAccount.kind === "CARD" ||
+                        selectedAccount.kind === "CREDIT"
                         ? Math.abs(selectedAccount.balance)
-                        : selectedAccount.balance
+                        : selectedAccount.balance,
                     )}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Moeda</span>
-                  <span className="text-sm">{selectedAccount.currencyCode}</span>
+                  <span className="text-sm">
+                    {selectedAccount.currencyCode}
+                  </span>
                 </div>
                 {selectedAccount.number && (
                   <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">
-                      Número
-                    </span>
+                    <span className="text-sm text-muted-foreground">Final</span>
                     <span className="text-sm font-mono">
                       ****{selectedAccount.number.slice(-4)}
+                    </span>
+                  </div>
+                )}
+                {selectedAccount.ownerName && (
+                  <div className="flex justify-between gap-4">
+                    <span className="text-sm text-muted-foreground">
+                      Titular
+                    </span>
+                    <span className="max-w-[60%] text-right text-sm">
+                      {selectedAccount.ownerName}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    Transações
+                  </span>
+                  <span className="text-sm tabular-nums">
+                    {selectedAccount.transactionCount ?? 0}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    Total gasto
+                  </span>
+                  <span className="text-sm font-medium tabular-nums">
+                    {format(selectedAccount.totalSpent ?? 0)}
+                  </span>
+                </div>
+                {(selectedAccount.firstTransactionAt ||
+                  selectedAccount.createdAt) && (
+                  <div className="flex justify-between gap-4">
+                    <span className="text-sm text-muted-foreground">Desde</span>
+                    <span className="text-right text-sm">
+                      {formatDateFull(
+                        selectedAccount.firstTransactionAt ??
+                          selectedAccount.createdAt,
+                      )}
+                    </span>
+                  </div>
+                )}
+                {selectedAccount.lastTransactionAt && (
+                  <div className="flex justify-between gap-4">
+                    <span className="text-sm text-muted-foreground">
+                      Último uso
+                    </span>
+                    <span className="text-right text-sm">
+                      {formatDateFull(selectedAccount.lastTransactionAt)}
+                    </span>
+                  </div>
+                )}
+                {selectedAccount.sourceProvider && (
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">
+                      Origem
+                    </span>
+                    <span className="text-sm">
+                      {selectedAccount.sourceProvider}
                     </span>
                   </div>
                 )}
@@ -422,8 +639,8 @@ export default function AccountsPage() {
               <Separator />
 
               {(() => {
-                const allocation = allocationMap.get(selectedAccount.id)
-                if (!allocation) return null
+                const allocation = allocationMap.get(selectedAccount.id);
+                if (!allocation) return null;
                 return (
                   <div className="space-y-2">
                     <div className="text-sm font-medium">
@@ -435,11 +652,60 @@ export default function AccountsPage() {
                       {format(allocation.balance)})
                     </div>
                   </div>
-                )
+                );
               })()}
 
+              {selectedAccount.kind === "CASH" && (
+                <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Wallet className="size-4 text-muted-foreground" />
+                    Ajustar saldo em dinheiro
+                  </div>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Valor (ex: 50.00)"
+                    value={cashInput}
+                    onChange={(e) => setCashInput(e.target.value)}
+                    className="h-8 text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                      disabled={
+                        savingCash ||
+                        !cashInput ||
+                        parseFloat(cashInput.replace(",", ".")) <= 0
+                      }
+                      onClick={() => handleCashAdjust("add")}
+                    >
+                      <Plus className="size-3.5 mr-1" />
+                      Adicionar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="flex-1"
+                      disabled={
+                        savingCash ||
+                        !cashInput ||
+                        parseFloat(cashInput.replace(",", ".")) <= 0
+                      }
+                      onClick={() => handleCashAdjust("remove")}
+                    >
+                      <Minus className="size-3.5 mr-1" />
+                      Remover
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               <Button variant="outline" asChild className="mt-2">
-                <Link href={`/transactions?accountId=${selectedAccount.id}`}>
+                <Link
+                  href={`/transactions?accountId=${selectedAccount.id}&period=${period.period}`}
+                >
                   Ver Transações
                 </Link>
               </Button>
@@ -448,5 +714,5 @@ export default function AccountsPage() {
         </SheetContent>
       </Sheet>
     </div>
-  )
+  );
 }

@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import { useState, useMemo } from "react"
-import Link from "next/link"
+import { useState, useMemo } from "react";
+import Link from "next/link";
 import {
   ChevronLeft,
   ChevronRight,
@@ -10,54 +10,51 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
-} from "lucide-react"
-import { useApi } from "@/hooks/use-api"
-import { useCurrency } from "@/lib/currency-context"
-import {
-  formatDate,
-  daysUntil,
-  daysUntilLabel,
-} from "@/lib/format"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
-import { cn } from "@/lib/utils"
-import { PageError } from "@/components/page-error"
+} from "lucide-react";
+import { useApi } from "@/hooks/use-api";
+import { useCurrency } from "@/lib/currency-context";
+import { formatDate, daysUntil, daysUntilLabel } from "@/lib/format";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+import { PageError } from "@/components/page-error";
 
 interface Bill {
-  id: string
-  accountId: string | null
-  accountName: string
-  dueDate: string
-  totalAmount: number
-  minimumPayment: number
-  status: string
-  closingDate: string
+  id: string;
+  accountId: string | null;
+  accountName: string;
+  dueDate: string;
+  totalAmount: number;
+  minimumPayment: number;
+  status: string;
+  paidAt?: string | null;
+  closingDate: string;
 }
 
 interface BillsSummary {
-  totalOpen: number
-  totalOverdue: number
-  totalPaid: number
+  totalOpen: number;
+  totalOverdue: number;
+  totalPaid: number;
   counts: {
-    total: number
-    open: number
-    overdue: number
-    paid: number
-  }
-  upcoming: Bill[]
+    total: number;
+    open: number;
+    overdue: number;
+    paid: number;
+  };
+  upcoming: Bill[];
 }
 
 interface BillsResponse {
-  results: Bill[]
+  results: Bill[];
 }
 
 interface BillsSummaryResponse {
-  summary: BillsSummary
+  summary: BillsSummary;
 }
 
 function getStatusConfig(status: string, dueDate: string) {
-  const days = daysUntil(dueDate)
+  const days = daysUntil(dueDate);
 
   if (status === "PAID") {
     return {
@@ -65,23 +62,23 @@ function getStatusConfig(status: string, dueDate: string) {
       className: "bg-blue-400/10 text-blue-400 border-blue-400/20",
       icon: CheckCircle2,
       dotColor: "bg-blue-400",
-    }
+    };
   }
-  if (status === "OVERDUE" || days < 0) {
-    return {
-      label: "Vencida",
-      className: "bg-red-400/10 text-red-400 border-red-400/20",
-      icon: AlertCircle,
-      dotColor: "bg-red-400",
-    }
-  }
-  if (status === "CLOSED" || days <= 0) {
+  if (status === "CLOSED") {
     return {
       label: "Fechada",
       className: "bg-emerald-400/10 text-emerald-400 border-emerald-400/20",
       icon: CheckCircle2,
       dotColor: "bg-emerald-400",
-    }
+    };
+  }
+  if (days < 0) {
+    return {
+      label: "Vencida",
+      className: "bg-red-400/10 text-red-400 border-red-400/20",
+      icon: AlertCircle,
+      dotColor: "bg-red-400",
+    };
   }
   if (days <= 7) {
     return {
@@ -89,25 +86,25 @@ function getStatusConfig(status: string, dueDate: string) {
       className: "bg-amber-400/10 text-amber-400 border-amber-400/20",
       icon: Clock,
       dotColor: "bg-amber-400",
-    }
+    };
   }
   return {
     label: "Aberta",
     className: "bg-zinc-400/10 text-zinc-400 border-zinc-400/20",
     icon: Calendar,
     dotColor: "bg-zinc-400",
-  }
+  };
 }
 
 function getInitials(name?: string): string {
-  if (!name) return "?"
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (!parts.length) return "?"
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
   return parts
     .map((w) => w[0])
     .slice(0, 2)
     .join("")
-    .toUpperCase()
+    .toUpperCase();
 }
 
 const monthNames = [
@@ -123,92 +120,119 @@ const monthNames = [
   "Outubro",
   "Novembro",
   "Dezembro",
-]
+];
 
 export default function BillsPage() {
-  const { format } = useCurrency()
-  const now = new Date()
-  const [selectedMonth, setSelectedMonth] = useState(now.getMonth())
-  const [selectedYear, setSelectedYear] = useState(now.getFullYear())
+  const { format } = useCurrency();
+  const now = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [payingBillId, setPayingBillId] = useState<string | null>(null);
 
-  const monthParam = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`
+  const monthParam = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
 
-  const { data: billsData, loading: billsLoading, error: billsError, refetch: refetchBills } =
-    useApi<BillsResponse>("/api/domain/bills", { month: monthParam })
+  const {
+    data: billsData,
+    loading: billsLoading,
+    error: billsError,
+    refetch: refetchBills,
+  } = useApi<BillsResponse>("/api/domain/bills", { month: monthParam });
 
-  const { data: summaryData, loading: summaryLoading, error: summaryError, refetch: refetchSummary } =
-    useApi<BillsSummaryResponse>("/api/domain/metrics/bills/summary", {
-      month: monthParam,
-    })
+  const {
+    data: summaryData,
+    loading: summaryLoading,
+    error: summaryError,
+    refetch: refetchSummary,
+  } = useApi<BillsSummaryResponse>("/api/domain/metrics/bills/summary", {
+    month: monthParam,
+  });
 
-  const loading = billsLoading || summaryLoading
+  const loading = billsLoading || summaryLoading;
 
-  const bills = billsData?.results
-  const summary = summaryData?.summary
+  const bills = billsData?.results;
+  const summary = summaryData?.summary;
 
   const sortedBills = useMemo(() => {
-    const list = bills ?? []
+    const list = bills ?? [];
     return [...list].sort((a, b) => {
       const statusOrder: Record<string, number> = {
         OVERDUE: 0,
         OPEN: 1,
         CLOSED: 2,
         PAID: 3,
-      }
-      const aOrder = statusOrder[a.status] ?? 1
-      const bOrder = statusOrder[b.status] ?? 1
-      if (aOrder !== bOrder) return aOrder - bOrder
-      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
-    })
-  }, [bills])
+      };
+      const aOrder = statusOrder[a.status] ?? 1;
+      const bOrder = statusOrder[b.status] ?? 1;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    });
+  }, [bills]);
 
   if (billsError || summaryError) {
     return (
       <PageError
         message="Erro ao carregar faturas"
         refetch={() => {
-          refetchBills()
-          refetchSummary()
+          refetchBills();
+          refetchSummary();
         }}
       />
-    )
+    );
   }
 
   const totalAmount = summary
     ? summary.totalOpen + summary.totalOverdue + summary.totalPaid
-    : 0
+    : 0;
 
-  function handlePrevMonth() {
+  function navigateToPreviousMonth() {
     if (selectedMonth === 0) {
-      setSelectedMonth(11)
-      setSelectedYear((y) => y - 1)
+      setSelectedMonth(11);
+      setSelectedYear((y) => y - 1);
     } else {
-      setSelectedMonth((m) => m - 1)
+      setSelectedMonth((month) => month - 1);
     }
   }
 
-  function handleNextMonth() {
+  function navigateToNextMonth() {
     if (selectedMonth === 11) {
-      setSelectedMonth(0)
-      setSelectedYear((y) => y + 1)
+      setSelectedMonth(0);
+      setSelectedYear((y) => y + 1);
     } else {
-      setSelectedMonth((m) => m + 1)
+      setSelectedMonth((month) => month + 1);
     }
   }
 
-  function handleGoToToday() {
-    setSelectedMonth(now.getMonth())
-    setSelectedYear(now.getFullYear())
+  function resetToToday() {
+    setSelectedMonth(now.getMonth());
+    setSelectedYear(now.getFullYear());
+  }
+
+  async function markBillAsPaid(billId: string) {
+    setPayingBillId(billId);
+    try {
+      const response = await fetch(`/api/domain/bills/${billId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paidAt: new Date().toISOString() }),
+      });
+      if (!response.ok) throw new Error("Falha ao marcar fatura como paga");
+      refetchBills();
+      refetchSummary();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setPayingBillId(null);
+    }
   }
 
   const isCurrentMonth =
-    selectedMonth === now.getMonth() && selectedYear === now.getFullYear()
+    selectedMonth === now.getMonth() && selectedYear === now.getFullYear();
 
   return (
     <div className="flex flex-col gap-6 p-4 sm:p-6 lg:p-10 max-w-5xl mx-auto w-full">
       {/* Period Navigation */}
       <div className="flex items-center justify-between">
-        <h1 className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+        <h1 className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
           Faturas
         </h1>
         <div className="flex items-center gap-1">
@@ -216,8 +240,8 @@ export default function BillsPage() {
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 px-2.5 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
-              onClick={handleGoToToday}
+              className="h-7 px-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
+              onClick={resetToToday}
             >
               Hoje
             </Button>
@@ -226,7 +250,7 @@ export default function BillsPage() {
             variant="ghost"
             size="icon"
             className="size-7"
-            onClick={handlePrevMonth}
+            onClick={navigateToPreviousMonth}
           >
             <ChevronLeft className="size-3.5" />
           </Button>
@@ -237,7 +261,7 @@ export default function BillsPage() {
             variant="ghost"
             size="icon"
             className="size-7"
-            onClick={handleNextMonth}
+            onClick={navigateToNextMonth}
           >
             <ChevronRight className="size-3.5" />
           </Button>
@@ -257,7 +281,7 @@ export default function BillsPage() {
         </div>
       ) : summary ? (
         <div className="rounded-xl border bg-card p-6 space-y-5">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
             Total das Faturas
           </p>
           <p className="text-4xl font-bold tabular-nums tracking-tight text-pink-400">
@@ -267,7 +291,7 @@ export default function BillsPage() {
           {/* Breakdown by status */}
           <div className="flex flex-wrap gap-6">
             <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
                 Abertas
               </p>
               <p className="text-sm font-semibold tabular-nums">
@@ -275,7 +299,7 @@ export default function BillsPage() {
               </p>
             </div>
             <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-red-400">
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-red-400">
                 Vencidas
               </p>
               <p className="text-sm font-semibold tabular-nums text-red-400">
@@ -283,7 +307,7 @@ export default function BillsPage() {
               </p>
             </div>
             <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-emerald-400">
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-emerald-400">
                 Pagas
               </p>
               <p className="text-sm font-semibold tabular-nums text-emerald-400">
@@ -319,7 +343,7 @@ export default function BillsPage() {
           </div>
 
           {/* Legend */}
-          <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <span className="inline-block size-2 rounded-full bg-zinc-400" />
               Abertas
@@ -340,7 +364,7 @@ export default function BillsPage() {
       {!loading && summary && (
         <div className="grid grid-cols-3 gap-3">
           <div className="rounded-xl border bg-card p-4 space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
               Abertas
             </p>
             <p className="text-lg font-bold tabular-nums">
@@ -351,7 +375,7 @@ export default function BillsPage() {
             </p>
           </div>
           <div className="rounded-xl border bg-card p-4 space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-red-400">
+            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-red-400">
               Vencidas
             </p>
             <p className="text-lg font-bold tabular-nums text-red-400">
@@ -362,7 +386,7 @@ export default function BillsPage() {
             </p>
           </div>
           <div className="rounded-xl border bg-card p-4 space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-emerald-400">
+            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-emerald-400">
               Pagas
             </p>
             <p className="text-lg font-bold tabular-nums text-emerald-400">
@@ -377,7 +401,7 @@ export default function BillsPage() {
 
       {/* Bills list */}
       <div className="space-y-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+        <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
           Faturas do Periodo
         </p>
 
@@ -399,9 +423,9 @@ export default function BillsPage() {
         ) : (
           <div className="space-y-2">
             {sortedBills.map((bill) => {
-              const statusConfig = getStatusConfig(bill.status, bill.dueDate)
-              const StatusIcon = statusConfig.icon
-              const days = daysUntil(bill.dueDate)
+              const statusConfig = getStatusConfig(bill.status, bill.dueDate);
+              const StatusIcon = statusConfig.icon;
+              const days = daysUntil(bill.dueDate);
 
               return (
                 <div
@@ -423,15 +447,15 @@ export default function BillsPage() {
                         <Badge
                           variant="outline"
                           className={cn(
-                            "shrink-0 rounded-full border px-2 py-0 text-[10px] font-semibold uppercase tracking-wider",
-                            statusConfig.className
+                            "shrink-0 rounded-full border px-2 py-0 text-xs font-semibold uppercase tracking-wider",
+                            statusConfig.className,
                           )}
                         >
                           <StatusIcon className="mr-1 size-2.5" />
                           {statusConfig.label}
                         </Badge>
                       </div>
-                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Calendar className="size-3" />
                           Vence {formatDate(bill.dueDate)}
@@ -443,7 +467,7 @@ export default function BillsPage() {
                               ? "text-red-400"
                               : days <= 3
                                 ? "text-amber-400"
-                                : "text-muted-foreground"
+                                : "text-muted-foreground",
                           )}
                         >
                           {bill.status === "PAID"
@@ -458,22 +482,44 @@ export default function BillsPage() {
                       <p className="text-base font-bold tabular-nums text-pink-400">
                         {format(bill.totalAmount)}
                       </p>
-                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <span className="tabular-nums">
                           Min: {format(bill.minimumPayment)}
                         </span>
                       </div>
                     </div>
 
+                    {bill.status !== "PAID" && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                        disabled={payingBillId === bill.id}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          markBillAsPaid(bill.id);
+                        }}
+                      >
+                        <CheckCircle2 className="size-3.5" />
+                        {payingBillId === bill.id ? "..." : "Paga"}
+                      </Button>
+                    )}
+
                     <Link
-                      href={bill.accountId ? `/transactions?accountId=${bill.accountId}` : "/transactions"}
+                      href={
+                        bill.accountId
+                          ? `/transactions?accountId=${bill.accountId}`
+                          : "/transactions"
+                      }
                       className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
                     >
                       <ChevronRight className="size-4" />
                     </Link>
                   </div>
                 </div>
-              )
+              );
             })}
           </div>
         )}
@@ -485,9 +531,7 @@ export default function BillsPage() {
           <div className="rounded-2xl bg-muted p-5 mb-5">
             <CreditCard className="size-8 text-muted-foreground" />
           </div>
-          <h3 className="text-lg font-bold mb-1">
-            Nenhuma fatura encontrada
-          </h3>
+          <h3 className="text-lg font-bold mb-1">Nenhuma fatura encontrada</h3>
           <p className="text-sm text-muted-foreground max-w-xs">
             Nao identificamos registros de faturas para o periodo de{" "}
             {monthNames[selectedMonth]} de {selectedYear}.
@@ -498,25 +542,25 @@ export default function BillsPage() {
       {/* Upcoming Bills */}
       {!loading && summary?.upcoming && summary.upcoming.length > 0 && (
         <div className="space-y-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
             Proximos Vencimentos
           </p>
           <div className="rounded-xl border bg-card divide-y">
             {summary.upcoming.map((bill) => {
-              const statusConfig = getStatusConfig(bill.status, bill.dueDate)
+              const statusConfig = getStatusConfig(bill.status, bill.dueDate);
               return (
                 <div
                   key={bill.id}
                   className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-accent/50"
                 >
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
                     {getInitials(bill.accountName)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold truncate">
                       {bill.accountName}
                     </p>
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {formatDate(bill.dueDate)}
                     </p>
                   </div>
@@ -526,8 +570,8 @@ export default function BillsPage() {
                     </p>
                     <p
                       className={cn(
-                        "text-[10px] font-semibold uppercase tracking-wider",
-                        statusConfig.className.split(" ")[1]
+                        "text-xs font-semibold uppercase tracking-wider",
+                        statusConfig.className.split(" ")[1],
                       )}
                     >
                       {statusConfig.label}
@@ -536,15 +580,15 @@ export default function BillsPage() {
                   <span
                     className={cn(
                       "size-2 shrink-0 rounded-full",
-                      statusConfig.dotColor
+                      statusConfig.dotColor,
                     )}
                   />
                 </div>
-              )
+              );
             })}
           </div>
         </div>
       )}
     </div>
-  )
+  );
 }
