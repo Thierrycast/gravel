@@ -53,6 +53,8 @@ next-env.d.ts
 
 # agents
 skills-lock.json
+AGENTS.md
+/.agents/logs/
 
 # local maintenance scratchpads
 /scratch/
