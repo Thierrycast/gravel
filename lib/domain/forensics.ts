@@ -15,24 +15,24 @@ export async function checkBenfordsLaw() {
   let total = 0;
 
   for (const tx of transactions) {
-    const s = Math.abs(Number(tx.amount))
+    const amountStr = Math.abs(Number(tx.amount))
       .toString()
       .replace(/[^1-9]/, "");
-    if (s.length > 0) {
-      const firstDigit = parseInt(s[0]);
+    if (amountStr.length > 0) {
+      const firstDigit = parseInt(amountStr[0]);
       counts[firstDigit]++;
       total++;
     }
   }
 
-  const distribution = counts.slice(1).map((c) => (c / total) * 100);
+  const distribution = counts.slice(1).map((count) => (count / total) * 100);
   // Standard Benford distribution: [30.1, 17.6, 12.5, 9.7, 7.9, 6.7, 5.8, 5.1, 4.6]
   const ideal = [30.1, 17.6, 12.5, 9.7, 7.9, 6.7, 5.8, 5.1, 4.6];
 
   return {
     actual: distribution,
     ideal,
-    anomalies: distribution.map((v, i) => Math.abs(v - ideal[i]) > 5), // Simple threshold
+    anomalies: distribution.map((value, index) => Math.abs(value - ideal[index]) > 5), // Simple threshold
   };
 }
 
@@ -77,9 +77,9 @@ export async function detectHiddenSubscriptions() {
 
     if (hits >= 2) {
       const avgAmount =
-        txs.reduce((s, t) => s + Math.abs(Number(t.amount)), 0) / txs.length;
+        txs.reduce((sum, transaction) => sum + Math.abs(Number(transaction.amount)), 0) / txs.length;
       const variation = txs.some(
-        (t) => Math.abs(Math.abs(Number(t.amount)) - avgAmount) > 0.01,
+        (transaction) => Math.abs(Math.abs(Number(transaction.amount)) - avgAmount) > 0.01,
       );
 
       if (variation) {

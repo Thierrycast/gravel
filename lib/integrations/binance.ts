@@ -134,7 +134,7 @@ async function createSignedQuery(
   return params;
 }
 
-async function handleResponse(response: Response) {
+async function processBinanceResponse(response: Response) {
   if (response.ok) {
     return response.json();
   }
@@ -178,7 +178,7 @@ async function binanceRequest(
     cache: "no-store",
   });
 
-  return handleResponse(response);
+  return processBinanceResponse(response);
 }
 
 export async function fetchSpotAccount() {

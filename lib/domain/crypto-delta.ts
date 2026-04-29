@@ -174,12 +174,12 @@ export async function rebuildAllCryptoPositions() {
     }
 
     if (tx.direction === DomainTransactionDirection.INFLOW) {
-      const q = current.quantity.plus(quantity)
-      const cb = current.costBasis.plus(quantity.mul(meta.price))
+      const nextQuantity = current.quantity.plus(quantity)
+      const nextCostBasis = current.costBasis.plus(quantity.mul(meta.price))
       positions.set(meta.asset, {
-        quantity: q,
-        costBasis: cb,
-        averagePrice: q.greaterThan(0) ? cb.div(q) : ZERO,
+        quantity: nextQuantity,
+        costBasis: nextCostBasis,
+        averagePrice: nextQuantity.greaterThan(0) ? nextCostBasis.div(nextQuantity) : ZERO,
       })
     } else if (tx.direction === DomainTransactionDirection.OUTFLOW) {
       const quantityToRemove = Prisma.Decimal.min(current.quantity, quantity)

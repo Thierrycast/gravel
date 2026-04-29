@@ -536,8 +536,8 @@ function resolveMerchantInMemory(
     if (input.sourceExternalId) {
       const existingSrc = ctx.merchantSourceByExtId.get(input.sourceExternalId);
       if (existingSrc) {
-        const m = ctx.merchantsById.get(existingSrc.domainMerchantId);
-        if (m) return m;
+        const merchant = ctx.merchantsById.get(existingSrc.domainMerchantId);
+        if (merchant) return merchant;
       }
     }
 
@@ -679,48 +679,48 @@ async function projectPluggyTransactions() {
 
   const accountMap = new Map<string, string>(
     accounts
-      .filter((a) => a.sourceExternalId !== null)
-      .map((a) => [a.sourceExternalId as string, a.id]),
+      .filter((account) => account.sourceExternalId !== null)
+      .map((account) => [account.sourceExternalId as string, account.id]),
   );
   const accountTypeMap = new Map<string, string | null>(
-    pluggyAccounts.map((a) => [a.externalId, a.type]),
+    pluggyAccounts.map((account) => [account.externalId, account.type]),
   );
   const categoriesBySlug = new Map<string, string>(
-    categories.map((c) => [c.slug, c.id]),
+    categories.map((category) => [category.slug, category.id]),
   );
   const categoriesBySource = new Map<string, string>(
     categories
       .filter(
-        (c) => c.sourceProvider === SourceProvider.PLUGGY && c.sourceExternalId,
+        (category) => category.sourceProvider === SourceProvider.PLUGGY && category.sourceExternalId,
       )
-      .map((c) => [
-        `${c.sourceProvider}:${c.sourceExternalId as string}`,
-        c.id,
+      .map((category) => [
+        `${category.sourceProvider}:${category.sourceExternalId as string}`,
+        category.id,
       ]),
   );
   const categoriesByName = new Map<string, string>(
-    categories.map((c) => [
-      normalizeText(c.name) ?? c.name.toLowerCase(),
-      c.id,
+    categories.map((category) => [
+      normalizeText(category.name) ?? category.name.toLowerCase(),
+      category.id,
     ]),
   );
-  const ignoredIds = new Set(ignoredRows.map((r) => r.domainTransactionId));
+  const ignoredIds = new Set(ignoredRows.map((row) => row.domainTransactionId));
 
   const merchantsById = new Map<string, MerchantLike>(
-    existingMerchants.map((m) => [m.id, m]),
+    existingMerchants.map((merchant) => [merchant.id, merchant]),
   );
   const merchantByCnpj = new Map<string, MerchantLike>(
     existingMerchants
-      .filter((m): m is MerchantLike & { cnpj: string } => m.cnpj !== null)
-      .map((m) => [m.cnpj, m]),
+      .filter((merchant): merchant is MerchantLike & { cnpj: string } => merchant.cnpj !== null)
+      .map((merchant) => [merchant.cnpj, merchant]),
   );
   const merchantByNormalized = new Map<string, MerchantLike>(
-    existingMerchants.map((m) => [m.normalizedName, m]),
+    existingMerchants.map((merchant) => [merchant.normalizedName, merchant]),
   );
   const merchantSourceByExtId = new Map<string, { domainMerchantId: string }>(
-    existingMerchantSources.map((s) => [
-      s.sourceExternalId,
-      { domainMerchantId: s.domainMerchantId },
+    existingMerchantSources.map((source) => [
+      source.sourceExternalId,
+      { domainMerchantId: source.domainMerchantId },
     ]),
   );
 
@@ -752,7 +752,7 @@ async function projectPluggyTransactions() {
 
     if (chunkRecords.length === 0) break;
 
-    const externalIds = chunkRecords.map((r) => r.externalId);
+    const externalIds = chunkRecords.map((record) => record.externalId);
     const [existingTransactions, existingTransactionSources] =
       await Promise.all([
         prisma.domainTransaction.findMany({
@@ -797,18 +797,18 @@ async function projectPluggyTransactions() {
       string,
       { id: string; metadataJson: string | null }
     >(
-      existingTransactions.map((t) => [
-        t.sourceExternalId,
-        { id: t.id, metadataJson: t.metadataJson },
+      existingTransactions.map((transaction) => [
+        transaction.sourceExternalId,
+        { id: transaction.id, metadataJson: transaction.metadataJson },
       ]),
     );
     const existingSourceByExtId = new Map<
       string,
       { id: string; domainTransactionId: string }
     >(
-      existingTransactionSources.map((s) => [
-        s.sourceExternalId,
-        { id: s.id, domainTransactionId: s.domainTransactionId },
+      existingTransactionSources.map((source) => [
+        source.sourceExternalId,
+        { id: source.id, domainTransactionId: source.domainTransactionId },
       ]),
     );
 

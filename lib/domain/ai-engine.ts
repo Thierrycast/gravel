@@ -29,12 +29,12 @@ export async function getBehavioralNudges() {
   // 2. Opportunity Cost (Tax to BTC)
   // Find transactions with "Taxa" or "Tarifa"
   const taxes = transactions.filter(
-    (t) =>
-      (t.description || "").toLowerCase().includes("taxa") ||
-      (t.description || "").toLowerCase().includes("tarifa") ||
-      (t.merchantName || "").toLowerCase().includes("banco"),
+    (tax) =>
+      (tax.description || "").toLowerCase().includes("taxa") ||
+      (tax.description || "").toLowerCase().includes("tarifa") ||
+      (tax.merchantName || "").toLowerCase().includes("banco"),
   );
-  const totalTaxes = taxes.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  const totalTaxes = taxes.reduce((sum, tax) => sum + Math.abs(Number(tax.amount)), 0);
 
   if (totalTaxes > 10) {
     const btcPrice = 500000; // Approximate BRL price for BTC

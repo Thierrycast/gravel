@@ -80,7 +80,7 @@ export function deriveInstitutionFromNames(names: string[]): string | null {
   if (haystack.includes("pagseguro") || haystack.includes("pagbank") || haystack.includes("pag")) return "PagBank";
   if (haystack.includes("picpay")) return "PicPay";
   if (haystack.includes("btg")) return "BTG Pactual";
-  if (haystack.includes("xp investimentos") || names.some((n) => n.trim().toUpperCase() === "XP")) return "XP";
+  if (haystack.includes("xp investimentos") || names.some((name) => name.trim().toUpperCase() === "XP")) return "XP";
   if (haystack.includes("wise")) return "Wise";
   if (haystack.includes("binance")) return "Binance";
   if (haystack.includes("rico")) return "Rico";

@@ -409,7 +409,7 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
 
   // Variable (non-recurring) expenses: exclude internal transfers and known recurring rules
   const categoryMap = new Map<string, (typeof categories)[number]>(
-    categories.map((c) => [c.id, c]),
+    categories.map((category) => [category.id, category]),
   );
   const EXCLUDED_SPENDING_CATEGORIES = new Set([
     "pagamento de cartão de crédito",
@@ -596,13 +596,13 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
 
   const averageMonthlyIncome =
     monthsData.length > 0
-      ? monthsData.reduce((sum, m) => sum + m.income, 0) / monthsData.length
+      ? monthsData.reduce((sum, month) => sum + month.income, 0) / monthsData.length
       : 0;
   const averageMonthlyExpenses =
     monthsData.length > 0
       ? monthsData.reduce(
-          (sum, m) =>
-            sum + m.recurringExpenses + m.installments + m.variableExpenses,
+          (sum, month) =>
+            sum + month.recurringExpenses + month.installments + month.variableExpenses,
           0,
         ) / monthsData.length
       : 0;
@@ -730,11 +730,11 @@ export async function refreshDerivedCaches() {
     await tx.balanceProjection.deleteMany();
     if (projection.months.length > 0) {
       await tx.balanceProjection.createMany({
-        data: projection.months.map((m) => ({
+        data: projection.months.map((month) => ({
           date: new Date(
-            `${m.year}-${String(m.month).padStart(2, "0")}-01T00:00:00Z`,
+            `${month.year}-${String(month.month).padStart(2, "0")}-01T00:00:00Z`,
           ),
-          projectedBalance: new Prisma.Decimal(m.balance.toFixed(2)),
+          projectedBalance: new Prisma.Decimal(month.balance.toFixed(2)),
         })),
       });
     }
@@ -750,15 +750,15 @@ export async function refreshDerivedCaches() {
 export async function getDashboardRecurring() {
   const rules = await getRecurringPayload("EXPENSE");
   const categories = await prisma.domainCategory.findMany();
-  const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
+  const categoryMap = new Map(categories.map((category) => [category.id, category.name]));
   const merchantIds = rules
-    .map((r) => r.merchantId)
+    .map((rule) => rule.merchantId)
     .filter(Boolean) as string[];
   const merchants = await prisma.domainMerchant.findMany({
     where: { id: { in: merchantIds } },
     select: { id: true, displayName: true },
   });
-  const merchantMap = new Map(merchants.map((m) => [m.id, m.displayName]));
+  const merchantMap = new Map(merchants.map((merchant) => [merchant.id, merchant.displayName]));
   const merchantEnrichments = await prisma.merchantEnrichment.findMany({
     where:
       merchantIds.length > 0
@@ -770,28 +770,28 @@ export async function getDashboardRecurring() {
     merchantEnrichments.map((item) => [item.domainMerchantId, item.logoUrl]),
   );
 
-  const mapped = rules.map((r) => ({
-    id: r.id,
-    description: r.title,
-    amount: r.amount,
-    frequency: r.interval,
-    category: r.categoryId
-      ? (categoryMap.get(r.categoryId) ?? "Sem categoria")
+  const mapped = rules.map((rule) => ({
+    id: rule.id,
+    description: rule.title,
+    amount: rule.amount,
+    frequency: rule.interval,
+    category: rule.categoryId
+      ? (categoryMap.get(rule.categoryId) ?? "Sem categoria")
       : "Sem categoria",
-    categoryId: r.categoryId,
-    nextDate: r.nextDate,
-    type: r.type,
-    occurrences: r.occurrences ?? 0,
-    lastDate: r.lastOccurrenceAt,
-    confidence: r.confidence ?? 0,
-    isManual: r.origin === "manual",
-    origin: r.origin,
-    merchantName: r.merchantId ? merchantMap.get(r.merchantId) : null,
-    logoUrl: r.merchantId ? (merchantLogoMap.get(r.merchantId) ?? null) : null,
-    isInstallment: r.isInstallment ?? false,
+    categoryId: rule.categoryId,
+    nextDate: rule.nextDate,
+    type: rule.type,
+    occurrences: rule.occurrences ?? 0,
+    lastDate: rule.lastOccurrenceAt,
+    confidence: rule.confidence ?? 0,
+    isManual: rule.origin === "manual",
+    origin: rule.origin,
+    merchantName: rule.merchantId ? merchantMap.get(rule.merchantId) : null,
+    logoUrl: rule.merchantId ? (merchantLogoMap.get(rule.merchantId) ?? null) : null,
+    isInstallment: rule.isInstallment ?? false,
   }));
 
-  const total = rules.reduce((sum, r) => sum + Math.abs(Number(r.amount)), 0);
+  const total = rules.reduce((sum, rule) => sum + Math.abs(Number(rule.amount)), 0);
 
   return {
     rules: mapped,

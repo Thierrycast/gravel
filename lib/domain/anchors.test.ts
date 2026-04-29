@@ -133,7 +133,7 @@ describe("rebuildAccountAnchors", () => {
       data: Array<{ year: number; month: number; balance: Prisma.Decimal; transactionsCount: number }>
     }
     // Feb (delta=70), Mar (no tx → 0 delta, carry 70), Apr (delta=50, total 120).
-    expect(createArgs.data.map((r) => `${r.year}-${r.month}`)).toEqual([
+    expect(createArgs.data.map((record) => `${record.year}-${record.month}`)).toEqual([
       "2026-2",
       "2026-3",
       "2026-4",
