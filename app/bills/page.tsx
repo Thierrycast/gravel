@@ -184,25 +184,25 @@ export default function BillsPage() {
     ? summary.totalOpen + summary.totalOverdue + summary.totalPaid
     : 0;
 
-  function handlePrevMonth() {
+  function navigateToPreviousMonth() {
     if (selectedMonth === 0) {
       setSelectedMonth(11);
       setSelectedYear((y) => y - 1);
     } else {
-      setSelectedMonth((m) => m - 1);
+      setSelectedMonth((month) => month - 1);
     }
   }
 
-  function handleNextMonth() {
+  function navigateToNextMonth() {
     if (selectedMonth === 11) {
       setSelectedMonth(0);
       setSelectedYear((y) => y + 1);
     } else {
-      setSelectedMonth((m) => m + 1);
+      setSelectedMonth((month) => month + 1);
     }
   }
 
-  function handleGoToToday() {
+  function resetToToday() {
     setSelectedMonth(now.getMonth());
     setSelectedYear(now.getFullYear());
   }
@@ -241,7 +241,7 @@ export default function BillsPage() {
               variant="ghost"
               size="sm"
               className="h-7 px-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
-              onClick={handleGoToToday}
+              onClick={resetToToday}
             >
               Hoje
             </Button>
@@ -250,7 +250,7 @@ export default function BillsPage() {
             variant="ghost"
             size="icon"
             className="size-7"
-            onClick={handlePrevMonth}
+            onClick={navigateToPreviousMonth}
           >
             <ChevronLeft className="size-3.5" />
           </Button>
@@ -261,7 +261,7 @@ export default function BillsPage() {
             variant="ghost"
             size="icon"
             className="size-7"
-            onClick={handleNextMonth}
+            onClick={navigateToNextMonth}
           >
             <ChevronRight className="size-3.5" />
           </Button>

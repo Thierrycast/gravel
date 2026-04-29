@@ -184,12 +184,12 @@ function MerchantsContent() {
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return enrichedMerchants;
 
-    const q = searchQuery.toLowerCase().trim();
+    const query = searchQuery.toLowerCase().trim();
     return enrichedMerchants.filter(
-      (m) =>
-        m.displayName.toLowerCase().includes(q) ||
-        m.merchant.toLowerCase().includes(q) ||
-        (m.cnpj && m.cnpj.includes(q)),
+      (merchant) =>
+        merchant.displayName.toLowerCase().includes(query) ||
+        merchant.merchant.toLowerCase().includes(query) ||
+        (merchant.cnpj && merchant.cnpj.includes(query)),
     );
   }, [enrichedMerchants, searchQuery]);
 

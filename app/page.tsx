@@ -25,7 +25,7 @@ export default async function Page({
     if (typeof value === "string") {
       urlParams.append(key, value);
     } else if (Array.isArray(value)) {
-      value.forEach((v) => urlParams.append(key, v));
+      value.forEach((val) => urlParams.append(key, val));
     }
   });
 

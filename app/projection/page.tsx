@@ -120,7 +120,7 @@ export default function ProjectionPage() {
       variant: "default" | "destructive" | "secondary";
     }[] = [];
 
-    const installmentMonths = monthsData.filter((m) => m.installments > 0);
+    const installmentMonths = monthsData.filter((month) => month.installments > 0);
     if (
       installmentMonths.length > 0 &&
       installmentMonths.length < monthsData.length
@@ -132,8 +132,8 @@ export default function ProjectionPage() {
     }
 
     const overBudget = monthsData.filter(
-      (m) =>
-        m.recurringExpenses + m.installments + m.variableExpenses > m.income,
+      (month) =>
+        month.recurringExpenses + month.installments + month.variableExpenses > month.income,
     );
     if (overBudget.length > 0) {
       const excess =
@@ -306,8 +306,8 @@ export default function ProjectionPage() {
               <CartesianGrid vertical={false} />
               <XAxis dataKey="label" tickLine={false} axisLine={false} />
               <YAxis
-                tickFormatter={(v) =>
-                  !isFinite(v) ? "—" : `R$${(v / 1000).toFixed(0)}k`
+                tickFormatter={(value) =>
+                  !isFinite(value) ? "—" : `R$${(value / 1000).toFixed(0)}k`
                 }
                 tickLine={false}
                 axisLine={false}
@@ -368,25 +368,25 @@ export default function ProjectionPage() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-2">
-            {(data?.months ?? []).map((m, idx) => {
-              const isExpanded = expandedMonth === m.label;
+            {(data?.months ?? []).map((month, idx) => {
+              const isExpanded = expandedMonth === month.label;
               const prevBalance =
                 idx > 0 ? (data?.months?.[idx - 1]?.balance ?? 0) : 0;
               const totalExpenses =
-                m.recurringExpenses + m.installments + m.variableExpenses;
-              const result = m.income - totalExpenses;
+                month.recurringExpenses + month.installments + month.variableExpenses;
+              const result = month.income - totalExpenses;
 
               return (
-                <div key={m.label} className="rounded-lg border">
+                <div key={month.label} className="rounded-lg border">
                   <button
                     type="button"
                     className="flex w-full items-center justify-between p-3 text-left hover:bg-muted/50 transition-colors"
                     onClick={() =>
-                      setExpandedMonth(isExpanded ? null : m.label)
+                      setExpandedMonth(isExpanded ? null : month.label)
                     }
                   >
                     <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium">{m.label}</span>
+                      <span className="text-sm font-medium">{month.label}</span>
                       <Badge
                         variant={result >= 0 ? "default" : "destructive"}
                         className="text-xs"
@@ -397,10 +397,10 @@ export default function ProjectionPage() {
                     <div className="flex items-center gap-4">
                       <span
                         className={`text-sm font-semibold ${
-                          m.balance >= 0 ? "text-emerald-400" : "text-red-400"
+                          month.balance >= 0 ? "text-emerald-400" : "text-red-400"
                         }`}
                       >
-                        {format(m.balance)}
+                        {format(month.balance)}
                       </span>
                       {isExpanded ? (
                         <ChevronUp className="size-4 text-muted-foreground" />
@@ -428,25 +428,25 @@ export default function ProjectionPage() {
                           <TableRow>
                             <TableCell>Receitas</TableCell>
                             <TableCell className="text-right font-medium text-emerald-600">
-                              {format(m.income)}
+                              {format(month.income)}
                             </TableCell>
                           </TableRow>
                           <TableRow>
                             <TableCell>Recorrências</TableCell>
                             <TableCell className="text-right font-medium text-red-500">
-                              {format(-m.recurringExpenses)}
+                              {format(-month.recurringExpenses)}
                             </TableCell>
                           </TableRow>
                           <TableRow>
                             <TableCell>Parcelas</TableCell>
                             <TableCell className="text-right font-medium text-red-500">
-                              {format(-m.installments)}
+                              {format(-month.installments)}
                             </TableCell>
                           </TableRow>
                           <TableRow>
                             <TableCell>Variável</TableCell>
                             <TableCell className="text-right font-medium text-red-500">
-                              {format(-m.variableExpenses)}
+                              {format(-month.variableExpenses)}
                             </TableCell>
                           </TableRow>
                           <TableRow>

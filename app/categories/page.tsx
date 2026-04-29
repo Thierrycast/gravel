@@ -218,7 +218,7 @@ function TagsTab() {
     setDialogOpen(true);
   }
 
-  async function handleSave() {
+  async function saveTag() {
     if (!tagName.trim()) return;
     setSaving(true);
     try {
@@ -242,7 +242,7 @@ function TagsTab() {
     }
   }
 
-  async function handleDelete(id: string) {
+  async function deleteTag(id: string) {
     await fetch(`/api/tags/${id}`, { method: "DELETE" });
     refetch();
   }
@@ -293,7 +293,7 @@ function TagsTab() {
                       Editar
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={() => handleDelete(tag.id)}
+                      onClick={() => deleteTag(tag.id)}
                       className="text-destructive"
                     >
                       <Trash2 className="mr-2 size-4" />
@@ -348,7 +348,7 @@ function TagsTab() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSave} disabled={saving || !tagName.trim()}>
+            <Button onClick={saveTag} disabled={saving || !tagName.trim()}>
               {saving ? "Salvando..." : "Salvar"}
             </Button>
           </DialogFooter>
@@ -401,7 +401,7 @@ function AutomacoesTab() {
     setDialogOpen(true);
   }
 
-  async function handleSave() {
+  async function saveAutomationRule() {
     if (!matchValue.trim()) return;
     setSaving(true);
     try {
@@ -432,12 +432,12 @@ function AutomacoesTab() {
     }
   }
 
-  async function handleDelete(id: string) {
+  async function deleteAutomationRule(id: string) {
     await fetch(`/api/automations/${id}`, { method: "DELETE" });
     refetch();
   }
 
-  async function handleToggleActive(rule: AutomationRule) {
+  async function toggleAutomationRuleActive(rule: AutomationRule) {
     await fetch(`/api/automations/${rule.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -507,7 +507,7 @@ function AutomacoesTab() {
                     </TableCell>
                     <TableCell className="text-center">
                       <button
-                        onClick={() => handleToggleActive(rule)}
+                        onClick={() => toggleAutomationRuleActive(rule)}
                         className="cursor-pointer"
                       >
                         <Badge variant={rule.active ? "default" : "outline"}>
@@ -528,7 +528,7 @@ function AutomacoesTab() {
                             Editar
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => handleDelete(rule.id)}
+                            onClick={() => deleteAutomationRule(rule.id)}
                             className="text-destructive"
                           >
                             <Trash2 className="mr-2 size-4" />
@@ -630,7 +630,7 @@ function AutomacoesTab() {
               Cancelar
             </Button>
             <Button
-              onClick={handleSave}
+              onClick={saveAutomationRule}
               disabled={saving || !matchValue.trim()}
             >
               {saving ? "Salvando..." : "Salvar"}

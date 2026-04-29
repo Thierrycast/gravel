@@ -77,8 +77,8 @@ export function NetWorthChart({ history, period }: NetWorthChartProps) {
           tickLine={false}
           axisLine={false}
           tick={{ fontSize: 10, fontFamily: "monospace", fill: "oklch(0.55 0 0)" }}
-          tickFormatter={(v) => {
-            const date = new Date(v)
+          tickFormatter={(value) => {
+            const date = new Date(value)
             return date.toLocaleDateString("pt-BR", { month: "short", day: "numeric" })
           }}
           minTickGap={30}
