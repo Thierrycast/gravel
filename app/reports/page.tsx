@@ -1,109 +1,118 @@
-"use client"
+"use client";
 
-import { useMemo } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
+import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   TrendingUp,
   TrendingDown,
   ExternalLink,
   BarChart3,
-} from "lucide-react"
-import { PieChart, Pie, Cell } from "recharts"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Badge } from "@/components/ui/badge"
+} from "lucide-react";
+import { PieChart, Pie, Cell } from "recharts";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
-} from "@/components/ui/chart"
-import { useApi } from "@/hooks/use-api"
-import { formatPercent } from "@/lib/format"
-import { useCurrency } from "@/lib/currency-context"
-import { getCategoryEmoji } from "@/lib/category-emoji"
-import { SankeyChart } from "@/components/charts/sankey-chart"
-import { usePeriod } from "@/hooks/use-period"
-import { PeriodSwitcher } from "@/components/period-switcher"
-import { PageHeader } from "@/components/page-header"
-import { PageError } from "@/components/page-error"
+} from "@/components/ui/chart";
+import { useApi } from "@/hooks/use-api";
+import { formatPercent } from "@/lib/format";
+import { useCurrency } from "@/lib/currency-context";
+import { getCategoryEmoji } from "@/lib/category-emoji";
+import { SankeyChart } from "@/components/charts/sankey-chart";
+import { usePeriod } from "@/hooks/use-period";
+import { PeriodSwitcher } from "@/components/period-switcher";
+import { PageHeader } from "@/components/page-header";
+import { PageError } from "@/components/page-error";
 
 interface OverviewResponse {
   summary: {
-    monthlyInflow: number
-    monthlyOutflow: number
-    monthlyNet: number
-    incomeChange: number | null
-    expenseChange: number | null
-    netChange: number | null
-  }
+    monthlyInflow: number;
+    monthlyOutflow: number;
+    monthlyNet: number;
+    incomeChange: number | null;
+    expenseChange: number | null;
+    netChange: number | null;
+  };
 }
 
 interface SpendingCategory {
-  name: string
-  categoryId: string
-  amount: number
-  sharePercent: number
-  count: number
+  name: string;
+  categoryId: string;
+  amount: number;
+  sharePercent: number;
+  count: number;
 }
 
 interface SpendingResponse {
   summary: {
-    total: number
-  }
-  results: SpendingCategory[]
+    total: number;
+  };
+  results: SpendingCategory[];
 }
 
-const CATEGORY_COLORS = [
-  "oklch(0.60 0.25 25)",   // Neon Red
-  "oklch(0.60 0.20 330)",  // Pink
-  "oklch(0.60 0.15 290)",  // Purple
-  "oklch(0.70 0.20 150)",  // Neon Green
-  "oklch(0.85 0.15 200)",  // Cyan
-  "oklch(0.80 0.20 75)",   // Amber
-  "oklch(0.65 0.20 260)",  // Blue
-  "oklch(0.70 0.18 180)",  // Teal
-  "oklch(0.75 0.15 30)",   // Orange
-  "oklch(0.55 0.20 310)",  // Violet
-]
+interface DomainCategory {
+  id: string;
+  name: string;
+  parentId: string | null;
+}
 
-const DAY_MS = 86_400_000
+interface DomainCategoriesResponse {
+  results: DomainCategory[];
+}
+
+type DisplayCategory = SpendingCategory;
+
+const CATEGORY_COLORS = [
+  "oklch(0.60 0.25 25)", // Neon Red
+  "oklch(0.60 0.20 330)", // Pink
+  "oklch(0.60 0.15 290)", // Purple
+  "oklch(0.70 0.20 150)", // Neon Green
+  "oklch(0.85 0.15 200)", // Cyan
+  "oklch(0.80 0.20 75)", // Amber
+  "oklch(0.65 0.20 260)", // Blue
+  "oklch(0.70 0.18 180)", // Teal
+  "oklch(0.75 0.15 30)", // Orange
+  "oklch(0.55 0.20 310)", // Violet
+];
+
+const DAY_MS = 86_400_000;
 
 function parsePeriodDate(value?: string) {
-  if (!value) return undefined
-  const date = new Date(value)
-  return Number.isFinite(date.getTime()) ? date : undefined
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date : undefined;
 }
 
 function resolvePeriodRange(period: ReturnType<typeof usePeriod>) {
-  const to = parsePeriodDate(period.to) ?? new Date()
-  const fromParam = parsePeriodDate(period.from)
+  const to = parsePeriodDate(period.to) ?? new Date();
+  const fromParam = parsePeriodDate(period.from);
 
-  if (fromParam) return { from: fromParam, to }
+  if (fromParam) return { from: fromParam, to };
 
   switch (period.period) {
     case "30d":
-      return { from: new Date(to.getTime() - 30 * DAY_MS), to }
+      return { from: new Date(to.getTime() - 30 * DAY_MS), to };
     case "90d":
-      return { from: new Date(to.getTime() - 90 * DAY_MS), to }
+      return { from: new Date(to.getTime() - 90 * DAY_MS), to };
     case "180d":
-      return { from: new Date(to.getTime() - 180 * DAY_MS), to }
+      return { from: new Date(to.getTime() - 180 * DAY_MS), to };
     case "12m":
-      return { from: new Date(to.getTime() - 365 * DAY_MS), to }
+      return { from: new Date(to.getTime() - 365 * DAY_MS), to };
     case "ytd":
-      return { from: new Date(Date.UTC(to.getUTCFullYear(), 0, 1)), to }
+      return { from: new Date(Date.UTC(to.getUTCFullYear(), 0, 1)), to };
     case "mtd":
     default:
       return {
         from: new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1)),
         to,
-      }
+      };
   }
 }
 
@@ -113,25 +122,31 @@ function StatCard({
   sub,
   tone = "neutral",
 }: {
-  label: string
-  value: string
-  sub?: React.ReactNode
-  tone?: "positive" | "negative" | "neutral" | "info"
+  label: string;
+  value: string;
+  sub?: React.ReactNode;
+  tone?: "positive" | "negative" | "neutral" | "info";
 }) {
   const toneClass = {
     positive: "text-emerald-400",
     negative: "text-rose-500",
     neutral: "text-foreground",
     info: "text-primary",
-  }[tone]
+  }[tone];
 
   return (
     <div className="border border-border p-4 flex flex-col gap-1">
-      <p className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">{label}</p>
-      <p className={`font-mono text-xl tabular-nums font-semibold ${toneClass}`}>{value}</p>
+      <p className="font-mono text-xs tracking-widest text-muted-foreground uppercase">
+        {label}
+      </p>
+      <p
+        className={`font-mono text-xl tabular-nums font-semibold ${toneClass}`}
+      >
+        {value}
+      </p>
       {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
     </div>
-  )
+  );
 }
 
 function LoadingSkeleton() {
@@ -142,7 +157,9 @@ function LoadingSkeleton() {
         <Skeleton className="h-8 w-32" />
       </div>
       <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20" />)}
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-20" />
+        ))}
       </div>
       <div className="grid gap-4 lg:grid-cols-5">
         <Skeleton className="h-[360px] lg:col-span-3" />
@@ -150,89 +167,230 @@ function LoadingSkeleton() {
       </div>
       <Skeleton className="h-[400px] w-full" />
     </div>
-  )
+  );
 }
 
 export default function ReportsPage() {
-  const router = useRouter()
-  const { format } = useCurrency()
-  const period = usePeriod("mtd")
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { format } = useCurrency();
+  const period = usePeriod("mtd");
 
-  const apiParams = period.params
+  const [showSalary, setShowSalary] = useState(
+    searchParams.get("showFutureSalary") !== "false",
+  );
+  const [showFuture, setShowFuture] = useState(
+    searchParams.get("showFutureAccounts") !== "false",
+  );
+  const [detailed, setDetailed] = useState(
+    searchParams.get("detailed") !== "false",
+  );
 
-  const { data: overview, loading: overviewLoading, error: overviewError, refetch: refetchOverview } =
-    useApi<OverviewResponse>("/api/domain/metrics/overview", apiParams)
+  const updateParam = (key: string, value: boolean) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set(key, String(value));
+    router.push(`?${params.toString()}`, { scroll: false });
+  };
 
-  const { data: spending, loading: spendingLoading, error: spendingError, refetch: refetchSpending } =
-    useApi<SpendingResponse>("/api/domain/metrics/spending/categories", apiParams)
+  const apiParams = period.params;
 
-  const loading = overviewLoading || spendingLoading
-  const error = overviewError || spendingError
+  const {
+    data: overview,
+    loading: overviewLoading,
+    error: overviewError,
+    refetch: refetchOverview,
+  } = useApi<OverviewResponse>("/api/domain/metrics/overview", apiParams);
+
+  const {
+    data: spending,
+    loading: spendingLoading,
+    error: spendingError,
+    refetch: refetchSpending,
+  } = useApi<SpendingResponse>(
+    "/api/domain/metrics/spending/categories",
+    apiParams,
+  );
+
+  // Fetch all categories for hierarchy support
+  const { data: allCategoriesData } = useApi<DomainCategoriesResponse>("/api/domain/categories", {
+    pageSize: "500",
+  });
+
+  const loading = overviewLoading || spendingLoading;
+  const error = overviewError || spendingError;
 
   const sortedCategories = useMemo(() => {
-    if (!spending?.results) return []
-    return [...spending.results].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
-  }, [spending])
+    if (!spending?.results) return [];
+    return [...spending.results].sort(
+      (a, b) => Math.abs(b.amount) - Math.abs(a.amount),
+    );
+  }, [spending]);
+
+  // Compute aggregated categories (roll up to parent)
+  const aggregatedCategories = useMemo(() => {
+    if (!spending?.results || !allCategoriesData?.results) return [];
+
+    // Build map of categoryId -> parentId
+    const catParentMap = new Map<string, string | null>();
+    allCategoriesData.results.forEach((cat) => {
+      catParentMap.set(cat.id, cat.parentId);
+    });
+
+    // Build map of rootId -> aggregated amount & count
+    const rootAmounts: Record<string, number> = {};
+    const rootCounts: Record<string, number> = {};
+
+    spending.results.forEach((item) => {
+      let rootId = item.categoryId;
+      let currentParent = catParentMap.get(item.categoryId);
+      while (currentParent) {
+        rootId = currentParent;
+        currentParent = catParentMap.get(rootId);
+      }
+      rootAmounts[rootId] = (rootAmounts[rootId] || 0) + item.amount;
+      rootCounts[rootId] = (rootCounts[rootId] || 0) + item.count;
+    });
+
+    // Get root category details (only those with aggregated amount)
+    const rootCategories = allCategoriesData.results.filter(
+      (cat) => !cat.parentId && rootAmounts[cat.id] !== undefined,
+    );
+
+    const total = rootCategories.reduce(
+      (sum, cat) => sum + rootAmounts[cat.id],
+      0,
+    );
+
+    const results = rootCategories
+      .map((cat) => ({
+        categoryId: cat.id,
+        name: cat.name,
+        amount: rootAmounts[cat.id],
+        sharePercent: total > 0 ? (rootAmounts[cat.id] / total) * 100 : 0,
+        count: rootCounts[cat.id] || 0,
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
+    return results;
+  }, [spending, allCategoriesData]);
+
+  const displayCategories = useMemo(() => {
+    return detailed ? sortedCategories : aggregatedCategories;
+  }, [detailed, sortedCategories, aggregatedCategories]);
 
   const categoryChartConfig = useMemo(() => {
-    const config: ChartConfig = {}
-    sortedCategories.forEach((cat, i) => {
+    const config: ChartConfig = {};
+    displayCategories.forEach((cat, i) => {
       config[cat.name] = {
         label: cat.name,
         color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
-      }
-    })
-    return config
-  }, [sortedCategories])
+      };
+    });
+    return config;
+  }, [displayCategories]);
 
   const pieData = useMemo(() => {
-    return sortedCategories.map((cat, i) => ({
+    return displayCategories.map((cat, i) => ({
       name: cat.name,
       value: Math.abs(cat.amount),
       fill: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
-    }))
-  }, [sortedCategories])
+    }));
+  }, [displayCategories]);
 
   if (error) {
     return (
       <PageError
         message="Erro ao carregar relatórios"
         refetch={() => {
-          refetchOverview()
-          refetchSpending()
+          refetchOverview();
+          refetchSpending();
         }}
       />
-    )
+    );
   }
 
-  const monthlyIncome = overview?.summary?.monthlyInflow ?? 0
-  const monthlyExpenses = Math.abs(overview?.summary?.monthlyOutflow ?? 0)
-  const netResult = overview?.summary?.monthlyNet ?? 0
-  const expenseChange = overview?.summary?.expenseChange ?? null
-  const netChange = overview?.summary?.netChange ?? null
-  const totalSpending = spending?.summary?.total ?? 0
+  const monthlyIncome = overview?.summary?.monthlyInflow ?? 0;
+  const monthlyExpenses = Math.abs(overview?.summary?.monthlyOutflow ?? 0);
+  const netResult = overview?.summary?.monthlyNet ?? 0;
+  const expenseChange = overview?.summary?.expenseChange ?? null;
+  const netChange = overview?.summary?.netChange ?? null;
+  const totalSpending = spending?.summary?.total ?? 0;
 
   // Derived stats
-  const savingsRate = monthlyIncome > 0 ? (netResult / monthlyIncome) * 100 : 0
-  const { from: periodStart, to: periodEnd } = resolvePeriodRange(period)
+  const savingsRate = monthlyIncome > 0 ? (netResult / monthlyIncome) * 100 : 0;
+  const { from: periodStart, to: periodEnd } = resolvePeriodRange(period);
   const daysInPeriod = Math.ceil(
-    Math.max(periodEnd.getTime() - periodStart.getTime(), DAY_MS) / DAY_MS
-  )
-  
-  const dailyAvgSpend = monthlyExpenses / Math.max(daysInPeriod, 1)
+    Math.max(periodEnd.getTime() - periodStart.getTime(), DAY_MS) / DAY_MS,
+  );
+
+  const dailyAvgSpend = monthlyExpenses / Math.max(daysInPeriod, 1);
 
   // Income/expense ratio
-  const total = monthlyIncome + monthlyExpenses
-  const incomePercent = total > 0 ? (monthlyIncome / total) * 100 : 50
+  const total = monthlyIncome + monthlyExpenses;
+  const incomePercent = total > 0 ? (monthlyIncome / total) * 100 : 50;
 
-  if (loading) return <LoadingSkeleton />
+  if (loading) return <LoadingSkeleton />;
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Relatórios"
         description="Análise detalhada de receitas, despesas e fluxo de caixa"
-        actions={<PeriodSwitcher state={period} />}
+        actions={
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-4 border-r pr-6 border-border/60">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="show-salary"
+                  checked={showSalary}
+                  onCheckedChange={(val) => {
+                    setShowSalary(val);
+                    updateParam("showFutureSalary", val);
+                  }}
+                />
+                <Label
+                  htmlFor="show-salary"
+                  className="text-xs font-medium cursor-pointer"
+                >
+                  Salários
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="show-future"
+                  checked={showFuture}
+                  onCheckedChange={(val) => {
+                    setShowFuture(val);
+                    updateParam("showFutureAccounts", val);
+                  }}
+                />
+                <Label
+                  htmlFor="show-future"
+                  className="text-xs font-medium cursor-pointer"
+                >
+                  Parcelas
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="detailed"
+                  checked={detailed}
+                  onCheckedChange={(val) => {
+                    setDetailed(val);
+                    updateParam("detailed", val);
+                  }}
+                />
+                <Label
+                  htmlFor="detailed"
+                  className="text-xs font-medium cursor-pointer"
+                >
+                  Subcategorias
+                </Label>
+              </div>
+            </div>
+            <PeriodSwitcher state={period} />
+          </div>
+        }
       />
 
       {/* Stat strip */}
@@ -243,8 +401,13 @@ export default function ReportsPage() {
           tone="negative"
           sub={
             expenseChange != null && (
-              <span className={expenseChange <= 0 ? "text-emerald-400" : "text-rose-500"}>
-                {expenseChange <= 0 ? "↓" : "↑"} {formatPercent(Math.abs(expenseChange))} vs período ant.
+              <span
+                className={
+                  expenseChange <= 0 ? "text-emerald-400" : "text-rose-500"
+                }
+              >
+                {expenseChange <= 0 ? "↓" : "↑"}{" "}
+                {formatPercent(Math.abs(expenseChange))} vs período ant.
               </span>
             )
           }
@@ -260,8 +423,13 @@ export default function ReportsPage() {
           tone={netResult >= 0 ? "positive" : "negative"}
           sub={
             netChange != null && (
-              <span className={netChange >= 0 ? "text-emerald-400" : "text-rose-500"}>
-                {netChange >= 0 ? "↑" : "↓"} {formatPercent(Math.abs(netChange))} vs mês ant.
+              <span
+                className={
+                  netChange >= 0 ? "text-emerald-400" : "text-rose-500"
+                }
+              >
+                {netChange >= 0 ? "↑" : "↓"}{" "}
+                {formatPercent(Math.abs(netChange))} vs mês ant.
               </span>
             )
           }
@@ -269,7 +437,13 @@ export default function ReportsPage() {
         <StatCard
           label="Taxa de Poupança"
           value={`${savingsRate.toFixed(1)}%`}
-          tone={savingsRate >= 20 ? "positive" : savingsRate >= 0 ? "neutral" : "negative"}
+          tone={
+            savingsRate >= 20
+              ? "positive"
+              : savingsRate >= 0
+                ? "neutral"
+                : "negative"
+          }
           sub={<span>~{format(dailyAvgSpend)}/dia em gastos</span>}
         />
       </div>
@@ -280,11 +454,11 @@ export default function ReportsPage() {
         <Card className="lg:col-span-3 rounded-none border-border">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
+              <CardTitle className="font-mono text-xs tracking-widest text-muted-foreground uppercase">
                 Gastos por Categoria
               </CardTitle>
-              <Badge variant="outline" className="font-mono text-[10px]">
-                {sortedCategories.length} cats
+              <Badge variant="outline" className="font-mono text-xs">
+                {displayCategories.length} cats
               </Badge>
             </div>
           </CardHeader>
@@ -319,9 +493,13 @@ export default function ReportsPage() {
                         key={`cell-${entry.name}`}
                         fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]}
                         onClick={() => {
-                          const cat = sortedCategories.find(c => c.name === entry.name)
+                          const cat = displayCategories.find(
+                            (c) => c.name === entry.name,
+                          );
                           if (cat?.categoryId) {
-                            router.push(`/transactions?categoryId=${cat.categoryId}&period=${period.period}`)
+                            router.push(
+                              `/transactions?categoryId=${cat.categoryId}&period=${period.period}`,
+                            );
                           }
                         }}
                         className="outline-none hover:opacity-80 transition-opacity"
@@ -332,15 +510,22 @@ export default function ReportsPage() {
               </ChartContainer>
 
               <div className="flex w-full flex-col gap-1.5">
-                {sortedCategories.slice(0, 8).map((cat, i) => (
+                {displayCategories.slice(0, 8).map((cat: DisplayCategory, i: number) => (
                   <button
                     key={cat.categoryId ?? cat.name}
-                    onClick={() => router.push(`/transactions?categoryId=${cat.categoryId}&period=${period.period}`)}
+                    onClick={() =>
+                      router.push(
+                        `/transactions?categoryId=${cat.categoryId}&period=${period.period}`,
+                      )
+                    }
                     className="flex items-center gap-2.5 py-1 hover:bg-muted/40 px-1 transition-colors group text-left w-full"
                   >
                     <div
                       className="size-2 shrink-0"
-                      style={{ backgroundColor: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }}
+                      style={{
+                        backgroundColor:
+                          CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+                      }}
                     />
                     <span className="flex-1 truncate text-xs font-mono">
                       {getCategoryEmoji(cat.name)} {cat.name}
@@ -354,9 +539,9 @@ export default function ReportsPage() {
                     <ExternalLink className="size-2.5 opacity-0 group-hover:opacity-60 text-primary transition-opacity shrink-0" />
                   </button>
                 ))}
-                {sortedCategories.length > 8 && (
-                  <p className="text-[10px] font-mono text-muted-foreground pl-4">
-                    +{sortedCategories.length - 8} outras categorias
+                {displayCategories.length > 8 && (
+                  <p className="text-xs font-mono text-muted-foreground pl-4">
+                    +{displayCategories.length - 8} outras categorias
                   </p>
                 )}
               </div>
@@ -368,12 +553,12 @@ export default function ReportsPage() {
         <Card className="lg:col-span-2 rounded-none border-border">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
+              <CardTitle className="font-mono text-xs tracking-widest text-muted-foreground uppercase">
                 Resultado
               </CardTitle>
               <Link
                 href="/cash-flow"
-                className="font-mono text-[10px] text-primary hover:text-primary/80 inline-flex items-center gap-1"
+                className="font-mono text-xs text-primary hover:text-primary/80 inline-flex items-center gap-1"
               >
                 fluxo_caixa
                 <ExternalLink className="size-2.5" />
@@ -392,42 +577,73 @@ export default function ReportsPage() {
               </span>
               {netChange != null && (
                 <div className="flex items-center gap-2 mt-1">
-                  <span className={`inline-flex items-center gap-0.5 font-mono text-xs font-medium ${
-                    netChange >= 0 ? "text-emerald-400" : "text-rose-500"
-                  }`}>
-                    {netChange >= 0 ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
-                    {netChange >= 0 ? "+" : ""}{formatPercent(Math.abs(netChange))}
+                  <span
+                    className={`inline-flex items-center gap-0.5 font-mono text-xs font-medium ${
+                      netChange >= 0 ? "text-emerald-400" : "text-rose-500"
+                    }`}
+                  >
+                    {netChange >= 0 ? (
+                      <TrendingUp className="size-3" />
+                    ) : (
+                      <TrendingDown className="size-3" />
+                    )}
+                    {netChange >= 0 ? "+" : ""}
+                    {formatPercent(Math.abs(netChange))}
                   </span>
-                  <span className="font-mono text-[10px] text-muted-foreground">vs período anterior</span>
+                  <span className="font-mono text-xs text-muted-foreground">
+                    vs período anterior
+                  </span>
                 </div>
               )}
             </div>
 
             {/* Income/Expense bar — flat, no rounding */}
             <div className="flex h-2 w-full overflow-hidden">
-              <div className="bg-emerald-500 transition-all" style={{ width: `${incomePercent}%` }} />
-              <div className="bg-rose-500/70 transition-all" style={{ width: `${100 - incomePercent}%` }} />
+              <div
+                className="bg-emerald-500 transition-all"
+                style={{ width: `${incomePercent}%` }}
+              />
+              <div
+                className="bg-rose-500/70 transition-all"
+                style={{ width: `${100 - incomePercent}%` }}
+              />
             </div>
 
             {/* Breakdown */}
             <div className="grid grid-cols-2 gap-3">
               <div className="border border-border p-3">
-                <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Receita</p>
-                <p className="font-mono text-sm font-bold tabular-nums text-emerald-400">{format(monthlyIncome)}</p>
+                <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-1">
+                  Receita
+                </p>
+                <p className="font-mono text-sm font-bold tabular-nums text-emerald-400">
+                  {format(monthlyIncome)}
+                </p>
               </div>
               <div className="border border-border p-3">
-                <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Gasto</p>
-                <p className="font-mono text-sm font-bold tabular-nums text-rose-500">{format(monthlyExpenses)}</p>
+                <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-1">
+                  Gasto
+                </p>
+                <p className="font-mono text-sm font-bold tabular-nums text-rose-500">
+                  {format(monthlyExpenses)}
+                </p>
               </div>
               <div className="border border-border p-3">
-                <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Poupança</p>
-                <p className={`font-mono text-sm font-bold tabular-nums ${savingsRate >= 0 ? "text-emerald-400" : "text-rose-500"}`}>
+                <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-1">
+                  Poupança
+                </p>
+                <p
+                  className={`font-mono text-sm font-bold tabular-nums ${savingsRate >= 0 ? "text-emerald-400" : "text-rose-500"}`}
+                >
                   {savingsRate.toFixed(1)}%
                 </p>
               </div>
               <div className="border border-border p-3">
-                <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Média/dia</p>
-                <p className="font-mono text-sm font-bold tabular-nums">{format(dailyAvgSpend)}</p>
+                <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-1">
+                  Média/dia
+                </p>
+                <p className="font-mono text-sm font-bold tabular-nums">
+                  {format(dailyAvgSpend)}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -438,7 +654,7 @@ export default function ReportsPage() {
       <Card className="rounded-none border-border">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase flex items-center gap-2">
+            <CardTitle className="font-mono text-xs tracking-widest text-muted-foreground uppercase flex items-center gap-2">
               <BarChart3 className="size-3" />
               Fluxo de Caixa
             </CardTitle>
@@ -448,14 +664,14 @@ export default function ReportsPage() {
           </div>
         </CardHeader>
         <CardContent className="pt-0">
-          <p className="font-mono text-[10px] text-muted-foreground mb-3">
+          <p className="font-mono text-xs text-muted-foreground mb-3">
             Clique em uma categoria para ver as transações correspondentes
           </p>
           <SankeyChart
             data={{
               income: monthlyIncome,
               periodParam: period.period,
-              categories: sortedCategories.map((cat, i) => ({
+              categories: displayCategories.map((cat, i) => ({
                 name: cat.name,
                 total: Math.abs(cat.amount),
                 color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
@@ -466,5 +682,5 @@ export default function ReportsPage() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

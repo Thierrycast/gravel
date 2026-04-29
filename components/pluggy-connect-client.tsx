@@ -507,7 +507,7 @@ export function PluggyConnectClient() {
                         </p>
                         <Badge
                           className={cn(
-                            "h-5 gap-1 border px-1.5 text-[10px] font-medium",
+                            "h-5 gap-1 border px-1.5 text-xs font-medium",
                             TONE_BADGE_CLASS[meta.tone]
                           )}
                         >
@@ -523,7 +523,7 @@ export function PluggyConnectClient() {
                       <p className="line-clamp-1 text-xs text-muted-foreground">
                         {meta.description}
                       </p>
-                      <p className="font-mono text-[10px] text-muted-foreground/70">
+                      <p className="font-mono text-xs text-muted-foreground/70">
                         {item.pluggyItemId}
                         {item.updatedAt ? ` · ${formatDateTime(item.updatedAt)}` : null}
                       </p>

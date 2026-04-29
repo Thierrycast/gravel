@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { getDomainTransactions } from "@/lib/domain/queries"
+import { getDashboardTransactions } from "@/lib/domain/queries"
 
 export const dynamic = "force-dynamic"
 
@@ -9,6 +9,6 @@ export async function GET(request: Request) {
   if (!searchParams.has("pageSize")) {
     searchParams.set("pageSize", "1000")
   }
-  const payload = await getDomainTransactions(searchParams)
+  const payload = await getDashboardTransactions(searchParams)
   return NextResponse.json(payload.results)
 }

@@ -129,6 +129,7 @@ function SidebarProvider({
     <SidebarContext.Provider value={contextValue}>
       <div
         data-slot="sidebar-wrapper"
+        suppressHydrationWarning
         style={
           {
             "--sidebar-width": SIDEBAR_WIDTH,
@@ -162,6 +163,12 @@ function Sidebar({
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  const [mounted, setMounted] = React.useState(false)
+
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
+
 
   if (collapsible === "none") {
     return (
@@ -178,7 +185,7 @@ function Sidebar({
     )
   }
 
-  if (isMobile) {
+  if (mounted && isMobile) {
     return (
       <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
         <SheetContent
@@ -588,9 +595,11 @@ function SidebarMenuSkeleton({
   showIcon?: boolean
 }) {
   // Random width between 50 to 90%.
-  const [width] = React.useState(() => {
-    return `${Math.floor(Math.random() * 40) + 50}%`
-  })
+  const [width, setWidth] = React.useState("80%")
+
+  React.useEffect(() => {
+    setWidth(`${Math.floor(Math.random() * 40) + 50}%`)
+  }, [])
 
   return (
     <div
@@ -606,6 +615,7 @@ function SidebarMenuSkeleton({
         />
       )}
       <Skeleton
+        suppressHydrationWarning
         className="h-4 max-w-(--skeleton-width) flex-1"
         data-sidebar="menu-skeleton-text"
         style={

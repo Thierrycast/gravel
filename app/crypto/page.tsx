@@ -67,8 +67,11 @@ interface CryptoResponse {
     missingCostBasisQuantity: number
     firstTradeAt: string | null
     lastTradeAt: string | null
+    imageUrl: string | null
   }>
 }
+
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 const quantityFormatter = new Intl.NumberFormat("pt-BR", {
   maximumFractionDigits: 8,
@@ -279,11 +282,18 @@ export default function CryptoPage() {
                 {results.map((asset) => (
                   <TableRow key={asset.asset}>
                     <TableCell>
-                      <div className="flex flex-col gap-0.5">
-                        <Link href={`/crypto/${asset.asset.toLowerCase()}`} className="font-medium hover:underline text-primary">
-                          {asset.asset}
-                        </Link>
-                        {asset.costBasisMissing ? (
+                      <div className="flex items-center gap-3">
+                        <Avatar className="size-8">
+                          <AvatarImage src={asset.imageUrl || undefined} />
+                          <AvatarFallback className="text-xs bg-muted">
+                            {asset.asset.slice(0, 2)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col gap-0.5">
+                          <Link href={`/crypto/${asset.asset.toLowerCase()}`} className="font-medium hover:underline text-primary">
+                            {asset.asset}
+                          </Link>
+                          {asset.costBasisMissing ? (
                           <button 
                             onClick={() => {
                               setEditingAsset({ asset: asset.asset, currentCost: asset.averagePriceBrl || 0 })
@@ -299,7 +309,8 @@ export default function CryptoPage() {
                           </span>
                         )}
                       </div>
-                    </TableCell>
+                    </div>
+                  </TableCell>
                     <TableCell className="text-right font-medium tabular-nums">
                       {formatQuantity(asset.quantity)}
                     </TableCell>
@@ -365,7 +376,7 @@ export default function CryptoPage() {
                 placeholder="Ex: 50000.00"
                 className="font-mono"
               />
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Informe o valor médio pago por cada unidade do ativo para que o PnL seja calculado corretamente.
               </p>
             </div>

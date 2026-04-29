@@ -254,6 +254,7 @@ async function syncItem(itemId: string) {
     itemId,
     connectorId: item?.connector?.id,
     connectorName: item?.connector?.name,
+    imageUrl: item?.connector?.imageUrl,
     status: item?.status,
   })
 
@@ -820,6 +821,14 @@ export async function syncPluggyData(options: SyncOptions = {}) {
 
     throw error
   }
+}
+
+/**
+ * Triggers an incremental sync for a single Pluggy item.
+ * Used by the webhook handler to process per-item events.
+ */
+export async function syncPluggyItem(itemId: string) {
+  return syncPluggyData({ itemId })
 }
 
 export async function getPluggyPersistenceSummary() {

@@ -53,6 +53,29 @@ export function formatCurrency(value: number | null | undefined): string {
   return currencyFmt.format(num === 0 ? 0 : num)
 }
 
+export function formatCurrencyByCode(
+  value: number | null | undefined,
+  currencyCode?: string | null
+): string {
+  const num = value ?? 0
+  const code = currencyCode?.trim().toUpperCase() || "BRL"
+  const normalizedCode =
+    code === "R$" || code === "REAL" || code === "REAIS"
+      ? "BRL"
+      : code === "DOLAR" || code === "DOLLAR"
+        ? "USD"
+        : code
+
+  try {
+    return new Intl.NumberFormat(normalizedCode === "USD" ? "en-US" : "pt-BR", {
+      style: "currency",
+      currency: normalizedCode,
+    }).format(num === 0 ? 0 : num)
+  } catch {
+    return `${normalizedCode} ${numberFmt.format(num === 0 ? 0 : num)}`
+  }
+}
+
 /**
  * Format a currency value with an explicit sign and absolute amount.
  * Negative numbers render as "−R$ 1.234,56", positives as "R$ 1.234,56".

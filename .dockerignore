@@ -30,7 +30,9 @@ data/
 .agents
 .ai
 .codex
+.kilo
 skills-lock.json
+.playwright-cli
 
 # Tests / docs (kept out of the runtime image)
 tests
@@ -38,6 +40,11 @@ playwright-report
 artifacts
 docs
 README.md
+
+# Local maintenance scripts
+scratch
+check_inflows.js
+cleanup_recurring.js
 
 # TypeScript incremental cache
 tsconfig.tsbuildinfo

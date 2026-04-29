@@ -1,168 +1,168 @@
-import { createHmac } from "node:crypto"
+import { createHmac } from "node:crypto";
 
-const defaultBaseUrl = "https://api.binance.com"
-const serverTimeTtlMs = 5 * 60 * 1000
+const defaultBaseUrl = "https://api.binance.com";
+const serverTimeTtlMs = 5 * 60 * 1000;
 
 type BinanceServerTimeCache = {
-  offsetMs: number
-  expiresAt: number
-}
+  offsetMs: number;
+  expiresAt: number;
+};
 
 type ExchangeInfoCache = {
-  payload: BinanceExchangeInfo
-  expiresAt: number
-}
+  payload: BinanceExchangeInfo;
+  expiresAt: number;
+};
 
 type BinanceRequestOptions = {
-  query?: Record<string, string | number | boolean | undefined>
-  signed?: boolean
-}
+  query?: Record<string, string | number | boolean | undefined>;
+  signed?: boolean;
+};
 
 type BinanceExchangeSymbol = {
-  symbol: string
-  status?: string
-  baseAsset?: string
-  quoteAsset?: string
-  permissions?: string[]
-  isSpotTradingAllowed?: boolean
-}
+  symbol: string;
+  status?: string;
+  baseAsset?: string;
+  quoteAsset?: string;
+  permissions?: string[];
+  isSpotTradingAllowed?: boolean;
+};
 
 type BinanceExchangeInfo = {
-  timezone?: string
-  serverTime?: number
-  symbols?: BinanceExchangeSymbol[]
-}
+  timezone?: string;
+  serverTime?: number;
+  symbols?: BinanceExchangeSymbol[];
+};
 
 declare global {
-  var binanceServerTimeCache: BinanceServerTimeCache | undefined
-  var binanceExchangeInfoCache: ExchangeInfoCache | undefined
+  var binanceServerTimeCache: BinanceServerTimeCache | undefined;
+  var binanceExchangeInfoCache: ExchangeInfoCache | undefined;
 }
 
 function getEnv(name: string) {
-  const value = process.env[name]
+  const value = process.env[name];
   if (!value) {
-    throw new Error(`Missing env var: ${name}`)
+    throw new Error(`Missing env var: ${name}`);
   }
-  return value
+  return value;
 }
 
 function getBaseUrl() {
-  return process.env.BINANCE_API_BASE ?? defaultBaseUrl
+  return process.env.BINANCE_API_BASE ?? defaultBaseUrl;
 }
 
 function getApiKey() {
-  return getEnv("BINANCE_API_KEY")
+  return getEnv("BINANCE_API_KEY");
 }
 
 function getApiSecret() {
-  return getEnv("BINANCE_API_SECRET")
+  return getEnv("BINANCE_API_SECRET");
 }
 
 function getRecvWindow() {
-  const raw = process.env.BINANCE_RECV_WINDOW
-  const parsed = raw ? Number(raw) : 5000
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 5000
+  const raw = process.env.BINANCE_RECV_WINDOW;
+  const parsed = raw ? Number(raw) : 5000;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 5000;
 }
 
 function isValidServerTimeCache(
-  entry?: BinanceServerTimeCache
+  entry?: BinanceServerTimeCache,
 ): entry is BinanceServerTimeCache {
-  return Boolean(entry && Date.now() < entry.expiresAt)
+  return Boolean(entry && Date.now() < entry.expiresAt);
 }
 
 function isValidExchangeInfoCache(
-  entry?: ExchangeInfoCache
+  entry?: ExchangeInfoCache,
 ): entry is ExchangeInfoCache {
-  return Boolean(entry && Date.now() < entry.expiresAt)
+  return Boolean(entry && Date.now() < entry.expiresAt);
 }
 
 async function getServerTimeOffset() {
-  const cached = globalThis.binanceServerTimeCache
+  const cached = globalThis.binanceServerTimeCache;
   if (isValidServerTimeCache(cached)) {
-    return cached.offsetMs
+    return cached.offsetMs;
   }
 
-  const before = Date.now()
+  const before = Date.now();
   const response = await fetch(`${getBaseUrl()}/api/v3/time`, {
     cache: "no-store",
-  })
-  const after = Date.now()
+  });
+  const after = Date.now();
 
   if (!response.ok) {
-    throw new Error(`Binance server time error: ${response.status}`)
+    throw new Error(`Binance server time error: ${response.status}`);
   }
 
-  const payload = (await response.json()) as { serverTime?: number }
-  const serverTime = Number(payload.serverTime)
+  const payload = (await response.json()) as { serverTime?: number };
+  const serverTime = Number(payload.serverTime);
 
   if (!Number.isFinite(serverTime)) {
-    throw new Error("Binance server time invalido")
+    throw new Error("Binance server time invalido");
   }
 
-  const latencyMidpoint = before + (after - before) / 2
-  const offsetMs = serverTime - latencyMidpoint
+  const latencyMidpoint = before + (after - before) / 2;
+  const offsetMs = serverTime - latencyMidpoint;
 
   globalThis.binanceServerTimeCache = {
     offsetMs,
     expiresAt: Date.now() + serverTimeTtlMs,
-  }
+  };
 
-  return offsetMs
+  return offsetMs;
 }
 
 function signQuery(queryString: string) {
-  return createHmac("sha256", getApiSecret()).update(queryString).digest("hex")
+  return createHmac("sha256", getApiSecret()).update(queryString).digest("hex");
 }
 
 async function createSignedQuery(
-  query?: Record<string, string | number | boolean | undefined>
+  query?: Record<string, string | number | boolean | undefined>,
 ) {
-  const offsetMs = await getServerTimeOffset()
-  const params = new URLSearchParams()
+  const offsetMs = await getServerTimeOffset();
+  const params = new URLSearchParams();
 
   for (const [key, value] of Object.entries(query ?? {})) {
-    if (value === undefined) continue
-    params.set(key, String(value))
+    if (value === undefined) continue;
+    params.set(key, String(value));
   }
 
-  params.set("timestamp", String(Math.round(Date.now() + offsetMs)))
-  params.set("recvWindow", String(getRecvWindow()))
+  params.set("timestamp", String(Math.round(Date.now() + offsetMs)));
+  params.set("recvWindow", String(getRecvWindow()));
 
-  const queryString = params.toString()
-  params.set("signature", signQuery(queryString))
+  const queryString = params.toString();
+  params.set("signature", signQuery(queryString));
 
-  return params
+  return params;
 }
 
-async function handleResponse(response: Response) {
+async function processBinanceResponse(response: Response) {
   if (response.ok) {
-    return response.json()
+    return response.json();
   }
 
-  const error = await response.json().catch(() => ({}))
+  const error = await response.json().catch(() => ({}));
   const message =
     typeof error?.msg === "string"
       ? error.msg
       : typeof error?.message === "string"
         ? error.message
-        : ""
+        : "";
 
-  throw new Error(`Binance error: ${response.status} ${message}`.trim())
+  throw new Error(`Binance error: ${response.status} ${message}`.trim());
 }
 
 async function binanceRequest(
   path: string,
-  options: BinanceRequestOptions = {}
+  options: BinanceRequestOptions = {},
 ) {
-  const url = new URL(`${getBaseUrl()}${path}`)
+  const url = new URL(`${getBaseUrl()}${path}`);
 
   if (options.signed) {
-    const signedParams = await createSignedQuery(options.query)
-    url.search = signedParams.toString()
+    const signedParams = await createSignedQuery(options.query);
+    url.search = signedParams.toString();
   } else if (options.query) {
     for (const [key, value] of Object.entries(options.query)) {
-      if (value === undefined) continue
-      url.searchParams.set(key, String(value))
+      if (value === undefined) continue;
+      url.searchParams.set(key, String(value));
     }
   }
 
@@ -176,66 +176,100 @@ async function binanceRequest(
           "Content-Type": "application/json",
         },
     cache: "no-store",
-  })
+  });
 
-  return handleResponse(response)
+  return processBinanceResponse(response);
 }
 
 export async function fetchSpotAccount() {
-  return binanceRequest("/api/v3/account", { signed: true })
+  return binanceRequest("/api/v3/account", { signed: true });
 }
 
 export async function fetchMyTrades(params: {
-  symbol: string
-  limit?: number
-  fromId?: number
+  symbol: string;
+  limit?: number;
+  fromId?: number;
 }) {
   return binanceRequest("/api/v3/myTrades", {
     signed: true,
     query: params,
-  })
+  });
 }
 
 export async function fetchTickerPrices(params?: { symbols?: string[] }) {
   const query =
     params?.symbols && params.symbols.length > 0
       ? { symbols: JSON.stringify(params.symbols) }
-      : undefined
+      : undefined;
 
-  return binanceRequest("/api/v3/ticker/price", { query })
+  return binanceRequest("/api/v3/ticker/price", { query });
 }
 
 export async function fetchExchangeInfo() {
-  const cached = globalThis.binanceExchangeInfoCache
+  const cached = globalThis.binanceExchangeInfoCache;
   if (isValidExchangeInfoCache(cached)) {
-    return cached.payload
+    return cached.payload;
   }
 
   const payload = (await binanceRequest(
-    "/api/v3/exchangeInfo"
-  )) as BinanceExchangeInfo
+    "/api/v3/exchangeInfo",
+  )) as BinanceExchangeInfo;
 
   globalThis.binanceExchangeInfoCache = {
     payload,
     expiresAt: Date.now() + serverTimeTtlMs,
-  }
+  };
 
-  return payload
+  return payload;
+}
+
+export type BinanceKline = [
+  number, // Open time
+  string, // Open
+  string, // High
+  string, // Low
+  string, // Close
+  string, // Volume
+  number, // Close time
+  string, // Quote asset volume
+  number, // Number of trades
+  string, // Taker buy base asset volume
+  string, // Taker buy quote asset volume
+  string, // Ignore
+];
+
+export async function fetchKlines(params: {
+  symbol: string;
+  interval?: string;
+  limit?: number;
+  startTime?: number;
+  endTime?: number;
+}) {
+  const query: Record<string, string | number | undefined> = {
+    symbol: params.symbol,
+    interval: params.interval ?? "1d",
+    limit: params.limit ?? 90,
+  };
+
+  if (params.startTime) query.startTime = params.startTime;
+  if (params.endTime) query.endTime = params.endTime;
+
+  return binanceRequest("/api/v3/klines", { query }) as Promise<BinanceKline[]>;
 }
 
 export function selectPreferredTradingSymbol(
   asset: string,
-  exchangeInfo: BinanceExchangeInfo
+  exchangeInfo: BinanceExchangeInfo,
 ) {
-  const normalizedAsset = asset.toUpperCase()
-  const stableAssets = new Set(["USDT", "FDUSD", "USDC", "BUSD"])
+  const normalizedAsset = asset.toUpperCase();
+  const stableAssets = new Set(["USDT", "FDUSD", "USDC", "BUSD"]);
   if (stableAssets.has(normalizedAsset)) {
     return {
       symbol: normalizedAsset,
       quoteAsset: normalizedAsset,
       price: 1,
       synthetic: true,
-    }
+    };
   }
 
   const preferredQuotes = [
@@ -246,36 +280,38 @@ export function selectPreferredTradingSymbol(
     "BRL",
     "BTC",
     "ETH",
-  ]
+  ];
 
-  const symbols = Array.isArray(exchangeInfo.symbols) ? exchangeInfo.symbols : []
+  const symbols = Array.isArray(exchangeInfo.symbols)
+    ? exchangeInfo.symbols
+    : [];
   const tradableSymbols = symbols.filter((symbol) => {
-    if (symbol.baseAsset !== normalizedAsset) return false
-    if (symbol.status !== "TRADING") return false
-    if (symbol.isSpotTradingAllowed === false) return false
+    if (symbol.baseAsset !== normalizedAsset) return false;
+    if (symbol.status !== "TRADING") return false;
+    if (symbol.isSpotTradingAllowed === false) return false;
     if (
       Array.isArray(symbol.permissions) &&
       symbol.permissions.length > 0 &&
       !symbol.permissions.includes("SPOT")
     ) {
-      return false
+      return false;
     }
 
-    return true
-  })
+    return true;
+  });
 
   for (const quoteAsset of preferredQuotes) {
     const match = tradableSymbols.find(
-      (symbol) => symbol.quoteAsset === quoteAsset
-    )
+      (symbol) => symbol.quoteAsset === quoteAsset,
+    );
     if (match?.symbol && match.quoteAsset) {
       return {
         symbol: match.symbol,
         quoteAsset: match.quoteAsset,
         synthetic: false,
-      }
+      };
     }
   }
 
-  return null
+  return null;
 }

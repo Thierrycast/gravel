@@ -1,6 +1,6 @@
 # Gravel CLI
 
-A CLI do Gravel é uma ferramenta de linha de comando poderosa projetada para diagnóstico, exportação de dados e geração de contexto para agentes de IA.
+A CLI do Gravel e uma ferramenta de linha de comando poderosa projetada para diagnóstico, exportação de dados e geração de contexto para agentes de IA.
 
 ## Como Executar
 
@@ -10,14 +10,14 @@ A CLI pode ser executada através do script `npm` definido no `package.json`:
 npm run gravel -- [comando] [opções]
 ```
 
-*Nota: O `--` é necessário para passar argumentos para o comando subjacente.*
+*Nota: O `--` e necessário para passar argumentos para o comando subjacente.*
 
 ## Comandos Principais
 
 ### `doctor`
 Realiza um check-up completo do ambiente local.
 - Verifica versão do Node.js.
-- Valida existência do `.env` e chaves obrigatórias.
+- Válida existência do `.env` e chaves obrigatórias.
 - Testa conectividade com o banco de dados SQLite.
 - Resume o volume de dados em cada entidade de domínio.
 - Mostra o status dos últimos sincronismos (Pluggy/Binance).

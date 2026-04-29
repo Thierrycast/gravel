@@ -24,7 +24,7 @@ export function PrivacyToggle() {
           {isPrivate ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
         </Button>
       </TooltipTrigger>
-      <TooltipContent side="bottom" className="text-[10px] font-mono">
+      <TooltipContent side="bottom" className="text-xs font-mono">
         {isPrivate ? "Mostrar valores" : "Ocultar valores"}
       </TooltipContent>
     </Tooltip>

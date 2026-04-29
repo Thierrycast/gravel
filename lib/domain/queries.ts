@@ -7,6 +7,8 @@ import {
   parseDateParam,
   parseNumberParam,
 } from "@/lib/core/filters"
+import { buildTransactionDisplay } from "@/lib/domain/enrichment/display"
+import { deriveInstitutionFromNames, getInstitutionLogo } from "@/lib/domain/utils"
 import { prisma } from "@/lib/prisma"
 
 /** Resolves a period shorthand into a start Date. Must stay in sync with analytics.ts resolvePeriodStart. */
@@ -86,6 +88,7 @@ export async function getDomainTransactions(searchParams: URLSearchParams) {
   const filters = parseDomainQuery(searchParams)
   const pagination = normalizePagination(filters.page, filters.pageSize)
   let searchWhere: Prisma.DomainTransactionWhereInput[] | undefined
+  let categoryFilterIds: string[] | undefined
 
   if (filters.q) {
     const [categories, accounts, merchants] = await Promise.all([
@@ -141,13 +144,39 @@ export async function getDomainTransactions(searchParams: URLSearchParams) {
     ]
   }
 
+  if (filters.categoryId) {
+    const categories = await prisma.domainCategory.findMany({
+      select: { id: true, parentId: true },
+    })
+    const childrenByParent = new Map<string, string[]>()
+    for (const category of categories) {
+      if (!category.parentId) continue
+      childrenByParent.set(category.parentId, [
+        ...(childrenByParent.get(category.parentId) ?? []),
+        category.id,
+      ])
+    }
+    const ids = new Set<string>([filters.categoryId])
+    const queue = [filters.categoryId]
+    while (queue.length > 0) {
+      const current = queue.shift()
+      if (!current) continue
+      for (const childId of childrenByParent.get(current) ?? []) {
+        if (ids.has(childId)) continue
+        ids.add(childId)
+        queue.push(childId)
+      }
+    }
+    categoryFilterIds = Array.from(ids)
+  }
+
   const where: Prisma.DomainTransactionWhereInput = {
     occurredAt: {
       gte: filters.from,
       lte: filters.to,
     },
     domainAccountId: filters.accountId,
-    domainCategoryId: filters.categoryId,
+    domainCategoryId: categoryFilterIds ? { in: categoryFilterIds } : undefined,
     domainMerchantId: filters.merchantId,
     direction: filters.direction,
     sourceProvider: filters.provider ? (filters.provider as never) : undefined,
@@ -297,4 +326,138 @@ export async function getDomainCryptoAssets(searchParams: URLSearchParams) {
     ...pagination,
     results,
   }
+}
+
+export async function getDashboardTransactions(searchParams: URLSearchParams) {
+  const payload = await getDomainTransactions(searchParams)
+
+  const categoryIds = Array.from(
+    new Set(
+      payload.results
+        .map((transaction) => transaction.domainCategoryId)
+        .filter((value): value is string => Boolean(value))
+    )
+  )
+  const accountIds = Array.from(
+    new Set(
+      payload.results
+        .map((transaction) => transaction.domainAccountId)
+        .filter((value): value is string => Boolean(value))
+    )
+  )
+  const merchantIds = Array.from(
+    new Set(
+      payload.results
+        .map((transaction) => transaction.domainMerchantId)
+        .filter((value): value is string => Boolean(value))
+    )
+  )
+
+  const [categories, accounts, merchants, merchantEnrichments, transactionEnrichments] = await Promise.all([
+    prisma.domainCategory.findMany({
+      where: categoryIds.length > 0 ? {} : { id: "__none__" },
+      select: { id: true, name: true, parentId: true },
+    }),
+    prisma.domainAccount.findMany({
+      where: accountIds.length > 0 ? { id: { in: accountIds } } : { id: "__none__" },
+      select: { id: true, name: true, institutionName: true, sourceParentId: true },
+    }),
+    prisma.domainMerchant.findMany({
+      where: merchantIds.length > 0 ? { id: { in: merchantIds } } : { id: "__none__" },
+      select: { id: true, displayName: true },
+    }),
+    prisma.merchantEnrichment.findMany({
+      where: merchantIds.length > 0 ? { domainMerchantId: { in: merchantIds } } : { id: "__none__" },
+      select: { domainMerchantId: true, logoUrl: true, status: true },
+    }),
+    prisma.transactionEnrichment.findMany({
+      where: payload.results.length > 0 ? { domainTransactionId: { in: payload.results.map((tx) => tx.id) } } : { id: "__none__" },
+      select: { domainTransactionId: true, status: true },
+    }),
+  ])
+
+  const categoryMap = new Map(categories.map((category) => [category.id, category]))
+
+  // Derive real institution names from grouped account names (MeuPluggy proxy has no brand)
+  const accountNamesByParent = new Map<string, string[]>()
+  for (const account of accounts) {
+    if (!account.sourceParentId) continue
+    const bucket = accountNamesByParent.get(account.sourceParentId) ?? []
+    bucket.push(account.name)
+    accountNamesByParent.set(account.sourceParentId, bucket)
+  }
+  const institutionByParent = new Map<string, string | null>()
+  for (const [parentId, names] of accountNamesByParent.entries()) {
+    institutionByParent.set(parentId, deriveInstitutionFromNames(names))
+  }
+  const accountMap = new Map(accounts.map((account) => {
+    const groupInstitution = account.sourceParentId ? (institutionByParent.get(account.sourceParentId) ?? null) : null
+    const storedName = account.institutionName && !["Pluggy", "MeuPluggy", "PLUGGY"].includes(account.institutionName) ? account.institutionName : null
+    const institution = groupInstitution ?? storedName ?? null
+    return [account.id, { name: account.name, imageUrl: getInstitutionLogo(institution ?? account.name) }]
+  }))
+
+  const merchantMap = new Map(merchants.map((merchant) => [merchant.id, merchant]))
+  const merchantEnrichmentMap = new Map(merchantEnrichments.map((item) => [item.domainMerchantId, item]))
+  const transactionEnrichmentMap = new Map(transactionEnrichments.map((item) => [item.domainTransactionId, item]))
+
+  const mapped = payload.results.map((tx) => {
+    const accountInfo = tx.domainAccountId ? accountMap.get(tx.domainAccountId) : null
+    const category = tx.domainCategoryId ? categoryMap.get(tx.domainCategoryId) : null
+    const parentCategory = category?.parentId ? categoryMap.get(category.parentId) : null
+    const merchant = tx.domainMerchantId ? merchantMap.get(tx.domainMerchantId) : null
+    const merchantEnrichment = tx.domainMerchantId
+      ? merchantEnrichmentMap.get(tx.domainMerchantId)
+      : null
+    const transactionEnrichment = transactionEnrichmentMap.get(tx.id)
+    
+    return {
+      ...buildTransactionDisplay(tx, {
+        category,
+        parentCategory,
+        merchant,
+        merchantLogoUrl: merchantEnrichment?.logoUrl ?? null,
+        enrichmentStatus: transactionEnrichment?.status ?? merchantEnrichment?.status ?? null,
+      }),
+      accountId: tx.domainAccountId,
+      accountName: accountInfo?.name ?? "",
+      accountImageUrl: accountInfo?.imageUrl ?? null,
+    }
+  })
+
+  return {
+    summary: {
+      total: payload.total,
+    },
+    results: mapped,
+    meta: {
+      page: payload.page,
+      pageSize: payload.pageSize,
+      totalPages: Math.max(1, Math.ceil(payload.total / payload.pageSize)),
+    },
+  }
+}
+
+export async function getUserSettings(searchParams?: URLSearchParams) {
+  const setting = await prisma.userSetting.findFirst()
+
+  const base = {
+    monthlySalary: setting ? Number(setting.monthlySalary) : 0,
+    showFutureSalary: setting ? setting.showFutureSalary : true,
+    showFutureAccounts: setting ? setting.showFutureAccounts : true,
+  }
+
+  if (searchParams) {
+    const showFutureSalary = searchParams.get("showFutureSalary")
+    if (showFutureSalary !== null) {
+      base.showFutureSalary = showFutureSalary === "true"
+    }
+
+    const showFutureAccounts = searchParams.get("showFutureAccounts")
+    if (showFutureAccounts !== null) {
+      base.showFutureAccounts = showFutureAccounts === "true"
+    }
+  }
+
+  return base
 }

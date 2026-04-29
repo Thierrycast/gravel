@@ -67,6 +67,7 @@ export async function GET(request: Request) {
 
         return {
           asset: asset.asset,
+          imageUrl: asset.imageUrl,
           quantity: asset.quantity,
           averagePriceBrl,
           averagePriceUsd,
