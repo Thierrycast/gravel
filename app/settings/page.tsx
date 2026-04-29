@@ -61,7 +61,7 @@ export default function SettingsPage() {
     }
   }, [settings])
 
-  async function handleSave() {
+  async function saveSettings() {
     setSaving(true)
     try {
       const res = await fetch("/api/settings", {
@@ -121,7 +121,7 @@ export default function SettingsPage() {
                   value={formData.vaultMasterPassword}
                   onChange={(e) => setFormData({ ...formData, vaultMasterPassword: e.target.value })}
                 />
-                <p className="text-[10px] text-muted-foreground italic">DICA: Use o atalho ESC para travar instantaneamente (Panic Key).</p>
+                <p className="text-xs text-muted-foreground italic">DICA: Use o atalho ESC para travar instantaneamente (Panic Key).</p>
               </div>
               
               <div className="space-y-2">
@@ -256,7 +256,7 @@ export default function SettingsPage() {
 
       <div className="flex justify-end gap-3">
         <Button variant="outline" onClick={() => refetch()} disabled={saving}>Cancelar</Button>
-        <Button onClick={handleSave} disabled={saving} className="gap-2">
+        <Button onClick={saveSettings} disabled={saving} className="gap-2">
           {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
           Salvar Alterações
         </Button>

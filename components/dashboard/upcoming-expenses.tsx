@@ -52,7 +52,7 @@ export function UpcomingExpenses({
         <CardTitle className="text-xs font-mono tracking-widest uppercase text-muted-foreground">
           Despesas Recorrentes
         </CardTitle>
-        <CardDescription className="text-[10px] font-mono text-muted-foreground/60 uppercase">
+        <CardDescription className="text-xs font-mono text-muted-foreground/60 uppercase">
           {totalMonthly != null
             ? `Total mensal: ${format(totalMonthly)}`
             : "Carregando..."}
@@ -99,7 +99,7 @@ export function UpcomingExpenses({
                       </div>
                     ) : (
                       <div className="shrink-0 size-8 rounded-lg border border-border/40 bg-muted/50 flex items-center justify-center mt-0.5">
-                        <span className="text-[10px] font-mono text-muted-foreground uppercase">
+                        <span className="text-xs font-mono text-muted-foreground uppercase">
                           {expense.description.slice(0, 2)}
                         </span>
                       </div>
@@ -109,16 +109,16 @@ export function UpcomingExpenses({
                         {expense.description}
                       </p>
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-2">
-                        <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest px-1 border border-border/60 rounded-[2px]">
+                        <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest px-1 border border-border/60 rounded-sm">
                           {expense.category}
                         </span>
                         <div className="flex items-center gap-1.5">
                           <Repeat className="h-3 w-3 text-muted-foreground" />
-                          <span className="text-[10px] font-mono text-muted-foreground uppercase">
+                          <span className="text-xs font-mono text-muted-foreground uppercase">
                             {frequencyLabels[expense.frequency] ??
                               expense.frequency}
                           </span>
-                          <span className="text-[10px] font-mono text-muted-foreground">
+                          <span className="text-xs font-mono text-muted-foreground">
                             &middot; {daysUntilLabel(expense.nextDate)}
                           </span>
                         </div>

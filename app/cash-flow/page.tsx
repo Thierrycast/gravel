@@ -318,7 +318,7 @@ export default function CashFlowPage() {
             <CardContent>
               <ChartContainer
                 config={incomeChartConfig}
-                className="h-[220px] w-full"
+                className="h-56 w-full"
               >
                 <AreaChart data={chartData}>
                   <defs>
@@ -401,7 +401,7 @@ export default function CashFlowPage() {
             <CardContent>
               <ChartContainer
                 config={investmentChartConfig}
-                className="h-[220px] w-full"
+                className="h-56 w-full"
               >
                 <BarChart data={chartData} barCategoryGap="20%">
                   <CartesianGrid
@@ -474,7 +474,7 @@ export default function CashFlowPage() {
             <CardContent>
               <ChartContainer
                 config={expenseChartConfig}
-                className="h-[220px] w-full"
+                className="h-56 w-full"
               >
                 <BarChart data={chartData} barCategoryGap="20%">
                   <CartesianGrid
@@ -532,7 +532,7 @@ export default function CashFlowPage() {
           <CardContent>
             <ChartContainer
               config={netChartConfig}
-              className="h-[240px] w-full"
+              className="h-60 w-full"
             >
               <BarChart data={chartData} barCategoryGap="20%">
                 <CartesianGrid

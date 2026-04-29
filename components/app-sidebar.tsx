@@ -174,7 +174,7 @@ export function AppSidebar() {
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-black text-lg tracking-tighter uppercase italic">Gravel</span>
-                  <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest">Finance OS</span>
+                  <span className="text-xs text-muted-foreground font-medium uppercase tracking-widest">Finance OS</span>
                 </div>
               </Link>
             </SidebarMenuButton>
