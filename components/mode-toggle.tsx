@@ -32,7 +32,7 @@ export function ModeToggle() {
     )
   }
 
-  const toggle = () => {
+  const toggleThemeMode = () => {
     setTheme(buildTheme(family, mode === "dark" ? "light" : "dark"))
   }
 
@@ -40,7 +40,7 @@ export function ModeToggle() {
     <Button
       variant="ghost"
       size="icon"
-      onClick={toggle}
+      onClick={toggleThemeMode}
       className="size-8 text-muted-foreground hover:text-foreground"
       aria-label={mode === "dark" ? "Ativar modo claro" : "Ativar modo escuro"}
     >

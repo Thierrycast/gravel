@@ -114,7 +114,7 @@ export function SyncButton() {
 
   // Tick every minute so relativeTime re-derives without setState-in-effect
   useEffect(() => {
-    const interval = setInterval(() => setClockTick((t) => t + 1), 60_000)
+    const interval = setInterval(() => setClockTick((tick) => tick + 1), 60_000)
     return () => clearInterval(interval)
   }, [])
 
@@ -154,8 +154,8 @@ export function SyncButton() {
     if (needsSync) {
       autoSyncFiredRef.current = true
       // Small delay so the page has time to load first
-      const t = setTimeout(() => triggerSync(), 5_000)
-      return () => clearTimeout(t)
+      const autoSyncTimer = setTimeout(() => triggerSync(), 5_000)
+      return () => clearTimeout(autoSyncTimer)
     }
   }, [lastSyncAt, syncIntervalHours, triggerSync])
 
