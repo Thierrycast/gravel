@@ -33,7 +33,6 @@ export async function POST(req: Request) {
   }
 
   const stateKey = `webhook-event-${id}`
-  console.log(`[Pluggy Webhook] Received event: ${event} id=${id} itemId=${itemId}`)
 
   // 2. Atomic idempotency claim. Insert the state row as RUNNING;
   //    a unique-violation (P2002) means another request is already processing it.
@@ -52,7 +51,6 @@ export async function POST(req: Request) {
       // allow retries when the prior run is still RUNNING or ended in ERROR.
       const existing = await prisma.domainSyncState.findUnique({ where: { stateKey } })
       if (existing?.status === "SUCCESS") {
-        console.log(`[Pluggy Webhook] Event ${id} already processed. Skipping.`)
         return NextResponse.json({ ok: true, skipped: true })
       }
       if (existing?.status === "RUNNING") {
@@ -81,20 +79,18 @@ export async function POST(req: Request) {
       case "item/created":
       case "transactions/created":
         if (itemId) {
-          console.log(`[Pluggy Webhook] Triggering sync for item: ${itemId}`)
           await syncPluggyItem(itemId)
         }
         break
 
       case "item/deleted":
         if (itemId) {
-          console.log(`[Pluggy Webhook] Item deleted: ${itemId}`)
           // Mark item as deleted in our domain or clean up
         }
         break
 
       default:
-        console.log(`[Pluggy Webhook] Unhandled event type: ${event}`)
+        // Unhandled event type
     }
 
     await prisma.domainSyncState.update({

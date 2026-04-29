@@ -79,9 +79,6 @@ async function fetchMacroSeriesWindow(
   }
 
   const data = (await response.json()) as BcbPoint[]
-  console.log(
-    `[BCB Sync] Fetched ${data.length} points for ${seriesName} (${formatBcbDate(from)} -> ${formatBcbDate(to)})`
-  )
 
   return data.map((point) => ({
     series: seriesName,

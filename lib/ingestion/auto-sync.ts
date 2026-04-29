@@ -45,8 +45,6 @@ export async function checkAndTriggerAutoSync() {
     const needsSync = !lastSyncAt || (now.getTime() - lastSyncAt.getTime()) > intervalMs
 
     if (needsSync) {
-      console.log(`[auto-sync] Triggering automatic sync. Last sync: ${lastSyncAt?.toISOString() ?? "never"}. Interval: ${intervalHours}h`)
-      
       // Fire-and-forget background sync
       runFullOperationalSync().catch((err) => {
         // Only log if it's not a lock error (which we already tried to avoid but race conditions exist)
