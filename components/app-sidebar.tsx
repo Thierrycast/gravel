@@ -155,22 +155,8 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-lg shadow-primary/20 group-data-[collapsible=icon]:size-8">
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="size-5"
-                  >
-                    <path d="M2 20c1-2 3-3 5-3s4 1 5 3" />
-                    <path d="M7 17c1-3 4-5 8-5s7 2 8 5" />
-                    <path d="M12 12c1-4 5-7 10-7" />
-                    <circle cx="5" cy="5" r="1" fill="currentColor" />
-                    <circle cx="10" cy="8" r="1" fill="currentColor" />
-                  </svg>
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg shadow-lg shadow-primary/20 overflow-hidden group-data-[collapsible=icon]:size-8">
+                  <img src="/icon.png" alt="Gravel Logo" className="size-full object-cover rounded-md" />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-black text-lg tracking-tighter uppercase italic">Gravel</span>
