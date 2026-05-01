@@ -152,3 +152,11 @@ docker run -p 3000:3000 \
 - 📈 **Detalhamento Cripto Profundo**: Gráficos históricos, visão de PnL por ativo e custo médio móvel real.
 - 🌊 **Sankey Chart Inteligente**: Visualização moderna do fluxo do seu dinheiro, com modo privacidade e curvatura controlada.
 - 🧠 **Snapshot de IA**: Pipeline otimizada para "alimentar" sua IA com as métricas essenciais e gerar insights poderosos sobre seu dinheiro.
+
+---
+
+## 🪨 Por que "Gravel"?
+
+O nome "Gravel" (*cascalho* em inglês) é um easter egg da minha época de escola em Sardoá. Como o próprio nome da cidade significa "Toá" (uma pedra de origem indígena), a escola criou uma moeda com esse nome para premiar os alunos.
+
+A piada interna era inevitável: *"Rapaz, eu nunca vi essa peste de toá... a única coisa que tem nas ruas dessa cidade é cascalho!"*. O apelido pegou e o dinheiro da escola virou "cascalho". Anos depois, a brincadeira virou o nome deste projeto pessoal, focado em gerenciar o "cascalho" da vida adulta.
