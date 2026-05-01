@@ -38,7 +38,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   const lock = React.useCallback(() => {
     if (!enabled) return
     setIsLocked(true)
-    toast.warning("Interface bloqueada pelo Vault", { icon: <Lock className="size-4" /> })
+    toast.warning("Vault travado. Seu cascalho está seguro!", { icon: <Lock className="size-4" /> })
   }, [enabled])
 
   const unlock = React.useCallback(async (password: string) => {
@@ -50,7 +50,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     if (password === masterPassword) {
       setIsLocked(false)
       setPasswordInput("")
-      toast.success("Acesso liberado", { icon: <ShieldCheck className="size-4" /> })
+      toast.success("Acesso liberado. Bem-vindo de volta ao Toá!", { icon: <ShieldCheck className="size-4" /> })
       setUnlocking(false)
       return true
     } else {

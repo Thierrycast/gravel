@@ -77,7 +77,7 @@ export default function ScenariosPage() {
         body: JSON.stringify(scenarioForm),
       })
       if (!res.ok) throw new Error()
-      toast.success("Cenário adicionado!")
+      toast.success("Cenário adicionado! (Um futuro com mais cascalho)")
       setScenarioForm({ title: "", amount: "", date: new Date(), isRecurring: false })
       refetchScenarios()
     } catch {
@@ -88,7 +88,7 @@ export default function ScenariosPage() {
   async function deleteScenario(id: string) {
     try {
       await fetch(`/api/scenarios?id=${id}`, { method: "DELETE" })
-      toast.success("Cenário removido")
+      toast.success("Cenário removido (Menos ilusões com o Toá)")
       refetchScenarios()
     } catch {
       toast.error("Erro ao remover")
@@ -103,7 +103,7 @@ export default function ScenariosPage() {
         body: JSON.stringify(lendForm),
       })
       if (!res.ok) throw new Error()
-      toast.success("Empréstimo registrado!")
+      toast.success("Empréstimo registrado (O cascalho mudou de mãos)")
       setLendForm({ friendName: "", friendPhone: "", amount: "", dueDate: new Date(), description: "" })
       refetchLends()
     } catch {
@@ -117,7 +117,7 @@ export default function ScenariosPage() {
         method: "PATCH",
         body: JSON.stringify({ id, status: "PAID" }),
       })
-      toast.success("Marcado como pago!")
+      toast.success("Pago! O Toá voltou pra casa.")
       refetchLends()
     } catch {
       toast.error("Erro ao atualizar")
