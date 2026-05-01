@@ -183,7 +183,7 @@ export function SyncButton() {
           status === "done" && "border-emerald-500/50 text-emerald-400",
           status === "error" && "border-destructive/50 text-destructive",
         )}
-        title="Sincronizar dados com a API"
+        title="Sincronizar seus cascalhos com a API"
       >
         <RefreshCw
           className={cn("size-3", status === "syncing" && "animate-spin")}

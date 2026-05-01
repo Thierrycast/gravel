@@ -70,7 +70,7 @@ export default function SettingsPage() {
         body: JSON.stringify(formData),
       })
       if (!res.ok) throw new Error("Falha ao salvar")
-      toast.success("Configurações salvas com sucesso!")
+      toast.success("Configurações salvas! Seu cascalho agradece.")
       refetch()
     } catch {
       toast.error("Erro ao salvar configurações")
