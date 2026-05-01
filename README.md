@@ -1,6 +1,12 @@
-# Gravel Finance
+<div align="center">
+  <img src="public/icon.png" alt="Gravel Logo" width="144" height="144" />
+  
+  # Gravel Finance
 
-✨ Um dashboard financeiro pessoal com agregação de dados bancários (Pluggy Open Finance) e crypto (Binance).
+  ✨ Um dashboard financeiro pessoal com agregação de dados bancários (Pluggy Open Finance) e crypto (Binance).
+</div>
+
+<br />
 
 Construído com **Next.js 16**, **React 19**, **Prisma** e **SQLite** — uma arquitetura *local-first*, sem dependências de serviços SaaS externos além dos provedores de dados. Ideal para homelab e uso pessoal com controle total sobre sua privacidade financeira.
 

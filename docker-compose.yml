@@ -62,7 +62,7 @@ x-casaos:
     en_us: "A personal finance dashboard with bank data aggregation (Pluggy Open Finance) and crypto (Binance)."
     pt_br: "Um dashboard financeiro pessoal com agregação de dados bancários (Pluggy Open Finance) e crypto (Binance)."
   developer: "Thierry"
-  icon: https://raw.githubusercontent.com/Thierrycast/gravel/main/public/favicon.ico
+  icon: https://raw.githubusercontent.com/Thierrycast/gravel/main/public/icon.png
   index: /
   is_uncontrolled: false
   port_map: "8421"
