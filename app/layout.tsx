@@ -13,7 +13,7 @@ import { BottomNav } from "@/components/bottom-nav";
 
 export const metadata: Metadata = {
   title: "Gravel Finance",
-  description: "Personal financial dashboard with multi-currency support and privacy mode.",
+  description: "Personal financial dashboard with multi-currency support and privacy mode. Tracking every digital 'cascalho' with precision.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
