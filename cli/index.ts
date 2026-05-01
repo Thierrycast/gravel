@@ -10,7 +10,7 @@ import { snapshotCommand } from "./commands/snapshot.js"
 
 const program = new Command()
   .name("gravel")
-  .description("Gravel Finance CLI - Analise, diagnostico e exportacao para IA")
+  .description("Gravel Finance CLI - Analise, diagnostico e exportacao para IA (Gerenciando o cascalho)")
   .version("0.1.0")
 
 program.addCommand(doctorCommand)

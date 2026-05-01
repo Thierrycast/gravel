@@ -1,3 +1,4 @@
+// O cofre central onde todo o nosso "cascalho" fica guardado.
 import { PrismaClient } from "@prisma/client"
 
 declare global {
