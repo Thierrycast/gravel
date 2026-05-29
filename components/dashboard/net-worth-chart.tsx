@@ -20,19 +20,19 @@ interface NetWorthChartProps {
 const chartConfig = {
   netWorth: {
     label: "Patrimônio",
-    color: "oklch(0.70 0.20 150)",
+    color: "var(--chart-2)",
   },
   scenarioNetWorth: {
     label: "Simulado",
-    color: "oklch(0.85 0.15 200)",
+    color: "var(--chart-1)",
   },
   assets: {
     label: "Ativos",
-    color: "oklch(0.85 0.15 200)",
+    color: "var(--chart-1)",
   },
   liabilities: {
     label: "Passivos",
-    color: "oklch(0.60 0.25 25)",
+    color: "var(--chart-4)",
   },
 } satisfies ChartConfig
 
@@ -71,12 +71,12 @@ export function NetWorthChart({ history, period }: NetWorthChartProps) {
             <stop offset="95%" stopColor="var(--color-netWorth)" stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="oklch(0.25 0 0)" />
+        <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--border)" />
         <XAxis
           dataKey="date"
           tickLine={false}
           axisLine={false}
-          tick={{ fontSize: 10, fontFamily: "monospace", fill: "oklch(0.55 0 0)" }}
+          tick={{ fontSize: 10, fontFamily: "monospace", fill: "var(--muted-foreground)" }}
           tickFormatter={(value) => {
             const date = new Date(value)
             return date.toLocaleDateString("pt-BR", { month: "short", day: "numeric" })
@@ -86,9 +86,10 @@ export function NetWorthChart({ history, period }: NetWorthChartProps) {
         <YAxis
           tickLine={false}
           axisLine={false}
-          tick={{ fontSize: 10, fontFamily: "monospace", fill: "oklch(0.55 0 0)" }}
+          tick={{ fontSize: 10, fontFamily: "monospace", fill: "var(--muted-foreground)" }}
           tickFormatter={(v) => formatCompact(v)}
-          width={60}
+          width={80}
+          tickCount={5}
           domain={[
             (dataMin: number) => dataMin - Math.abs(dataMin) * 0.25,
             (dataMax: number) => dataMax + Math.abs(dataMax) * 0.25,

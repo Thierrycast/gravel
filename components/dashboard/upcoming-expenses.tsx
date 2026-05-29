@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { daysUntilLabel } from "@/lib/format";
 import { useCurrency } from "@/lib/currency-context";
 import { LogoImage } from "@/components/logo-image";
+import { getCategoryEmoji, getCategoryColor } from "@/lib/category-emoji";
 import Link from "next/link";
 import { ArrowRight, Repeat } from "lucide-react";
 
@@ -47,7 +48,7 @@ export function UpcomingExpenses({
 }: UpcomingExpensesProps) {
   const { format } = useCurrency();
   return (
-    <Card className="col-span-full lg:col-span-1 rounded-none border-border h-full flex flex-col">
+    <Card className="col-span-full lg:col-span-1 rounded-none border-border h-full flex flex-col overflow-hidden">
       <CardHeader className="pb-3">
         <CardTitle className="text-xs font-mono tracking-widest uppercase text-muted-foreground">
           Despesas Recorrentes
@@ -62,7 +63,7 @@ export function UpcomingExpenses({
             href="/recurring"
             className="inline-flex items-center gap-1 text-xs font-mono text-muted-foreground hover:text-primary transition-colors"
           >
-            ver_mais
+            Ver mais
             <ArrowRight className="h-3 w-3" />
           </Link>
         </CardAction>
@@ -90,17 +91,18 @@ export function UpcomingExpenses({
                 >
                   <div className="flex-1 min-w-0 flex items-start gap-3">
                     {expense.logoUrl ? (
-                      <div className="shrink-0 size-8 rounded-lg border border-border/40 bg-muted/30 p-1 flex items-center justify-center overflow-hidden mt-0.5">
+                      <div className="shrink-0 size-8 rounded-lg border border-border/40 bg-white p-1 flex items-center justify-center overflow-hidden mt-0.5 shadow-sm">
                         <LogoImage
                           src={expense.logoUrl}
                           alt={expense.description}
                           className="size-full object-contain"
+                          fallback={getCategoryEmoji(expense.category || "")}
                         />
                       </div>
                     ) : (
-                      <div className="shrink-0 size-8 rounded-lg border border-border/40 bg-muted/50 flex items-center justify-center mt-0.5">
-                        <span className="text-xs font-mono text-muted-foreground uppercase">
-                          {expense.description.slice(0, 2)}
+                      <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border border-border/40 bg-muted/50 text-base leading-none">
+                        <span>
+                          {getCategoryEmoji(expense.category || "")}
                         </span>
                       </div>
                     )}
@@ -115,7 +117,7 @@ export function UpcomingExpenses({
                         <div className="flex items-center gap-1.5">
                           <Repeat className="h-3 w-3 text-muted-foreground" />
                           <span className="text-xs font-mono text-muted-foreground uppercase">
-                            {frequencyLabels[expense.frequency] ??
+                            {frequencyLabels[expense.frequency.toLowerCase()] ??
                               expense.frequency}
                           </span>
                           <span className="text-xs font-mono text-muted-foreground">

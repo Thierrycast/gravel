@@ -12,8 +12,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate } from "@/lib/format";
 import { useCurrency } from "@/lib/currency-context";
 import { LogoImage } from "@/components/logo-image";
+import { getCategoryEmoji } from "@/lib/category-emoji";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, BadgeDollarSign, Users } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+
 
 interface Transaction {
   id: string;
@@ -26,11 +29,84 @@ interface Transaction {
   accountName: string;
   accountImageUrl?: string | null;
   merchantName?: string | null;
+  merchantLogoUrl?: string | null;
+  displayTitle?: string;
+  displaySubtitle?: string | null;
+  isSalary?: boolean;
+  isSelfTransfer?: boolean;
+  transferFromAccountName?: string | null;
+  transferFromAccountImageUrl?: string | null;
+  transferToAccountName?: string | null;
+  transferToAccountImageUrl?: string | null;
+  linkedLend?: {
+    id: string;
+    friendName: string;
+    status: string;
+    role: "loan-outflow" | "payment-inflow";
+  } | null;
 }
+
 
 interface RecentTransactionsProps {
   transactions: Transaction[] | null;
   loading: boolean;
+}
+
+function AccountLogo({
+  name,
+  imageUrl,
+}: {
+  name?: string | null;
+  imageUrl?: string | null;
+}) {
+  const label = name || "Conta";
+  const initials = label.slice(0, 2).toUpperCase();
+
+  return (
+    <span className="flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/50 bg-white p-0.5 text-[10px] font-bold text-sky-700 shadow-sm">
+      {imageUrl ? (
+        <LogoImage
+          src={imageUrl}
+          alt={label}
+          className="size-full object-contain"
+          fallback={initials}
+          fallbackClassName="text-[10px] text-sky-700"
+        />
+      ) : (
+        initials
+      )}
+    </span>
+  );
+}
+
+function TransferRouteLogo({ transaction }: { transaction: Transaction }) {
+  const fromName = transaction.transferFromAccountName ?? transaction.accountName;
+  const toName = transaction.transferToAccountName ?? "Destino";
+  const hasRoute =
+    Boolean(transaction.transferFromAccountName) ||
+    Boolean(transaction.transferToAccountName);
+
+  if (!hasRoute) {
+    return (
+      <div className="shrink-0 size-10 rounded-xl border border-sky-500/30 bg-sky-500/10 flex items-center justify-center shadow-sm text-xl">
+        {getCategoryEmoji(transaction.category || "")}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-10 shrink-0 items-center gap-1 rounded-xl border border-sky-500/25 bg-sky-500/10 px-1.5 shadow-sm">
+      <AccountLogo
+        name={fromName}
+        imageUrl={transaction.transferFromAccountImageUrl}
+      />
+      <ArrowRight className="size-3 text-sky-500" />
+      <AccountLogo
+        name={toName}
+        imageUrl={transaction.transferToAccountImageUrl}
+      />
+    </div>
+  );
 }
 
 export function RecentTransactions({
@@ -54,7 +130,7 @@ export function RecentTransactions({
   }, [transactions]);
 
   return (
-    <Card className="col-span-full lg:col-span-2 rounded-none border-border h-full flex flex-col">
+    <Card className="col-span-full lg:col-span-2 rounded-none border-border h-full flex flex-col overflow-hidden">
       <CardHeader className="pb-3 px-6">
         <CardTitle className="text-sm font-bold tracking-widest uppercase text-muted-foreground/80">
           Movimentações recentes
@@ -62,10 +138,10 @@ export function RecentTransactions({
         <CardAction>
           <Link
             href="/transactions"
-            className="inline-flex items-center gap-1.5 text-sm font-bold text-primary hover:underline transition-all"
+            className="inline-flex items-center gap-1 text-xs font-mono text-muted-foreground hover:text-primary transition-colors"
           >
-            VER TODAS
-            <ArrowRight className="h-4 w-4" />
+            Ver mais
+            <ArrowRight className="h-3 w-3" />
           </Link>
         </CardAction>
       </CardHeader>
@@ -90,60 +166,94 @@ export function RecentTransactions({
                   {dateKey === "sem-data" ? "SEM_DATA" : formatDate(dateKey)}
                 </p>
                 <div className="space-y-4">
-                  {txs.map((tx) => (
-                    <div
-                      key={tx.id}
-                      className="flex items-center justify-between gap-4 py-1"
-                    >
-                      <div className="flex-1 min-w-0 flex items-center gap-3">
-                        <span
-                          className={`shrink-0 font-mono text-base font-black ${
-                            tx.direction === "INFLOW" || Number(tx.amount) > 0
-                              ? "text-emerald-400"
-                              : "text-rose-500"
-                          }`}
-                        >
-                          {tx.direction === "INFLOW" || Number(tx.amount) > 0
-                            ? "+"
-                            : "−"}
-                        </span>
-                        <div className="flex items-center gap-3.5 min-w-0">
-                          {tx.accountImageUrl ? (
-                            <div className="shrink-0 size-10 rounded-xl border border-border/40 bg-muted/30 p-1.5 flex items-center justify-center shadow-sm overflow-hidden">
-                              <LogoImage
-                                src={tx.accountImageUrl}
-                                alt={tx.accountName}
-                                className="size-full object-contain"
-                              />
+                  {txs.map((tx) => {
+                    const isSelfTransfer = Boolean(tx.isSelfTransfer);
+                    const title =
+                      tx.displayTitle || tx.merchantName || tx.description;
+                    const subtitle =
+                      tx.displaySubtitle ||
+                      (isSelfTransfer
+                        ? "Transferência entre minhas contas"
+                        : tx.accountName);
+                    const amountTone = isSelfTransfer
+                      ? "text-sky-400"
+                      : tx.direction === "INFLOW" || Number(tx.amount) > 0
+                        ? "text-emerald-400"
+                        : "text-rose-500";
+
+                    return (
+                      <div
+                        key={tx.id}
+                        className="flex items-center justify-between gap-4 py-1"
+                      >
+                        <div className="flex-1 min-w-0 flex items-center gap-3">
+                          <span
+                            className={`shrink-0 font-mono text-base font-black ${amountTone}`}
+                          >
+                            {isSelfTransfer
+                              ? "↔"
+                              : tx.direction === "INFLOW" || Number(tx.amount) > 0
+                                ? "+"
+                                : "−"}
+                          </span>
+                          <div className="flex items-center gap-3.5 min-w-0">
+                            {isSelfTransfer ? (
+                              <TransferRouteLogo transaction={tx} />
+                            ) : tx.merchantLogoUrl ? (
+                              <div className="shrink-0 size-10 rounded-xl border border-border/40 bg-white p-1.5 flex items-center justify-center shadow-sm overflow-hidden">
+                                <LogoImage
+                                  src={tx.merchantLogoUrl}
+                                  alt={tx.merchantName || tx.description}
+                                  className="size-full object-contain"
+                                  fallback={getCategoryEmoji(tx.category || "")}
+                                />
+                              </div>
+                            ) : (
+                              <div className="shrink-0 size-10 rounded-xl border border-border/40 bg-muted/50 flex items-center justify-center shadow-sm text-xl">
+                                {getCategoryEmoji(tx.category || "")}
+                              </div>
+                            )}
+
+                            <div className="min-w-0 flex-1">
+                              <p
+                                className="line-clamp-2 text-base font-semibold leading-tight text-foreground/90 sm:truncate"
+                                title={title}
+                              >
+                                {title}
+                              </p>
+                              {(tx.isSalary || tx.linkedLend) && (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {tx.isSalary ? (
+                                    <Badge className="h-5 gap-1 bg-emerald-500/10 px-1.5 text-[10px] font-mono text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400">
+                                      <BadgeDollarSign className="size-3" />
+                                      Salário
+                                    </Badge>
+                                  ) : null}
+                                  {tx.linkedLend ? (
+                                    <Badge className="h-5 gap-1 bg-sky-500/10 px-1.5 text-[10px] font-mono text-sky-600 hover:bg-sky-500/10 dark:text-sky-400">
+                                      <Users className="size-3" />
+                                      Empréstimo
+                                    </Badge>
+                                  ) : null}
+                                </div>
+                              )}
+                              <p
+                                className="mt-0.5 truncate text-sm font-medium text-muted-foreground/70"
+                                title={subtitle}
+                              >
+                                {subtitle}
+                              </p>
                             </div>
-                          ) : (
-                            <div className="shrink-0 size-10 rounded-xl border border-border/40 bg-muted/50 flex items-center justify-center shadow-sm">
-                              <span className="text-xs font-mono font-bold text-muted-foreground uppercase">
-                                {tx.accountName.slice(0, 2)}
-                              </span>
-                            </div>
-                          )}
-                          <div className="min-w-0">
-                            <p className="text-base font-semibold truncate leading-tight text-foreground/90">
-                              {tx.merchantName || tx.description}
-                            </p>
-                            <p className="text-sm text-muted-foreground/70 font-medium truncate mt-0.5">
-                              {tx.accountName}
-                            </p>
                           </div>
                         </div>
+                        <span
+                          className={`text-base font-mono font-bold tabular-nums whitespace-nowrap ${amountTone}`}
+                        >
+                          {format(Math.abs(Number(tx.amount)))}
+                        </span>
                       </div>
-                      <span
-                        className={`text-base font-mono font-bold tabular-nums whitespace-nowrap ${
-                          tx.direction === "INFLOW" || Number(tx.amount) > 0
-                            ? "text-emerald-400"
-                            : "text-rose-500"
-                        }`}
-                      >
-                        {format(Math.abs(Number(tx.amount)))}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ))}
