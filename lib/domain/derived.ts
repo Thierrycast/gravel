@@ -1,11 +1,12 @@
 import { DomainTransactionDirection, Prisma } from "@prisma/client";
 
 import { parseNumberParam } from "@/lib/core/filters";
+import { RECURRING_DETECTION, PROJECTION } from "@/lib/domain/constants";
 import {
+  classifyCashFlowTransaction,
   getCashFlowMetrics,
   getCryptoPortfolioMetrics,
   getOverviewMetrics,
-  isInternalTransfer,
 } from "@/lib/domain/analytics";
 import { getUserSettings } from "@/lib/domain/queries";
 import { prisma } from "@/lib/prisma";
@@ -86,6 +87,31 @@ function normalizeText(value?: string | null) {
   );
 }
 
+function normalizeCategoryLookup(value?: string | null) {
+  return (
+    value
+      ?.normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase() ?? ""
+  );
+}
+
+function normalizePatternLookup(value?: string | null) {
+  return normalizeCategoryLookup(value)
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isSalaryCategory(category: { slug?: string | null; name?: string | null }) {
+  const lookup = `${normalizeCategoryLookup(category.slug)} ${normalizeCategoryLookup(category.name)}`;
+  return (
+    lookup.includes("seed-salary") ||
+    lookup.includes("salario") ||
+    lookup.includes("salary")
+  );
+}
+
 function safeNumber(value: Prisma.Decimal) {
   return Number(value.toString());
 }
@@ -145,7 +171,15 @@ export async function refreshRecurringDerived(options?: {
       ? categoryMap.get(transaction.domainCategoryId)
       : null;
 
-    if (isInternalTransfer(category?.name, category?.kind)) continue;
+    const classification = classifyCashFlowTransaction(
+      transaction.direction,
+      category?.name,
+      category?.kind,
+      transaction.description ?? transaction.normalizedDescription,
+    );
+    if (classification === "excluded" || classification === "investment") {
+      continue;
+    }
 
     const normalizedDescription =
       transaction.normalizedDescription ??
@@ -158,9 +192,13 @@ export async function refreshRecurringDerived(options?: {
 
     if (!candidateKey) continue;
 
+    // Use a special key for salary to group them even if merchant differs slightly
+    const isSalary = category ? isSalaryCategory(category) : false;
+    const groupingKey = isSalary ? "salary_group" : (transaction.domainMerchantId ?? candidateKey);
+
     const key = [
       transaction.direction,
-      transaction.domainMerchantId ?? candidateKey,
+      groupingKey,
       transaction.domainAccountId ?? "all",
     ].join(":");
 
@@ -186,8 +224,11 @@ export async function refreshRecurringDerived(options?: {
     isInstallment?: boolean;
   }>;
 
-  for (const group of groups.values()) {
-    if (group.length < minOccurrences) continue;
+  for (const [key, group] of groups.entries()) {
+    const isSalaryGroup = key.includes("salary_group");
+    const requiredOccurrences = isSalaryGroup ? 1 : minOccurrences;
+
+    if (group.length < requiredOccurrences) continue;
 
     const sorted = [...group].sort(
       (left, right) => left.occurredAt.getTime() - right.occurredAt.getTime(),
@@ -205,16 +246,23 @@ export async function refreshRecurringDerived(options?: {
       Math.max(intervals.length, 1);
 
     let detectedInterval: string | null = null;
-    if (avgIntervalDays >= 5 && avgIntervalDays <= 9)
-      detectedInterval = "WEEKLY";
-    else if (avgIntervalDays >= 12 && avgIntervalDays <= 16)
-      detectedInterval = "BIWEEKLY";
-    else if (avgIntervalDays >= 25 && avgIntervalDays <= 35)
+    const { INTERVAL_THRESHOLDS } = RECURRING_DETECTION;
+    
+    // If it's a salary group with only 1 occurrence, default to MONTHLY
+    if (isSalaryGroup && group.length === 1) {
       detectedInterval = "MONTHLY";
-    else if (avgIntervalDays >= 80 && avgIntervalDays <= 100)
-      detectedInterval = "QUARTERLY";
-    else if (avgIntervalDays >= 345 && avgIntervalDays <= 385)
-      detectedInterval = "YEARLY";
+    } else {
+      if (avgIntervalDays >= INTERVAL_THRESHOLDS.WEEKLY.min && avgIntervalDays <= INTERVAL_THRESHOLDS.WEEKLY.max)
+        detectedInterval = "WEEKLY";
+      else if (avgIntervalDays >= INTERVAL_THRESHOLDS.BIWEEKLY.min && avgIntervalDays <= INTERVAL_THRESHOLDS.BIWEEKLY.max)
+        detectedInterval = "BIWEEKLY";
+      else if (avgIntervalDays >= INTERVAL_THRESHOLDS.MONTHLY.min && avgIntervalDays <= INTERVAL_THRESHOLDS.MONTHLY.max)
+        detectedInterval = "MONTHLY";
+      else if (avgIntervalDays >= INTERVAL_THRESHOLDS.QUARTERLY.min && avgIntervalDays <= INTERVAL_THRESHOLDS.QUARTERLY.max)
+        detectedInterval = "QUARTERLY";
+      else if (avgIntervalDays >= INTERVAL_THRESHOLDS.YEARLY.min && avgIntervalDays <= INTERVAL_THRESHOLDS.YEARLY.max)
+        detectedInterval = "YEARLY";
+    }
 
     if (!detectedInterval) continue;
 
@@ -227,16 +275,17 @@ export async function refreshRecurringDerived(options?: {
       ...amounts.map((amount) => Math.abs(amount - avgAmountNumber)),
     );
 
-    if (maxDeviation > Math.max(20, avgAmountNumber * 0.15)) continue;
+    if (maxDeviation > Math.max(RECURRING_DETECTION.AMOUNT_DEVIATION_FIXED, avgAmountNumber * RECURRING_DETECTION.AMOUNT_DEVIATION_PCT)) continue;
 
     const lastTransaction = sorted.at(-1);
     if (!lastTransaction) continue;
 
+    const { CONFIDENCE } = RECURRING_DETECTION;
     const confidence = Math.min(
-      0.99,
-      0.55 +
-        Math.min(sorted.length, 6) * 0.06 +
-        (1 - maxDeviation / Math.max(avgAmountNumber, 1)) * 0.1,
+      CONFIDENCE.MAX,
+      CONFIDENCE.BASE +
+        Math.min(sorted.length, CONFIDENCE.MAX_OCCURRENCES_FOR_SCORE) * CONFIDENCE.PER_OCCURRENCE +
+        (1 - maxDeviation / Math.max(avgAmountNumber, 1)) * CONFIDENCE.PER_DEVIATION,
     );
 
     let nextDate = new Date(lastTransaction.occurredAt);
@@ -254,7 +303,7 @@ export async function refreshRecurringDerived(options?: {
       name:
         lastTransaction.merchantName ??
         lastTransaction.description ??
-        "Recorrencia detectada",
+        "Detected recurrence",
       merchantId: lastTransaction.domainMerchantId ?? undefined,
       categoryId: lastTransaction.domainCategoryId ?? undefined,
       descriptionPattern:
@@ -370,14 +419,14 @@ export async function getRecurringPayload(type?: "INCOME" | "EXPENSE") {
 
 export async function getProjectionPayload(searchParams?: URLSearchParams) {
   const horizonMonths = Math.min(
-    Math.max(parseNumberParam(searchParams?.get("months") ?? null, 6) ?? 6, 1),
-    24,
+    Math.max(parseNumberParam(searchParams?.get("months") ?? null, PROJECTION.DEFAULT_MONTHS) ?? PROJECTION.DEFAULT_MONTHS, PROJECTION.MIN_MONTHS),
+    PROJECTION.MAX_MONTHS,
   );
   const includeVariableExpenses =
     searchParams?.get("includeVariableExpenses") !== "false";
 
   const now = new Date();
-  const lookbackFrom = new Date(now.getTime() - 90 * MS_IN_DAY);
+  const lookbackFrom = new Date(now.getTime() - PROJECTION.VARIABLE_EXPENSE_LOOKBACK_DAYS * MS_IN_DAY);
 
   const [
     overview,
@@ -386,6 +435,7 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
     pastTransactions,
     categories,
     settings,
+    scenarioEvents,
   ] = await Promise.all([
     getOverviewMetrics(new URLSearchParams("period=all")),
     getRecurringPayload(),
@@ -405,12 +455,30 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
     }),
     prisma.domainCategory.findMany(),
     getUserSettings(searchParams),
+    prisma.domainScenarioEvent.findMany({
+      where: { isActive: true },
+      orderBy: { date: "asc" },
+    }),
   ]);
 
   // Variable (non-recurring) expenses: exclude internal transfers and known recurring rules
   const categoryMap = new Map<string, (typeof categories)[number]>(
     categories.map((category) => [category.id, category]),
   );
+  const salaryCategoryIds = new Set(
+    categories.filter(isSalaryCategory).map((category) => category.id),
+  );
+  const salaryPatterns = settings.salaryPatterns
+    .map(normalizePatternLookup)
+    .filter(Boolean);
+  const matchesSalaryPattern = (...values: Array<string | null | undefined>) => {
+    if (salaryPatterns.length === 0) return false;
+    const lookup = normalizePatternLookup(values.filter(Boolean).join(" "));
+    if (!lookup) return false;
+    return salaryPatterns.some(
+      (pattern) => lookup.includes(pattern) || pattern.includes(lookup),
+    );
+  };
   const EXCLUDED_SPENDING_CATEGORIES = new Set([
     "pagamento de cartão de crédito",
     "transferência mesma titularidade",
@@ -458,19 +526,25 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
     month: number;
     year: number;
     label: string;
+    knownIncome: number;
+    estimatedSalary: number;
     income: number;
+    scenarioAdjustments: number;
     recurringExpenses: number;
     installments: number;
     variableExpenses: number;
     projected: number;
     balance: number;
+    startingBalance: number;
   }>;
 
   for (let index = 1; index <= horizonMonths; index += 1) {
     const pointDate = startOfMonth(addMonths(now, index));
     const pointMonthEnd = endOfMonth(pointDate);
+    const startingBalance = currentBalance;
 
     let recurringInflow = ZERO;
+    let salaryRecurringInflow = ZERO;
     let recurringOutflow = ZERO;
     let installmentsOutflow = ZERO;
 
@@ -484,13 +558,20 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
         continue;
 
       if (rule.type === "INCOME") {
-        recurringInflow = recurringInflow.plus(decimal(rule.amount));
-      } else if (!settings.showFutureAccounts) {
-        continue;
+        const incomeAmount = decimal(rule.amount);
+        recurringInflow = recurringInflow.plus(incomeAmount);
+        if (
+          (rule.categoryId && salaryCategoryIds.has(rule.categoryId)) ||
+          matchesSalaryPattern(rule.title, rule.descriptionPattern)
+        ) {
+          salaryRecurringInflow = salaryRecurringInflow.plus(incomeAmount);
+        }
       } else if (rule.isInstallment) {
-        installmentsOutflow = installmentsOutflow.plus(
-          decimal(rule.amount).abs(),
-        );
+        if (settings.showFutureAccounts) {
+          installmentsOutflow = installmentsOutflow.plus(
+            decimal(rule.amount).abs(),
+          );
+        }
       } else {
         recurringOutflow = recurringOutflow.plus(decimal(rule.amount).abs());
       }
@@ -554,18 +635,50 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
         .filter((tx) => tx.direction === "INFLOW")
         .map((tx) => tx.amount),
     );
+    const futureSalaryInflow = sumDecimals(
+      futureTransactions
+        .filter(
+          (tx) =>
+            tx.direction === "INFLOW" &&
+            ((tx.domainCategoryId &&
+              salaryCategoryIds.has(tx.domainCategoryId)) ||
+              matchesSalaryPattern(
+                tx.description,
+                tx.normalizedDescription,
+                tx.merchantName,
+              )),
+        )
+        .map((tx) => tx.amount.abs()),
+    );
     const futureOutflow = sumDecimals(
       futureTransactions
         .filter((tx) => tx.direction === "OUTFLOW")
         .map((tx) => tx.amount.abs()),
     );
 
+    const configuredSalary = new Prisma.Decimal(settings.monthlySalary);
+    const salaryTopUp = configuredSalary
+      .minus(salaryRecurringInflow)
+      .minus(futureSalaryInflow);
     const salaryIncome =
-      settings.showFutureSalary && settings.monthlySalary > 0
-        ? new Prisma.Decimal(settings.monthlySalary)
+      settings.showFutureSalary &&
+      configuredSalary.greaterThan(0) &&
+      salaryTopUp.greaterThan(0)
+        ? salaryTopUp
         : ZERO;
-    const income = safeNumber(
-      recurringInflow.plus(futureInflow).plus(salaryIncome),
+    const knownIncome = recurringInflow.plus(futureInflow);
+    const income = safeNumber(knownIncome.plus(salaryIncome));
+    const scenarioAdjustments = safeNumber(
+      sumDecimals(
+        scenarioEvents
+          .filter((event) => {
+            if (event.isRecurring) {
+              return event.date <= pointMonthEnd;
+            }
+            return event.date >= pointDate && event.date <= pointMonthEnd;
+          })
+          .map((event) => event.amount),
+      ),
     );
     const recurringExpenses = safeNumber(recurringOutflow);
     const installments = safeNumber(
@@ -576,28 +689,55 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
 
     const totalOutflow =
       recurringExpenses + installments + variableExpenses + knownFutureOutflow;
-    const monthlyNet = income - totalOutflow;
-    currentBalance = currentBalance.plus(
-      new Prisma.Decimal(monthlyNet.toFixed(2)),
-    );
+    const monthlyNet = income + scenarioAdjustments - totalOutflow;
+    const monthlyNetDecimal = new Prisma.Decimal(monthlyNet.toFixed(2));
+    currentBalance = startingBalance.plus(monthlyNetDecimal);
 
     monthsData.push({
       month: pointDate.getUTCMonth() + 1,
       year: pointDate.getUTCFullYear(),
       label: monthKey(pointDate),
+      knownIncome: safeNumber(knownIncome),
+      estimatedSalary: safeNumber(salaryIncome),
       income,
+      scenarioAdjustments,
       recurringExpenses,
       installments,
       variableExpenses: variableExpenses + knownFutureOutflow,
-      projected: monthlyNet,
+      projected: safeNumber(monthlyNetDecimal),
       balance: safeNumber(currentBalance),
+      startingBalance: safeNumber(startingBalance),
     });
   }
 
+  // Compute average monthly income from real past transaction inflows (3-month window)
+  // so the summary card reflects actual income even when salary is not configured.
+  const pastInflowTransactions = pastTransactions.filter((tx) => {
+    if (tx.direction !== DomainTransactionDirection.INFLOW) return false;
+    const cat = tx.domainCategoryId ? categoryMap.get(tx.domainCategoryId) : null;
+    const classification = classifyCashFlowTransaction(
+      tx.direction,
+      cat?.name,
+      cat?.kind,
+      tx.description ?? tx.normalizedDescription,
+    );
+    return classification === "income";
+  });
+  const totalPastInflow = safeNumber(
+    sumDecimals(pastInflowTransactions.map((tx) => tx.amount.abs())),
+  );
+  // lookback window is VARIABLE_EXPENSE_LOOKBACK_DAYS (90 days ≈ 3 months)
+  const lookbackMonths = PROJECTION.VARIABLE_EXPENSE_LOOKBACK_DAYS / 30;
+  const avgRealMonthlyInflow = totalPastInflow / lookbackMonths;
+
+  // Use the higher of real historical inflow or projected monthly income (when salary is set)
   const averageMonthlyIncome =
     monthsData.length > 0
-      ? monthsData.reduce((sum, month) => sum + month.income, 0) / monthsData.length
-      : 0;
+      ? Math.max(
+          avgRealMonthlyInflow,
+          monthsData.reduce((sum, month) => sum + month.income, 0) / monthsData.length,
+        )
+      : avgRealMonthlyInflow;
   const averageMonthlyExpenses =
     monthsData.length > 0
       ? monthsData.reduce(
@@ -641,7 +781,7 @@ export async function getPortfolioPayload() {
   const loanBalance = sumDecimals(
     activeLoans.map((loan) => loan.contractAmount),
   );
-  const liabilitiesTotal = overview.openBills.plus(loanBalance);
+  const liabilitiesTotal = overview.liabilitiesTotal;
 
   return {
     summary: {
