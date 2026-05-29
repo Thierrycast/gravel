@@ -6,11 +6,16 @@ const CATEGORY_EMOJI: Record<string, string> = {
   "moradia": "🏠",
   "aluguel": "🏠",
   "saúde": "💊",
+  "dentista": "🦷",
+  "dentistas": "🦷",
+  "odonto": "🦷",
+  "odontologia": "🦷",
   "educação": "📚",
   "lazer": "🎮",
   "entretenimento": "🎬",
   "compras": "🛍️",
   "vestuário": "👕",
+  "vestiário": "👕",
   "serviços": "🔧",
   "assinaturas": "📱",
   "streaming": "📺",
@@ -46,6 +51,8 @@ const CATEGORY_EMOJI: Record<string, string> = {
   "jogos": "🎮",
   "música": "🎵",
   "livros": "📖",
+  "livraria": "📚",
+  "livrarias": "📚",
   "presentes": "🎁",
   "taxas bancárias": "🏦",
   "juros": "📊",
@@ -64,7 +71,14 @@ const CATEGORY_EMOJI: Record<string, string> = {
   "empréstimos e financiamento": "🏦",
   "impostos sobre operações financeiras": "📋",
   "jogos e videogames": "🎮",
-  "transferência mesma titularidade": "🔄",
+  "transferência entre minhas contas": "↔️",
+  "transferencia entre minhas contas": "↔️",
+  "transferência mesma titularidade": "↔️",
+  "transferencia mesma titularidade": "↔️",
+  "transferência entre contas": "↔️",
+  "transferencia entre contas": "↔️",
+  "transferência interna": "↔️",
+  "transferencia interna": "↔️",
   "transferências": "🔄",
   "transferência - pix": "⚡",
 }
@@ -83,6 +97,9 @@ const CATEGORY_COLORS: Record<string, string> = {
   "telefone": "#3b82f6",
   "universidade": "#0ea5e9",
   "educação": "#0ea5e9",
+  "livros": "#0ea5e9",
+  "livraria": "#0ea5e9",
+  "livrarias": "#0ea5e9",
   "supermercado": "#10b981",
   "mercado": "#10b981",
   "restaurantes, bares e lanchonetes": "#f59e0b",
@@ -94,6 +111,10 @@ const CATEGORY_COLORS: Record<string, string> = {
   "doações": "#ef4444",
   "farmácia": "#14b8a6",
   "saúde": "#14b8a6",
+  "dentista": "#14b8a6",
+  "dentistas": "#14b8a6",
+  "odonto": "#14b8a6",
+  "odontologia": "#14b8a6",
   "impostos sobre operações financeiras": "#64748b",
   "impostos": "#64748b",
   "transporte": "#06b6d4",
@@ -110,12 +131,20 @@ const CATEGORY_COLORS: Record<string, string> = {
   "viagem": "#0891b2",
   "beleza": "#f472b6",
   "vestuário": "#c084fc",
+  "vestiário": "#c084fc",
   "lazer": "#34d399",
   "entretenimento": "#fb923c",
   "pagamento de cartão de crédito": "#94a3b8",
+  "transferência entre minhas contas": "#0284c7",
+  "transferencia entre minhas contas": "#0284c7",
+  "transferência mesma titularidade": "#0284c7",
+  "transferencia mesma titularidade": "#0284c7",
+  "transferência entre contas": "#0284c7",
+  "transferencia entre contas": "#0284c7",
+  "transferência interna": "#0284c7",
+  "transferencia interna": "#0284c7",
   "transferência": "#94a3b8",
   "transferências": "#94a3b8",
-  "transferência mesma titularidade": "#94a3b8",
   "transferência - pix": "#94a3b8",
   "pix": "#94a3b8",
 }
@@ -130,7 +159,7 @@ const FALLBACK_COLORS = [
 export function getCategoryEmoji(name: string): string {
   const lower = name.toLowerCase().trim()
   if (CATEGORY_EMOJI[lower]) return CATEGORY_EMOJI[lower]
-  for (const [key, emoji] of Object.entries(CATEGORY_EMOJI)) {
+  for (const [key, emoji] of Object.entries(CATEGORY_EMOJI).sort((a, b) => b[0].length - a[0].length)) {
     if (lower.includes(key) || key.includes(lower)) return emoji
   }
   return "📌"
@@ -139,7 +168,7 @@ export function getCategoryEmoji(name: string): string {
 export function getCategoryColor(name: string, index?: number): string {
   const lower = name.toLowerCase().trim()
   if (CATEGORY_COLORS[lower]) return CATEGORY_COLORS[lower]
-  for (const [key, color] of Object.entries(CATEGORY_COLORS)) {
+  for (const [key, color] of Object.entries(CATEGORY_COLORS).sort((a, b) => b[0].length - a[0].length)) {
     if (lower.includes(key) || key.includes(lower)) return color
   }
   return FALLBACK_COLORS[(index ?? 0) % FALLBACK_COLORS.length]
