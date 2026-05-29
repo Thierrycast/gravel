@@ -24,7 +24,7 @@ import {
 import { useApi } from "@/hooks/use-api";
 import { formatPercent } from "@/lib/format";
 import { useCurrency } from "@/lib/currency-context";
-import { getCategoryEmoji } from "@/lib/category-emoji";
+import { getCategoryEmoji, getCategoryColor } from "@/lib/category-emoji";
 import { SankeyChart } from "@/components/charts/sankey-chart";
 import { usePeriod } from "@/hooks/use-period";
 import { PeriodSwitcher } from "@/components/period-switcher";
@@ -69,20 +69,8 @@ interface DomainCategoriesResponse {
 
 type DisplayCategory = SpendingCategory;
 
-const CATEGORY_COLORS = [
-  "oklch(0.60 0.25 25)", // Neon Red
-  "oklch(0.60 0.20 330)", // Pink
-  "oklch(0.60 0.15 290)", // Purple
-  "oklch(0.70 0.20 150)", // Neon Green
-  "oklch(0.85 0.15 200)", // Cyan
-  "oklch(0.80 0.20 75)", // Amber
-  "oklch(0.65 0.20 260)", // Blue
-  "oklch(0.70 0.18 180)", // Teal
-  "oklch(0.75 0.15 30)", // Orange
-  "oklch(0.55 0.20 310)", // Violet
-];
-
 const DAY_MS = 86_400_000;
+const MIN_INCOME_FOR_SAVINGS_RATE = 1;
 
 function parsePeriodDate(value?: string) {
   if (!value) return undefined;
@@ -135,12 +123,12 @@ function StatCard({
   }[tone];
 
   return (
-    <div className="border border-border p-4 flex flex-col gap-1">
+    <div className="flex min-w-0 flex-col gap-1 border border-border p-4">
       <p className="font-mono text-xs tracking-widest text-muted-foreground uppercase">
         {label}
       </p>
       <p
-        className={`font-mono text-xl tabular-nums font-semibold ${toneClass}`}
+        className={`break-words font-mono text-xl font-semibold tabular-nums ${toneClass}`}
       >
         {value}
       </p>
@@ -176,9 +164,6 @@ export default function ReportsPage() {
   const { format } = useCurrency();
   const period = usePeriod("mtd");
 
-  const [showSalary, setShowSalary] = useState(
-    searchParams.get("showFutureSalary") !== "false",
-  );
   const [showFuture, setShowFuture] = useState(
     searchParams.get("showFutureAccounts") !== "false",
   );
@@ -192,7 +177,13 @@ export default function ReportsPage() {
     router.push(`?${params.toString()}`, { scroll: false });
   };
 
-  const apiParams = period.params;
+  const apiParams = useMemo<Record<string, string>>(() => {
+    return {
+      ...period.params,
+      showFutureAccounts: String(showFuture),
+      ...(detailed ? { subcategories: "true" } : {}),
+    };
+  }, [period.params, detailed, showFuture]);
 
   const {
     data: overview,
@@ -212,9 +203,12 @@ export default function ReportsPage() {
   );
 
   // Fetch all categories for hierarchy support
-  const { data: allCategoriesData } = useApi<DomainCategoriesResponse>("/api/domain/categories", {
-    pageSize: "500",
-  });
+  const { data: allCategoriesData } = useApi<DomainCategoriesResponse>(
+    "/api/domain/categories",
+    {
+      pageSize: "500",
+    },
+  );
 
   const loading = overviewLoading || spendingLoading;
   const error = overviewError || spendingError;
@@ -283,7 +277,7 @@ export default function ReportsPage() {
     displayCategories.forEach((cat, i) => {
       config[cat.name] = {
         label: cat.name,
-        color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+        color: getCategoryColor(cat.name, i),
       };
     });
     return config;
@@ -293,7 +287,7 @@ export default function ReportsPage() {
     return displayCategories.map((cat, i) => ({
       name: cat.name,
       value: Math.abs(cat.amount),
-      fill: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+      fill: getCategoryColor(cat.name, i),
     }));
   }, [displayCategories]);
 
@@ -317,7 +311,10 @@ export default function ReportsPage() {
   const totalSpending = spending?.summary?.total ?? 0;
 
   // Derived stats
-  const savingsRate = monthlyIncome > 0 ? (netResult / monthlyIncome) * 100 : 0;
+  const savingsRate =
+    monthlyIncome >= MIN_INCOME_FOR_SAVINGS_RATE
+      ? (netResult / monthlyIncome) * 100
+      : null;
   const { from: periodStart, to: periodEnd } = resolvePeriodRange(period);
   const daysInPeriod = Math.ceil(
     Math.max(periodEnd.getTime() - periodStart.getTime(), DAY_MS) / DAY_MS,
@@ -337,24 +334,8 @@ export default function ReportsPage() {
         title="Relatórios"
         description="Análise detalhada de receitas, despesas e fluxo de caixa"
         actions={
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-4 border-r pr-6 border-border/60">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="show-salary"
-                  checked={showSalary}
-                  onCheckedChange={(val) => {
-                    setShowSalary(val);
-                    updateParam("showFutureSalary", val);
-                  }}
-                />
-                <Label
-                  htmlFor="show-salary"
-                  className="text-xs font-medium cursor-pointer"
-                >
-                  Salários
-                </Label>
-              </div>
+          <div className="flex w-full max-w-full flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex flex-wrap items-center gap-3 border-border/60 sm:gap-4 sm:border-r sm:pr-6">
               <div className="flex items-center space-x-2">
                 <Switch
                   id="show-future"
@@ -394,7 +375,7 @@ export default function ReportsPage() {
       />
 
       {/* Stat strip */}
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
         <StatCard
           label="Total Gasto"
           value={format(monthlyExpenses)}
@@ -436,15 +417,23 @@ export default function ReportsPage() {
         />
         <StatCard
           label="Taxa de Poupança"
-          value={`${savingsRate.toFixed(1)}%`}
+          value={savingsRate == null ? "N/D" : `${savingsRate.toFixed(1)}%`}
           tone={
-            savingsRate >= 20
-              ? "positive"
-              : savingsRate >= 0
-                ? "neutral"
-                : "negative"
+            savingsRate == null
+              ? "neutral"
+              : savingsRate >= 20
+                ? "positive"
+                : savingsRate >= 0
+                  ? "neutral"
+                  : "negative"
           }
-          sub={<span>~{format(dailyAvgSpend)}/dia em gastos</span>}
+          sub={
+            savingsRate == null ? (
+              <span>Receita insuficiente para calcular</span>
+            ) : (
+              <span>~{format(dailyAvgSpend)}/dia em gastos</span>
+            )
+          }
         />
       </div>
 
@@ -462,11 +451,11 @@ export default function ReportsPage() {
               </Badge>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-hidden">
             <div className="flex flex-col items-center gap-6 sm:flex-row">
               <ChartContainer
                 config={categoryChartConfig}
-                className="aspect-square h-[200px] shrink-0"
+                className="aspect-square h-[180px] max-w-full shrink-0 sm:h-[200px]"
               >
                 <PieChart>
                   <ChartTooltip
@@ -491,7 +480,7 @@ export default function ReportsPage() {
                     {pieData.map((entry, index) => (
                       <Cell
                         key={`cell-${entry.name}`}
-                        fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]}
+                        fill={getCategoryColor(entry.name, index)}
                         onClick={() => {
                           const cat = displayCategories.find(
                             (c) => c.name === entry.name,
@@ -510,35 +499,37 @@ export default function ReportsPage() {
               </ChartContainer>
 
               <div className="flex w-full flex-col gap-1.5">
-                {displayCategories.slice(0, 8).map((cat: DisplayCategory, i: number) => (
-                  <button
-                    key={cat.categoryId ?? cat.name}
-                    onClick={() =>
-                      router.push(
-                        `/transactions?categoryId=${cat.categoryId}&period=${period.period}`,
-                      )
-                    }
-                    className="flex items-center gap-2.5 py-1 hover:bg-muted/40 px-1 transition-colors group text-left w-full"
-                  >
-                    <div
-                      className="size-2 shrink-0"
-                      style={{
-                        backgroundColor:
-                          CATEGORY_COLORS[i % CATEGORY_COLORS.length],
-                      }}
-                    />
-                    <span className="flex-1 truncate text-xs font-mono">
-                      {getCategoryEmoji(cat.name)} {cat.name}
-                    </span>
-                    <span className="text-xs font-mono tabular-nums text-muted-foreground">
-                      {cat.sharePercent.toFixed(1)}%
-                    </span>
-                    <span className="text-xs font-mono tabular-nums font-medium">
-                      {format(Math.abs(cat.amount))}
-                    </span>
-                    <ExternalLink className="size-2.5 opacity-0 group-hover:opacity-60 text-primary transition-opacity shrink-0" />
-                  </button>
-                ))}
+                {displayCategories
+                  .slice(0, 8)
+                  .map((cat: DisplayCategory, i: number) => (
+                    <button
+                      key={cat.categoryId ?? cat.name}
+                      onClick={() =>
+                        router.push(
+                          `/transactions?categoryId=${cat.categoryId}&period=${period.period}`,
+                        )
+                      }
+                      className="flex items-center gap-2.5 py-1 hover:bg-muted/40 px-1 transition-colors group text-left w-full"
+                    >
+                      <div
+                        className="size-2 shrink-0"
+                        style={{
+                          backgroundColor:
+                            getCategoryColor(cat.name, i),
+                        }}
+                      />
+                      <span className="flex-1 truncate text-xs font-mono">
+                        {getCategoryEmoji(cat.name)} {cat.name}
+                      </span>
+                      <span className="text-xs font-mono tabular-nums text-muted-foreground">
+                        {cat.sharePercent.toFixed(1)}%
+                      </span>
+                      <span className="text-xs font-mono tabular-nums font-medium">
+                        {format(Math.abs(cat.amount))}
+                      </span>
+                      <ExternalLink className="size-2.5 opacity-0 group-hover:opacity-60 text-primary transition-opacity shrink-0" />
+                    </button>
+                  ))}
                 {displayCategories.length > 8 && (
                   <p className="text-xs font-mono text-muted-foreground pl-4">
                     +{displayCategories.length - 8} outras categorias
@@ -632,9 +623,15 @@ export default function ReportsPage() {
                   Poupança
                 </p>
                 <p
-                  className={`font-mono text-sm font-bold tabular-nums ${savingsRate >= 0 ? "text-emerald-400" : "text-rose-500"}`}
+                  className={`font-mono text-sm font-bold tabular-nums ${
+                    savingsRate == null
+                      ? "text-muted-foreground"
+                      : savingsRate >= 0
+                        ? "text-emerald-400"
+                        : "text-rose-500"
+                  }`}
                 >
-                  {savingsRate.toFixed(1)}%
+                  {savingsRate == null ? "N/D" : `${savingsRate.toFixed(1)}%`}
                 </p>
               </div>
               <div className="border border-border p-3">
@@ -674,7 +671,7 @@ export default function ReportsPage() {
               categories: displayCategories.map((cat, i) => ({
                 name: cat.name,
                 total: Math.abs(cat.amount),
-                color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+                color: getCategoryColor(cat.name, i),
                 categoryId: cat.categoryId,
               })),
             }}

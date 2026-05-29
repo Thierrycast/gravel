@@ -15,8 +15,9 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import {
-  BarChart as ReChartsBarChart,
+  ComposedChart,
   Bar,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -28,44 +29,22 @@ import {
   CardDescription,
   CardHeader,
 } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-
-type Nudge = {
-  type: "WARNING" | "INFO" | string;
-  title: string;
-  message: string;
-};
-
-type HiddenSubscription = {
-  name: string;
-  avgGap: number;
-  avgAmount: number;
-  occurrences: number;
-};
-
-type InsightsResponse = {
-  nudges?: Nudge[];
-  forensics?: {
-    benford?: {
-      actual: number[];
-      ideal: number[];
-    };
-    hiddenSubs?: HiddenSubscription[];
-  };
-};
+import type { InsightsResponse } from "@/lib/types/dashboard";
 
 const chartConfig = {
   valor: {
-    label: "Seu Perfil",
-    color: "hsl(var(--primary))",
+    label: "Observado",
+    color: "var(--primary)",
   },
   ideal: {
-    label: "Ideal",
-    color: "hsl(var(--muted-foreground))",
+    label: "Esperado (Benford)",
+    color: "var(--muted-foreground)",
   },
 };
 
@@ -86,19 +65,21 @@ export default function InsightsPage() {
   const infos = nudges.filter((n) => n.type !== "WARNING");
 
   const benfordData = insights?.forensics?.benford?.actual.map(
-    (v: number, i: number) => ({
+    (v: number | null, i: number) => ({
       digit: (i + 1).toString(),
-      valor: parseFloat(v.toFixed(1)),
+      valor: parseFloat((v ?? 0).toFixed(1)),
       ideal: parseFloat(
         (insights?.forensics?.benford?.ideal[i] ?? 0).toFixed(1),
       ),
     }),
   );
+  const hasBenfordData =
+    benfordData?.some((point) => point.valor > 0 || point.ideal > 0) ?? false;
 
   const hiddenSubs = insights?.forensics?.hiddenSubs ?? [];
 
   return (
-    <div className="flex flex-col gap-8 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div className="flex flex-col gap-8 max-w-5xl mx-auto">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
@@ -202,17 +183,21 @@ export default function InsightsPage() {
                     <div>
                       <p className="text-sm font-medium">{sub.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        A cada {sub.avgGap.toFixed(0)} dias &middot;{" "}
+                        A cada {(sub.avgGap ?? 0).toFixed(0)} dias &middot;{" "}
                         {sub.occurrences}×
                       </p>
                     </div>
                     <p className="font-mono font-bold text-pink-400 tabular-nums">
-                      ~R$ {sub.avgAmount.toFixed(2)}
+                      ~R$ {(sub.avgAmount ?? 0).toFixed(2)}
                     </p>
                   </div>
                 ))}
               </div>
             )}
+            <p className="mt-4 border-t pt-3 text-xs text-muted-foreground">
+              Transferências Pix enviadas e pagamentos de fatura são excluídos
+              desta triagem.
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -247,9 +232,9 @@ export default function InsightsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {benfordData && benfordData.length > 0 ? (
+              {hasBenfordData ? (
                 <ChartContainer config={chartConfig} className="h-64 w-full">
-                  <ReChartsBarChart data={benfordData}>
+                  <ComposedChart data={benfordData}>
                     <CartesianGrid
                       vertical={false}
                       strokeDasharray="3 3"
@@ -273,18 +258,21 @@ export default function InsightsPage() {
                       fill="var(--color-valor)"
                       radius={[4, 4, 0, 0]}
                     />
-                    <Bar
+                    <Line
+                      type="monotone"
                       dataKey="ideal"
-                      fill="var(--color-ideal)"
-                      radius={[4, 4, 0, 0]}
-                      fillOpacity={0.3}
+                      stroke="var(--color-ideal)"
+                      strokeWidth={2}
+                      dot={{ r: 4, fill: "var(--color-ideal)" }}
                     />
-                  </ReChartsBarChart>
+                  </ComposedChart>
                 </ChartContainer>
               ) : (
-                <p className="text-sm text-muted-foreground py-6 text-center">
-                  Dados insuficientes para análise de Benford.
-                </p>
+                <EmptyState
+                  className="border-0 bg-transparent px-0 py-6"
+                  title="Sem dados suficientes"
+                  description="Dados insuficientes para exibir a análise de Benford."
+                />
               )}
             </CardContent>
           </Card>
