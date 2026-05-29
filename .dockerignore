@@ -27,4 +27,4 @@ docs
 scripts
 tests
 vitest.config.ts
-pnpm-lock.yaml
+# pnpm-lock.yaml removed from ignore
