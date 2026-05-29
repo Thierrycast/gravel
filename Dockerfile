@@ -40,7 +40,7 @@ RUN pnpm exec prisma generate \
 # ---------------------------------------------------------------------------
 FROM node:20-alpine AS runner
 
-RUN apk add --no-cache libc6-compat openssl wget
+RUN apk add --no-cache libc6-compat openssl su-exec wget
 
 WORKDIR /app
 
@@ -67,11 +67,9 @@ RUN npm install -g prisma@6.19.0 \
   && chmod +x ./entrypoint.sh \
   && npm cache clean --force
 
-USER nextjs
-
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD wget -qO- http://127.0.0.1:3000/ > /dev/null || exit 1
+  CMD wget -qO- http://127.0.0.1:3000/api/health/ready > /dev/null || exit 1
 
 ENTRYPOINT ["./entrypoint.sh"]
