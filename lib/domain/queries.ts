@@ -7,6 +7,7 @@ import {
   parseDateParam,
   parseNumberParam,
 } from "@/lib/core/filters"
+import { isInternalAccountTransfer } from "@/lib/domain/analytics/shared"
 import { buildTransactionDisplay } from "@/lib/domain/enrichment/display"
 import { deriveInstitutionFromNames, getInstitutionLogo } from "@/lib/domain/utils"
 import { prisma } from "@/lib/prisma"
@@ -45,9 +46,14 @@ export function parseDomainQuery(searchParams: URLSearchParams) {
     period,
     accountId: searchParams.get("accountId") ?? undefined,
     categoryId: searchParams.get("categoryId") ?? undefined,
-    merchantId: searchParams.get("merchantId") ?? undefined,
+    merchantId:
+      searchParams.get("merchantId") === "null" || searchParams.get("merchantId") === "undefined"
+        ? null
+        : (searchParams.get("merchantId") ?? undefined),
     provider: searchParams.get("provider") ?? undefined,
     asset: searchParams.get("asset") ?? undefined,
+    minAmount: parseNumberParam(searchParams.get("minAmount")),
+    maxAmount: parseNumberParam(searchParams.get("maxAmount")),
     q: searchParams.get("q")?.trim() || searchParams.get("search")?.trim() || undefined,
     direction:
       directionParam === "INFLOW" || directionParam === "INCOME"
@@ -116,6 +122,10 @@ export async function getDomainTransactions(searchParams: URLSearchParams) {
     const accountIds = accounts.map((account) => account.id)
     const merchantIds = merchants.map((merchant) => merchant.id)
 
+    // Check if query is a valid number to filter by amount
+    const amountQuery = Number(filters.q.replace(",", "."))
+    const isValidAmount = !isNaN(amountQuery) && filters.q.trim() !== ""
+
     searchWhere = [
       {
         description: {
@@ -132,6 +142,15 @@ export async function getDomainTransactions(searchParams: URLSearchParams) {
           contains: filters.q,
         },
       },
+      ...(isValidAmount
+        ? [
+            {
+              amount: {
+                equals: new Prisma.Decimal(amountQuery).abs(),
+              },
+            },
+          ]
+        : []),
       ...(categoryIds.length > 0
         ? [{ domainCategoryId: { in: categoryIds } satisfies Prisma.StringFilter }]
         : []),
@@ -176,8 +195,12 @@ export async function getDomainTransactions(searchParams: URLSearchParams) {
       lte: filters.to,
     },
     domainAccountId: filters.accountId,
-    domainCategoryId: categoryFilterIds ? { in: categoryFilterIds } : undefined,
+    domainCategoryId: filters.categoryId,
     domainMerchantId: filters.merchantId,
+    amount: {
+      gte: filters.minAmount ?? undefined,
+      lte: filters.maxAmount ?? undefined,
+    },
     direction: filters.direction,
     sourceProvider: filters.provider ? (filters.provider as never) : undefined,
     ...(searchWhere ? { OR: searchWhere } : {}),
@@ -328,6 +351,262 @@ export async function getDomainCryptoAssets(searchParams: URLSearchParams) {
   }
 }
 
+const SELF_TRANSFER_CATEGORY_NAME = "Transferência entre minhas contas"
+const SELF_TRANSFER_MATCH_WINDOW_MS = 3 * 24 * 60 * 60 * 1000
+
+type DashboardCategoryInfo = {
+  id: string
+  name: string
+  parentId: string | null
+  kind?: string | null
+}
+
+type DashboardAccountInfo = {
+  name: string
+  imageUrl: string | null
+}
+
+type TransferCandidate = {
+  id: string
+  occurredAt: Date
+  amount: Prisma.Decimal
+  direction: string
+  domainAccountId: string | null
+  domainCategoryId: string | null
+}
+
+type SelfTransferRoute = {
+  title: string
+  subtitle: string
+  fromAccountName: string | null
+  fromAccountImageUrl: string | null
+  toAccountName: string | null
+  toAccountImageUrl: string | null
+}
+
+function normalizeTransferLookup(value?: string | null) {
+  return (
+    value
+      ?.normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim() ?? ""
+  )
+}
+
+function parseSalaryPatterns(configJson?: string | null) {
+  if (!configJson) return []
+  try {
+    const config = JSON.parse(configJson) as { salaryPatterns?: unknown }
+    return Array.isArray(config.salaryPatterns)
+      ? config.salaryPatterns.filter(
+          (pattern): pattern is string =>
+            typeof pattern === "string" && pattern.trim().length > 0,
+        )
+      : []
+  } catch {
+    return []
+  }
+}
+
+function isSalaryCategoryName(value?: string | null) {
+  const normalized = normalizeTransferLookup(value)
+  return normalized === "salario" || normalized.includes("salary")
+}
+
+function matchesSalaryPattern(
+  transaction: {
+    description?: string | null
+    merchantName?: string | null
+  },
+  salaryPatterns: string[],
+) {
+  if (salaryPatterns.length === 0) return false
+  const lookup = normalizeTransferLookup(
+    [transaction.description, transaction.merchantName].filter(Boolean).join(" "),
+  )
+  if (!lookup) return false
+  return salaryPatterns.some((pattern) => {
+    const normalizedPattern = normalizeTransferLookup(pattern)
+    return (
+      normalizedPattern.length > 0 &&
+      (lookup.includes(normalizedPattern) || normalizedPattern.includes(lookup))
+    )
+  })
+}
+
+function amountCents(amount: Prisma.Decimal | number | string) {
+  return Math.round(Math.abs(Number(amount)) * 100)
+}
+
+function hasTransferSignal(
+  transaction: Pick<TransferCandidate, "direction">,
+  category?: DashboardCategoryInfo | null,
+) {
+  const categoryName = category?.name ?? null
+  const normalizedCategory = normalizeTransferLookup(categoryName)
+  return (
+    transaction.direction === "TRANSFER" ||
+    isInternalAccountTransfer(categoryName) ||
+    normalizedCategory.includes("transfer")
+  )
+}
+
+function hasInternalAccountTransferCategory(category?: DashboardCategoryInfo | null) {
+  return isInternalAccountTransfer(category?.name)
+}
+
+function directionsCanBeSelfTransferPair(left: TransferCandidate, right: TransferCandidate) {
+  if (
+    (left.direction === "OUTFLOW" && right.direction === "INFLOW") ||
+    (left.direction === "INFLOW" && right.direction === "OUTFLOW")
+  ) {
+    return true
+  }
+
+  return left.direction === "TRANSFER" || right.direction === "TRANSFER"
+}
+
+async function resolveSelfTransferRoutes(
+  transactions: TransferCandidate[],
+  categoryMap: Map<string, DashboardCategoryInfo>,
+  accountMap: Map<string, DashboardAccountInfo>,
+) {
+  const possibleTransfers = transactions.filter((transaction) => {
+    if (!transaction.domainAccountId) return false
+    const category = transaction.domainCategoryId
+      ? categoryMap.get(transaction.domainCategoryId)
+      : null
+    return hasTransferSignal(transaction, category)
+  })
+
+  if (possibleTransfers.length === 0) {
+    return new Map<string, SelfTransferRoute>()
+  }
+
+  const timestamps = possibleTransfers.map((transaction) =>
+    transaction.occurredAt.getTime(),
+  )
+  const from = new Date(Math.min(...timestamps) - SELF_TRANSFER_MATCH_WINDOW_MS)
+  const to = new Date(Math.max(...timestamps) + SELF_TRANSFER_MATCH_WINDOW_MS)
+  const candidates = await prisma.domainTransaction.findMany({
+    where: {
+      ignored: false,
+      occurredAt: {
+        gte: from,
+        lte: to,
+      },
+    },
+    select: {
+      id: true,
+      occurredAt: true,
+      amount: true,
+      direction: true,
+      domainAccountId: true,
+      domainCategoryId: true,
+    },
+  })
+
+  const missingAccountIds = Array.from(
+    new Set(
+      candidates
+        .map((candidate) => candidate.domainAccountId)
+        .filter((value): value is string => Boolean(value))
+        .filter((value) => !accountMap.has(value)),
+    ),
+  )
+
+  if (missingAccountIds.length > 0) {
+    const peerAccounts = await prisma.domainAccount.findMany({
+      where: { id: { in: missingAccountIds } },
+      select: { id: true, name: true, institutionName: true },
+    })
+
+    for (const account of peerAccounts) {
+      const storedName =
+        account.institutionName && !["Pluggy", "MeuPluggy", "PLUGGY"].includes(account.institutionName)
+          ? account.institutionName
+          : null
+      const institution = storedName ?? deriveInstitutionFromNames([account.name])
+      accountMap.set(account.id, {
+        name: account.name,
+        imageUrl: getInstitutionLogo(institution ?? account.name),
+      })
+    }
+  }
+
+  const candidatesByAmount = new Map<number, TransferCandidate[]>()
+  for (const candidate of candidates) {
+    if (!candidate.domainAccountId) continue
+    const key = amountCents(candidate.amount)
+    candidatesByAmount.set(key, [...(candidatesByAmount.get(key) ?? []), candidate])
+  }
+
+  const routes = new Map<string, SelfTransferRoute>()
+  for (const transaction of possibleTransfers) {
+    const category = transaction.domainCategoryId
+      ? categoryMap.get(transaction.domainCategoryId)
+      : null
+    const strongInternalCategory = hasInternalAccountTransferCategory(category)
+    const peers = candidatesByAmount.get(amountCents(transaction.amount)) ?? []
+    let bestPeer: TransferCandidate | null = null
+    let bestScore = Number.POSITIVE_INFINITY
+
+    for (const peer of peers) {
+      if (peer.id === transaction.id) continue
+      if (!peer.domainAccountId || peer.domainAccountId === transaction.domainAccountId) continue
+      if (!directionsCanBeSelfTransferPair(transaction, peer)) continue
+
+      const delta = Math.abs(peer.occurredAt.getTime() - transaction.occurredAt.getTime())
+      if (delta > SELF_TRANSFER_MATCH_WINDOW_MS) continue
+
+      const peerCategory = peer.domainCategoryId
+        ? categoryMap.get(peer.domainCategoryId)
+        : null
+      if (!hasTransferSignal(peer, peerCategory) && !strongInternalCategory) continue
+
+      const peerCategoryBonus = hasInternalAccountTransferCategory(peerCategory) ? 0 : 1
+      const score = delta + peerCategoryBonus
+      if (score < bestScore) {
+        bestPeer = peer
+        bestScore = score
+      }
+    }
+
+    if (!strongInternalCategory && !bestPeer) continue
+
+    const currentAccount = transaction.domainAccountId
+      ? accountMap.get(transaction.domainAccountId) ?? null
+      : null
+    const peerAccount = bestPeer?.domainAccountId
+      ? accountMap.get(bestPeer.domainAccountId) ?? null
+      : null
+    const fromAccount =
+      transaction.direction === "INFLOW"
+        ? peerAccount
+        : currentAccount
+    const toAccount =
+      transaction.direction === "INFLOW"
+        ? currentAccount
+        : peerAccount
+    const title =
+      fromAccount && toAccount
+        ? `${fromAccount.name} → ${toAccount.name}`
+        : SELF_TRANSFER_CATEGORY_NAME
+
+    routes.set(transaction.id, {
+      title,
+      subtitle: SELF_TRANSFER_CATEGORY_NAME,
+      fromAccountName: fromAccount?.name ?? null,
+      fromAccountImageUrl: fromAccount?.imageUrl ?? null,
+      toAccountName: toAccount?.name ?? null,
+      toAccountImageUrl: toAccount?.imageUrl ?? null,
+    })
+  }
+
+  return routes
+}
+
 export async function getDashboardTransactions(searchParams: URLSearchParams) {
   const payload = await getDomainTransactions(searchParams)
 
@@ -352,11 +631,20 @@ export async function getDashboardTransactions(searchParams: URLSearchParams) {
         .filter((value): value is string => Boolean(value))
     )
   )
+  const transactionIds = payload.results.map((transaction) => transaction.id)
 
-  const [categories, accounts, merchants, merchantEnrichments, transactionEnrichments] = await Promise.all([
+  const [
+    categories,
+    accounts,
+    merchants,
+    merchantEnrichments,
+    transactionEnrichments,
+    userSetting,
+    linkedLends,
+  ] = await Promise.all([
     prisma.domainCategory.findMany({
       where: categoryIds.length > 0 ? {} : { id: "__none__" },
-      select: { id: true, name: true, parentId: true },
+      select: { id: true, name: true, parentId: true, kind: true },
     }),
     prisma.domainAccount.findMany({
       where: accountIds.length > 0 ? { id: { in: accountIds } } : { id: "__none__" },
@@ -371,8 +659,31 @@ export async function getDashboardTransactions(searchParams: URLSearchParams) {
       select: { domainMerchantId: true, logoUrl: true, status: true },
     }),
     prisma.transactionEnrichment.findMany({
-      where: payload.results.length > 0 ? { domainTransactionId: { in: payload.results.map((tx) => tx.id) } } : { id: "__none__" },
+      where: transactionIds.length > 0 ? { domainTransactionId: { in: transactionIds } } : { id: "__none__" },
       select: { domainTransactionId: true, status: true },
+    }),
+    prisma.userSetting.findFirst({
+      where: { id: "default" },
+      select: { dashboardConfigJson: true },
+    }),
+    prisma.domainLend.findMany({
+      where: transactionIds.length > 0
+        ? {
+            OR: [
+              { domainTransactionId: { in: transactionIds } },
+              { inflowTransactionId: { in: transactionIds } },
+            ],
+          }
+        : { id: "__none__" },
+      select: {
+        id: true,
+        friendName: true,
+        amount: true,
+        dueDate: true,
+        status: true,
+        domainTransactionId: true,
+        inflowTransactionId: true,
+      },
     }),
   ])
 
@@ -400,6 +711,45 @@ export async function getDashboardTransactions(searchParams: URLSearchParams) {
   const merchantMap = new Map(merchants.map((merchant) => [merchant.id, merchant]))
   const merchantEnrichmentMap = new Map(merchantEnrichments.map((item) => [item.domainMerchantId, item]))
   const transactionEnrichmentMap = new Map(transactionEnrichments.map((item) => [item.domainTransactionId, item]))
+  const salaryPatterns = parseSalaryPatterns(userSetting?.dashboardConfigJson)
+  const lendByTransactionId = new Map<
+    string,
+    {
+      id: string
+      friendName: string
+      amount: Prisma.Decimal
+      dueDate: Date
+      status: string
+      role: "loan-outflow" | "payment-inflow"
+    }
+  >()
+  for (const lend of linkedLends) {
+    if (lend.domainTransactionId) {
+      lendByTransactionId.set(lend.domainTransactionId, {
+        id: lend.id,
+        friendName: lend.friendName,
+        amount: lend.amount,
+        dueDate: lend.dueDate,
+        status: lend.status,
+        role: "loan-outflow",
+      })
+    }
+    if (lend.inflowTransactionId) {
+      lendByTransactionId.set(lend.inflowTransactionId, {
+        id: lend.id,
+        friendName: lend.friendName,
+        amount: lend.amount,
+        dueDate: lend.dueDate,
+        status: lend.status,
+        role: "payment-inflow",
+      })
+    }
+  }
+  const selfTransferRoutes = await resolveSelfTransferRoutes(
+    payload.results,
+    categoryMap,
+    accountMap,
+  )
 
   const mapped = payload.results.map((tx) => {
     const accountInfo = tx.domainAccountId ? accountMap.get(tx.domainAccountId) : null
@@ -410,15 +760,51 @@ export async function getDashboardTransactions(searchParams: URLSearchParams) {
       ? merchantEnrichmentMap.get(tx.domainMerchantId)
       : null
     const transactionEnrichment = transactionEnrichmentMap.get(tx.id)
+    const selfTransferRoute = selfTransferRoutes.get(tx.id)
+    const linkedLend = lendByTransactionId.get(tx.id)
+    const isSalary =
+      tx.direction === "INFLOW" &&
+      (isSalaryCategoryName(category?.name) ||
+        isSalaryCategoryName(parentCategory?.name) ||
+        matchesSalaryPattern(tx, salaryPatterns))
+    const display = buildTransactionDisplay(tx, {
+      category,
+      parentCategory,
+      merchant,
+      merchantLogoUrl: merchantEnrichment?.logoUrl ?? null,
+      enrichmentStatus: transactionEnrichment?.status ?? merchantEnrichment?.status ?? null,
+    })
     
     return {
-      ...buildTransactionDisplay(tx, {
-        category,
-        parentCategory,
-        merchant,
-        merchantLogoUrl: merchantEnrichment?.logoUrl ?? null,
-        enrichmentStatus: transactionEnrichment?.status ?? merchantEnrichment?.status ?? null,
-      }),
+      ...display,
+      ...(selfTransferRoute
+        ? {
+            displayTitle: selfTransferRoute.title,
+            displaySubtitle:
+              display.rawDescription && display.rawDescription !== selfTransferRoute.title
+                ? display.rawDescription
+                : selfTransferRoute.subtitle,
+            categoryName: SELF_TRANSFER_CATEGORY_NAME,
+            effectiveCategory: SELF_TRANSFER_CATEGORY_NAME,
+            merchantLogoUrl: null,
+            isSelfTransfer: true,
+            transferFromAccountName: selfTransferRoute.fromAccountName,
+            transferFromAccountImageUrl: selfTransferRoute.fromAccountImageUrl,
+            transferToAccountName: selfTransferRoute.toAccountName,
+            transferToAccountImageUrl: selfTransferRoute.toAccountImageUrl,
+          }
+        : {}),
+      isSalary,
+      linkedLend: linkedLend
+        ? {
+            id: linkedLend.id,
+            friendName: linkedLend.friendName,
+            amount: Number(linkedLend.amount),
+            dueDate: linkedLend.dueDate,
+            status: linkedLend.status,
+            role: linkedLend.role,
+          }
+        : null,
       accountId: tx.domainAccountId,
       accountName: accountInfo?.name ?? "",
       accountImageUrl: accountInfo?.imageUrl ?? null,
@@ -441,10 +827,48 @@ export async function getDashboardTransactions(searchParams: URLSearchParams) {
 export async function getUserSettings(searchParams?: URLSearchParams) {
   const setting = await prisma.userSetting.findFirst()
 
+  let salaryPatterns: string[] = []
+  if (setting?.dashboardConfigJson) {
+    try {
+      const parsed = JSON.parse(setting.dashboardConfigJson)
+      if (Array.isArray(parsed.salaryPatterns)) {
+        salaryPatterns = parsed.salaryPatterns
+      }
+    } catch {}
+  }
+
+  let calculatedSalary = setting ? Number(setting.monthlySalary) : 0
+
+  if (salaryPatterns.length > 0) {
+    let sum = 0
+    const cutoff = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000)
+    for (const pattern of salaryPatterns) {
+      const lastTx = await prisma.domainTransaction.findFirst({
+        where: {
+          direction: "INFLOW",
+          occurredAt: { gte: cutoff },
+          OR: [
+            { description: { contains: pattern } },
+            { merchantName: { contains: pattern } },
+          ],
+        },
+        orderBy: { occurredAt: "desc" },
+      })
+
+      if (lastTx) {
+        sum += Number(lastTx.amount)
+      }
+    }
+    if (sum > 0) {
+      calculatedSalary = sum
+    }
+  }
+
   const base = {
-    monthlySalary: setting ? Number(setting.monthlySalary) : 0,
+    monthlySalary: calculatedSalary,
     showFutureSalary: setting ? setting.showFutureSalary : true,
     showFutureAccounts: setting ? setting.showFutureAccounts : true,
+    salaryPatterns,
   }
 
   if (searchParams) {
