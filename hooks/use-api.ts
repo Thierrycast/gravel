@@ -1,6 +1,8 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useCallback, useMemo } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { buildSearchParams } from "@/lib/utils"
 
 export interface UseApiError {
   title: string
@@ -17,6 +19,19 @@ interface UseApiResult<T> {
   error: string | null
   errorInfo: UseApiError | null
   refetch: () => void
+}
+
+/**
+ * Internal error type carrying structured info up through the query layer.
+ * useQuery preserves Error instances — we attach UseApiError as `.info`.
+ */
+class ApiError extends Error {
+  info: UseApiError
+  constructor(info: UseApiError) {
+    super(info.message)
+    this.info = info
+    this.name = "ApiError"
+  }
 }
 
 function titleForStatus(status: number) {
@@ -130,54 +145,48 @@ function unknownErrorInfo(error: unknown): UseApiError {
   }
 }
 
+function buildUrl(url: string, params?: Record<string, string | undefined>) {
+  const qs = buildSearchParams(params)
+  return `${url}${qs.size > 0 ? `?${qs}` : ""}`
+}
+
 export function useApi<T>(
   url: string | null,
   params?: Record<string, string | undefined>,
 ): UseApiResult<T> {
-  const [data, setData] = useState<T | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [errorInfo, setErrorInfo] = useState<UseApiError | null>(null)
+  const paramsKey = useMemo(() => (params ? JSON.stringify(params) : ""), [params])
 
-  const paramsKey = params ? JSON.stringify(params) : ""
-
-  const fetchData = useCallback(async () => {
-    if (!url) {
-      setLoading(false)
-      return
+  const queryFn = useCallback(async (): Promise<T> => {
+    if (!url) throw new ApiError({ title: "Sem URL", message: "URL ausente" })
+    const target = buildUrl(url, params)
+    const res = await fetch(target, { cache: "no-store" })
+    if (!res.ok) {
+      const info = await extractErrorInfo(res)
+      throw new ApiError(info)
     }
-    setLoading(true)
-    setError(null)
-    setErrorInfo(null)
-    try {
-      const u = new URL(url, window.location.origin)
-      if (params) {
-        Object.entries(params).forEach(([k, v]) => {
-          if (v != null && v !== "") u.searchParams.set(k, String(v))
-        })
-      }
-      const res = await fetch(u.toString(), { cache: "no-store" })
-      if (!res.ok) {
-        const apiError = await extractErrorInfo(res)
-        setErrorInfo(apiError)
-        setError(apiError.message)
-        return
-      }
-      const json = (await res.json()) as T
-      setData(json)
-    } catch (err) {
-      const apiError = unknownErrorInfo(err)
-      setErrorInfo(apiError)
-      setError(apiError.message)
-    } finally {
-      setLoading(false)
-    }
+    return (await res.json()) as T
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, paramsKey])
 
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
+  const query = useQuery<T, Error>({
+    queryKey: ["api", url ?? "noop", paramsKey],
+    queryFn,
+    enabled: !!url,
+  })
 
-  return { data, loading, error, errorInfo, refetch: fetchData }
+  const errorInfo: UseApiError | null = query.error
+    ? query.error instanceof ApiError
+      ? query.error.info
+      : unknownErrorInfo(query.error)
+    : null
+
+  return {
+    data: query.data ?? null,
+    loading: query.isPending && !!url,
+    error: errorInfo?.message ?? null,
+    errorInfo,
+    refetch: () => {
+      void query.refetch()
+    },
+  }
 }
