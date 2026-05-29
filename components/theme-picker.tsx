@@ -107,7 +107,9 @@ export function ThemePicker() {
   }
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="relative sm:contents">
+      <div className="flex gap-3 overflow-x-auto pb-4 snap-x sm:grid sm:grid-cols-2 lg:grid-cols-3 sm:overflow-visible sm:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+
       {FAMILIES.map((family) => {
         const preview = family.preview[currentMode]
         const isActive = mounted && currentFamily === family.id
@@ -118,12 +120,13 @@ export function ThemePicker() {
             onClick={() => pick(family.id)}
             aria-pressed={isActive}
             className={cn(
-              "group relative flex flex-col gap-3 rounded-lg border bg-card p-4 text-left transition-all hover:border-primary/60",
+              "group relative flex min-w-[260px] flex-1 flex-col gap-3 rounded-lg border bg-card p-4 text-left transition-all hover:border-primary/60 snap-center sm:min-w-0",
               isActive
                 ? "border-primary ring-2 ring-primary/30"
                 : "border-border",
             )}
           >
+
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <div className="text-sm font-medium">{family.name}</div>
@@ -190,6 +193,12 @@ export function ThemePicker() {
           </button>
         )
       })}
+      </div>
+      {/* Scroll affordance gradient – only visible when cards overflow (mobile) */}
+      <div
+        className="pointer-events-none absolute right-0 top-0 h-full w-10 bg-gradient-to-l from-card to-transparent sm:hidden"
+        aria-hidden
+      />
     </div>
   )
 }
