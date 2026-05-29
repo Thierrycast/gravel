@@ -43,36 +43,45 @@ const monthFmt = new Intl.DateTimeFormat("pt-BR", {
   year: "numeric",
 })
 
+const CURRENCY_ZERO_THRESHOLD = 0.005
+
+function normalizeCurrencyZero(value: number): number {
+  return Math.abs(value) < CURRENCY_ZERO_THRESHOLD ? 0 : value
+}
+
 /**
  * Format an unsigned currency value as BRL.
  * Use this when the sign is conveyed by context (e.g. an "expenses" card).
  */
 export function formatCurrency(value: number | null | undefined): string {
-  const num = value ?? 0
-  // Sanitize negative zero (IEEE 754 -0) to avoid displaying "-R$ 0,00"
-  return currencyFmt.format(num === 0 ? 0 : num)
+  const num = normalizeCurrencyZero(value ?? 0)
+  return currencyFmt.format(num)
 }
 
 export function formatCurrencyByCode(
   value: number | null | undefined,
   currencyCode?: string | null
 ): string {
-  const num = value ?? 0
+  const num = normalizeCurrencyZero(value ?? 0)
   const code = currencyCode?.trim().toUpperCase() || "BRL"
+  const isUsdAlias = code === "DOLAR" || code === "DOLLAR"
   const normalizedCode =
     code === "R$" || code === "REAL" || code === "REAIS"
       ? "BRL"
-      : code === "DOLAR" || code === "DOLLAR"
+      : isUsdAlias
         ? "USD"
         : code
 
   try {
-    return new Intl.NumberFormat(normalizedCode === "USD" ? "en-US" : "pt-BR", {
+    return new Intl.NumberFormat(
+      normalizedCode === "USD" && !isUsdAlias ? "en-US" : "pt-BR",
+      {
       style: "currency",
       currency: normalizedCode,
-    }).format(num === 0 ? 0 : num)
+      },
+    ).format(num)
   } catch {
-    return `${normalizedCode} ${numberFmt.format(num === 0 ? 0 : num)}`
+    return `${normalizedCode} ${numberFmt.format(num)}`
   }
 }
 
@@ -88,9 +97,7 @@ export function formatSignedCurrency(
   value: number | null | undefined,
   mode: "none" | "always" | "signed" = "none"
 ): string {
-  const raw = value ?? 0
-  // Sanitize negative zero
-  const num = raw === 0 ? 0 : raw
+  const num = normalizeCurrencyZero(value ?? 0)
   const formatted = currencyFmt.format(Math.abs(num))
   if (num < 0) return `−${formatted}`
   if ((mode === "always" || (mode === "signed" && num !== 0)) && num > 0) {
@@ -109,12 +116,12 @@ export function formatDelta(value: number | null | undefined): string {
 
 /** Compact form, e.g. "R$ 1,2 mil". Always positive (sign by context). */
 export function formatCurrencyCompact(value: number | null | undefined): string {
-  return currencyCompactFmt.format(value ?? 0)
+  return currencyCompactFmt.format(normalizeCurrencyZero(value ?? 0))
 }
 
 /** Smart compact: full notation under 100k, compact above. */
 export function formatCurrencySmart(value: number | null | undefined): string {
-  const num = value ?? 0
+  const num = normalizeCurrencyZero(value ?? 0)
   if (Math.abs(num) >= 100_000) return currencyCompactFmt.format(num)
   return currencyFmt.format(num)
 }
@@ -165,6 +172,17 @@ export function formatMonth(date: string | Date | null | undefined): string {
   const parsed = toValidDate(date)
   if (!parsed) return "Sem data"
   return monthFmt.format(parsed)
+}
+
+export function formatMonthYearLabel(
+  date: string | Date | null | undefined,
+  options?: { capitalize?: boolean }
+): string {
+  const parsed = toValidDate(date)
+  if (!parsed) return "Sem data"
+  const formatted = monthFmt.format(parsed).replace(/\s+de\s+/i, " de ")
+  if (!options?.capitalize) return formatted
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1)
 }
 
 export function daysUntil(date: string | Date | null | undefined): number {
