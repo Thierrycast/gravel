@@ -23,7 +23,6 @@ import {
   inferBillStatus,
   hasManualBillPayment,
   MerchantLike,
-  cleanMerchantName,
   extractDocumentFromText,
 } from "@/lib/domain/projectors/shared";
 

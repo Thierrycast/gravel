@@ -8,7 +8,7 @@ import { useCurrency } from "@/lib/currency-context";
 import { LogoImage } from "@/components/logo-image";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
-import { getCategoryEmoji, getCategoryColor } from "@/lib/category-emoji";
+import { getCategoryEmoji } from "@/lib/category-emoji";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {

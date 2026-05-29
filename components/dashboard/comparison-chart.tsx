@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
 import {
   AreaChart,
   Area,
@@ -492,7 +491,7 @@ export function ComparisonChart({
                 tickFormatter={(v) => formatCompact(Math.abs(Number(v)))}
                 width={62}
                 domain={[
-                  (dataMin: number) => {
+                  () => {
                     const allValues = chartData.flatMap(row => 
                       periods.map((_, i) => Number(row[`p${i}`] ?? 0))
                     );
@@ -501,7 +500,7 @@ export function ComparisonChart({
                     const ticks = getNiceTicks(min, max);
                     return ticks[0];
                   },
-                  (dataMax: number) => {
+                  () => {
                     const allValues = chartData.flatMap(row => 
                       periods.map((_, i) => Number(row[`p${i}`] ?? 0))
                     );

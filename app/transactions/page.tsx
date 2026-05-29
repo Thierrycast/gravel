@@ -3,7 +3,6 @@
 import {
   Suspense,
   startTransition,
-  useDeferredValue,
   useEffect,
   useMemo,
   useState,
@@ -302,7 +301,6 @@ function TransactionsContent() {
   const [searchInput, setSearchInput] = useState(query);
   const [minInput, setMinInput] = useState(minAmountStr);
   const [maxInput, setMaxInput] = useState(maxAmountStr);
-  const deferredSearchInput = useDeferredValue(searchInput);
   const [selectedTransaction, setSelectedTransaction] =
     useState<Transaction | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);

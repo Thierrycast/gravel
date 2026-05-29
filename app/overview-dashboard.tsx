@@ -16,15 +16,10 @@ import {
 import {
   ComparisonChart,
   Pills,
-  PERIOD_PALETTE,
-  PERIOD_OPTIONS,
-  METRIC_OPTIONS,
   type ChartFilters,
   type CompareResponse,
 } from "@/components/dashboard/comparison-chart";
 import {
-  Area,
-  AreaChart,
   Bar,
   CartesianGrid,
   Cell,
@@ -288,10 +283,11 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
   const [currentMonthLabel, setCurrentMonthLabel] = useState("");
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMounted(true);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCurrentMonthLabel(new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" }));
+    const timer = setTimeout(() => {
+      setMounted(true);
+      setCurrentMonthLabel(new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" }));
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
 
@@ -314,8 +310,10 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
   }, [chartFilters.periodType, chartFilters.lineCount]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (chartMode === "comparativo") fetchChartData();
+    if (chartMode === "comparativo") {
+      const timer = setTimeout(() => fetchChartData(), 0);
+      return () => clearTimeout(timer);
+    }
   }, [chartMode, fetchChartData]);
 
   function patchFilters(patch: Partial<ChartFilters>) {
@@ -643,7 +641,7 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
                       paddingAngle={2}
                       isAnimationActive={false}
                     >
-                      {pieData.map((entry, i) => (
+                      {pieData.map((entry) => (
                         <Cell key={entry.name} fill={entry.color} opacity={0.9} />
                       ))}
                     </Pie>
@@ -870,7 +868,7 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
                 <ResponsiveContainer width="50%" height="100%">
                   <PieChart>
                     <Pie data={pieData} dataKey="value" cx="50%" cy="50%" innerRadius="40%" outerRadius="76%" paddingAngle={2} isAnimationActive={false}>
-                      {pieData.map((entry, i) => (
+                      {pieData.map((entry) => (
                         <Cell key={entry.name} fill={entry.color} opacity={0.9} />
                       ))}
                     </Pie>
