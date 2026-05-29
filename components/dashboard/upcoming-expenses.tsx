@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { daysUntilLabel } from "@/lib/format";
 import { useCurrency } from "@/lib/currency-context";
 import { LogoImage } from "@/components/logo-image";
-import { getCategoryEmoji, getCategoryColor } from "@/lib/category-emoji";
+import { getCategoryEmoji } from "@/lib/category-emoji";
 import Link from "next/link";
 import { ArrowRight, Repeat } from "lucide-react";
 

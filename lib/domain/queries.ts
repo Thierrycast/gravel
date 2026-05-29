@@ -94,7 +94,6 @@ export async function getDomainTransactions(searchParams: URLSearchParams) {
   const filters = parseDomainQuery(searchParams)
   const pagination = normalizePagination(filters.page, filters.pageSize)
   let searchWhere: Prisma.DomainTransactionWhereInput[] | undefined
-  let categoryFilterIds: string[] | undefined
 
   if (filters.q) {
     const [categories, accounts, merchants] = await Promise.all([
@@ -186,7 +185,6 @@ export async function getDomainTransactions(searchParams: URLSearchParams) {
         queue.push(childId)
       }
     }
-    categoryFilterIds = Array.from(ids)
   }
 
   const where: Prisma.DomainTransactionWhereInput = {
