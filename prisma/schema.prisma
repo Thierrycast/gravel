@@ -355,6 +355,7 @@ model DomainLend {
   categoryId       String?
   domainBillId     String?
   domainTransactionId String?
+  inflowTransactionId String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }
