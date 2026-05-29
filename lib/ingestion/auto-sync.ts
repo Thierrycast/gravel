@@ -1,6 +1,13 @@
 import { prisma } from "@/lib/prisma"
-import { SourceProvider, OpsRunStatus } from "@prisma/client"
+import { Prisma, SourceProvider, OpsRunStatus } from "@prisma/client"
 import { runFullOperationalSync } from "./provider-sync"
+
+function isSchemaNotReadyError(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === "P2021" || error.code === "P2022")
+  )
+}
 
 /**
  * Checks if a full synchronization is needed based on the last successful run.
@@ -58,6 +65,10 @@ export async function checkAndTriggerAutoSync() {
 
     return { triggered: false, lastSyncAt }
   } catch (error) {
+    if (isSchemaNotReadyError(error)) {
+      return { triggered: false, status: "schema_not_ready" as const }
+    }
+
     console.error("[auto-sync] check failed:", error)
     return { triggered: false, error }
   }

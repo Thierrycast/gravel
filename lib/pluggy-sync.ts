@@ -456,9 +456,22 @@ async function syncTransactionEntity(
   })
 
   const merchant = transaction.merchant as Record<string, unknown> | null
-  const merchantCnpj = toStringOrNull(merchant?.cnpj)
-  const merchantName =
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const paymentData = transaction.paymentData as Record<string, any> | null
+
+
+
+  let merchantCnpj = toStringOrNull(merchant?.cnpj)
+  if (!merchantCnpj && paymentData?.receiver?.documentNumber?.value) {
+    merchantCnpj = toStringOrNull(paymentData.receiver.documentNumber.value)
+  }
+
+  let merchantName =
     toStringOrNull(merchant?.businessName) ?? toStringOrNull(merchant?.name)
+  if (!merchantName && paymentData?.receiver?.name) {
+    merchantName = toStringOrNull(paymentData.receiver.name)
+  }
+
 
   await prisma.pluggyTransactionRecord.upsert({
     where: { externalId },

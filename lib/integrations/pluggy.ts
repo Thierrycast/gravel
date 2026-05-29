@@ -1,32 +1,28 @@
 const defaultBaseUrl = "https://api.pluggy.ai"
 const defaultApiKeyTtlSeconds = 2 * 60 * 60
 
-function getEnv(name: string) {
-  const value = process.env[name]
-  if (!value) {
-    throw new Error(`Missing env var: ${name}`)
-  }
-  return value
+function getEnv(name: string): string | undefined {
+  return process.env[name]
 }
 
 function getBaseUrl() {
-  return process.env.PLUGGY_API_BASE ?? defaultBaseUrl
+  return getEnv("PLUGGY_API_BASE") ?? defaultBaseUrl
 }
 
 function getHeaderName() {
-  return process.env.PLUGGY_API_KEY_HEADER ?? "X-API-KEY"
+  return getEnv("PLUGGY_API_KEY_HEADER") ?? "X-API-KEY"
 }
 
 function getAuthPath() {
-  return process.env.PLUGGY_AUTH_PATH ?? "/auth"
+  return getEnv("PLUGGY_AUTH_PATH") ?? "/auth"
 }
 
 function getConnectTokenPath() {
-  return process.env.PLUGGY_CONNECT_TOKEN_PATH ?? "/connect_token"
+  return getEnv("PLUGGY_CONNECT_TOKEN_PATH") ?? "/connect_token"
 }
 
 function getApiKeyTtlSeconds() {
-  const raw = process.env.PLUGGY_API_KEY_TTL_SECONDS
+  const raw = getEnv("PLUGGY_API_KEY_TTL_SECONDS")
   if (!raw) return defaultApiKeyTtlSeconds
   const parsed = Number(raw)
   return Number.isFinite(parsed) && parsed > 0
@@ -91,6 +87,10 @@ function normalizeApiKeyResponse(data: ApiKeyResponse) {
 export async function createApiKey() {
   const clientId = getEnv("PLUGGY_CLIENT_ID")
   const clientSecret = getEnv("PLUGGY_CLIENT_SECRET")
+
+  if (!clientId || !clientSecret) {
+    throw new Error("Pluggy não configurado. Verifique as credenciais no arquivo .env")
+  }
 
   const response = await fetch(`${getBaseUrl()}${getAuthPath()}`, {
     method: "POST",
