@@ -1,4 +1,4 @@
-import { DomainTransactionDirection, Prisma } from "@prisma/client"
+import { DomainCategoryKind, DomainTransactionDirection, Prisma } from "@prisma/client"
 
 import { normalizeFinancialText, normalizeMerchantName } from "@/lib/domain/enrichment/normalization"
 import { prisma } from "@/lib/prisma"
@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma"
 const explicitInstallmentPattern =
   /(?:^|\D)(\d{1,2})\s*(?:\/|de)\s*(\d{1,2})(?:\D|$)/i
 const maxSimilarityInferredInstallments = 2
+const maxExplicitInstallmentAmountVariance = new Prisma.Decimal("1")
 
 type InstallmentCandidate = {
   id: string
@@ -18,6 +19,7 @@ type InstallmentCandidate = {
   domainCategoryId?: string | null
   domainMerchantId?: string | null
   merchantName?: string | null
+  metadataJson?: string | null
 }
 
 export function detectExplicitInstallment(text?: string | null) {
@@ -46,9 +48,14 @@ export function installmentMerchantKey(transaction: InstallmentCandidate) {
 }
 
 export function installmentDescriptionKey(transaction: InstallmentCandidate) {
+  const descriptionKey = stripInstallmentMarker(transaction.description)
+  if (detectExplicitInstallment(transaction.description) && descriptionKey) {
+    return descriptionKey
+  }
+
   return (
     stripInstallmentMarker(transaction.normalizedDescription) ??
-    stripInstallmentMarker(transaction.description) ??
+    descriptionKey ??
     installmentMerchantKey(transaction)
   )
 }
@@ -61,13 +68,13 @@ function monthIndex(date: Date) {
   return date.getUTCFullYear() * 12 + date.getUTCMonth()
 }
 
-function groupKey(transaction: InstallmentCandidate) {
+function groupKey(transaction: InstallmentCandidate, options?: { includeCategory?: boolean; includeAmount?: boolean }) {
   return [
     installmentMerchantKey(transaction),
     installmentDescriptionKey(transaction),
     transaction.domainAccountId ?? "all",
-    transaction.domainCategoryId ?? "uncategorized",
-    amountKey(transaction.amount),
+    options?.includeCategory === false ? "any-category" : transaction.domainCategoryId ?? "uncategorized",
+    options?.includeAmount === false ? "any-amount" : amountKey(transaction.amount),
   ].join(":")
 }
 
@@ -79,6 +86,41 @@ function isConsecutiveMonths(transactions: InstallmentCandidate[]) {
   })
 }
 
+function isAmountClose(left: Prisma.Decimal, right: Prisma.Decimal) {
+  return left.abs().minus(right.abs()).abs().lessThanOrEqualTo(maxExplicitInstallmentAmountVariance)
+}
+
+function splitExplicitInstallmentGroup(transactions: InstallmentCandidate[]) {
+  const sorted = [...transactions].sort((left, right) => left.occurredAt.getTime() - right.occurredAt.getTime())
+  const groups: InstallmentCandidate[][] = []
+
+  for (const transaction of sorted) {
+    const explicit = detectExplicitInstallment(transaction.description ?? transaction.normalizedDescription)
+    if (!explicit) continue
+
+    const currentGroup = groups.at(-1)
+    const previousTransaction = currentGroup?.at(-1)
+    const previousExplicit = previousTransaction
+      ? detectExplicitInstallment(previousTransaction.description ?? previousTransaction.normalizedDescription)
+      : null
+    const referenceTransaction = currentGroup?.[0]
+    const continuesCurrentGroup =
+      Boolean(currentGroup) &&
+      Boolean(previousExplicit) &&
+      explicit.total === previousExplicit?.total &&
+      explicit.current > (previousExplicit?.current ?? 0) &&
+      (!referenceTransaction || isAmountClose(transaction.amount, referenceTransaction.amount))
+
+    if (continuesCurrentGroup && currentGroup) {
+      currentGroup.push(transaction)
+    } else {
+      groups.push([transaction])
+    }
+  }
+
+  return groups
+}
+
 export function inferInstallmentGroups(transactions: InstallmentCandidate[]) {
   const candidates = transactions.filter(
     (transaction) => transaction.direction === DomainTransactionDirection.OUTFLOW || transaction.direction === "OUTFLOW"
@@ -88,7 +130,7 @@ export function inferInstallmentGroups(transactions: InstallmentCandidate[]) {
 
   for (const transaction of candidates) {
     const explicit = detectExplicitInstallment(transaction.description ?? transaction.normalizedDescription)
-    const key = groupKey(transaction)
+    const key = groupKey(transaction, { includeCategory: !explicit, includeAmount: !explicit })
     const target = explicit ? explicitGroups : similarGroups
     target.set(key, [...(target.get(key) ?? []), transaction])
   }
@@ -100,18 +142,19 @@ export function inferInstallmentGroups(transactions: InstallmentCandidate[]) {
     source: string
   }> = []
 
-  for (const group of explicitGroups.values()) {
-    const sorted = [...group].sort((left, right) => left.occurredAt.getTime() - right.occurredAt.getTime())
-    const totals = sorted
-      .map((transaction) => detectExplicitInstallment(transaction.description ?? transaction.normalizedDescription)?.total)
-      .filter((value): value is number => Boolean(value))
-    const totalInstallments = Math.max(...totals, sorted.length)
-    groups.push({
-      transactions: sorted,
-      totalInstallments,
-      confidence: new Prisma.Decimal("0.95"),
-      source: "explicit",
-    })
+  for (const groupedTransactions of explicitGroups.values()) {
+    for (const sorted of splitExplicitInstallmentGroup(groupedTransactions)) {
+      const totals = sorted
+        .map((transaction) => detectExplicitInstallment(transaction.description ?? transaction.normalizedDescription)?.total)
+        .filter((value): value is number => Boolean(value))
+      const totalInstallments = Math.max(...totals, sorted.length)
+      groups.push({
+        transactions: sorted,
+        totalInstallments,
+        confidence: new Prisma.Decimal("0.95"),
+        source: "explicit",
+      })
+    }
   }
 
   for (const group of similarGroups.values()) {
@@ -131,15 +174,72 @@ export function inferInstallmentGroups(transactions: InstallmentCandidate[]) {
   return groups
 }
 
-export async function rebuildInstallmentGroups() {
-  const transactions = await prisma.domainTransaction.findMany({
-    where: {
-      ignored: false,
-      direction: DomainTransactionDirection.OUTFLOW,
-    },
-    orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
+function hasManualCategoryOverride(transaction: InstallmentCandidate) {
+  if (!transaction.metadataJson) return false
+
+  try {
+    const metadata = JSON.parse(transaction.metadataJson) as {
+      overrides?: { categoryId?: string | null }
+    }
+    return Boolean(metadata.overrides && "categoryId" in metadata.overrides)
+  } catch {
+    return false
+  }
+}
+
+export function selectCanonicalInstallmentCategoryId(
+  transactions: InstallmentCandidate[],
+  categoryKindById = new Map<string, DomainCategoryKind>(),
+) {
+  const candidates = new Map<
+    string,
+    { count: number; firstIndex: number; kind?: DomainCategoryKind }
+  >()
+
+  for (const [index, transaction] of transactions.entries()) {
+    if (!transaction.domainCategoryId) continue
+    const current = candidates.get(transaction.domainCategoryId)
+    if (current) {
+      current.count += 1
+      continue
+    }
+    candidates.set(transaction.domainCategoryId, {
+      count: 1,
+      firstIndex: index,
+      kind: categoryKindById.get(transaction.domainCategoryId),
+    })
+  }
+
+  const entries = Array.from(candidates.entries())
+  if (entries.length === 0) return null
+
+  const nonTransferEntries = entries.filter(([, candidate]) => candidate.kind !== DomainCategoryKind.TRANSFER)
+  const pool = nonTransferEntries.length > 0 ? nonTransferEntries : entries
+
+  pool.sort((left, right) => {
+    const byCount = right[1].count - left[1].count
+    if (byCount !== 0) return byCount
+    return left[1].firstIndex - right[1].firstIndex
   })
+
+  return pool[0]?.[0] ?? null
+}
+
+export async function rebuildInstallmentGroups() {
+  const [transactions, categories] = await Promise.all([
+    prisma.domainTransaction.findMany({
+      where: {
+        ignored: false,
+        direction: DomainTransactionDirection.OUTFLOW,
+      },
+      orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
+    }),
+    prisma.domainCategory.findMany({
+      select: { id: true, kind: true },
+    }),
+  ])
   const groups = inferInstallmentGroups(transactions)
+  const categoryKindById = new Map(categories.map((category) => [category.id, category.kind]))
 
   await prisma.$transaction(async (tx) => {
     await tx.domainTransaction.updateMany({
@@ -155,13 +255,17 @@ export async function rebuildInstallmentGroups() {
       const first = group.transactions[0]
       const last = group.transactions.at(-1)
       if (!first || !last) continue
+      const canonicalCategoryId = selectCanonicalInstallmentCategoryId(
+        group.transactions,
+        categoryKindById,
+      )
 
       const createdGroup = await tx.transactionInstallmentGroup.create({
         data: {
           merchantKey: installmentMerchantKey(first),
           descriptionKey: installmentDescriptionKey(first),
           accountId: first.domainAccountId ?? null,
-          categoryId: first.domainCategoryId ?? null,
+          categoryId: canonicalCategoryId,
           amount: first.amount.abs(),
           totalInstallments: group.totalInstallments,
           firstDate: first.occurredAt,
@@ -179,6 +283,9 @@ export async function rebuildInstallmentGroups() {
             installmentGroupId: createdGroup.id,
             installmentNumber: explicit?.current ?? index + 1,
             installmentTotal: explicit?.total ?? group.totalInstallments,
+            ...(canonicalCategoryId && !hasManualCategoryOverride(transaction)
+              ? { domainCategoryId: canonicalCategoryId }
+              : {}),
           },
         })
       }
