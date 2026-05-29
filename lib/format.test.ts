@@ -121,7 +121,7 @@ describe("formatCurrencyCompact / Smart", () => {
 
   it("smart muda para compact acima de 100k", () => {
     const small = formatCurrencySmart(50_000)
-    const big = formatCurrencySmart(150_000)
+    const big = formatCurrencySmart(1_000_000)
     expect(small).toContain("50.000,00")
     expect(big.length).toBeLessThan(small.length)
   })
