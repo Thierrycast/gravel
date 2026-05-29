@@ -1,0 +1,33 @@
+export const RECURRING_DETECTION = {
+  INTERVAL_THRESHOLDS: {
+    WEEKLY: { min: 5, max: 9 },
+    BIWEEKLY: { min: 12, max: 16 },
+    MONTHLY: { min: 25, max: 35 },
+    QUARTERLY: { min: 80, max: 100 },
+    YEARLY: { min: 345, max: 385 },
+  },
+  AMOUNT_DEVIATION_FIXED: 20,
+  AMOUNT_DEVIATION_PCT: 0.15,
+  CONFIDENCE: {
+    BASE: 0.55,
+    PER_OCCURRENCE: 0.06,
+    PER_DEVIATION: 0.1,
+    MAX: 0.99,
+    MAX_OCCURRENCES_FOR_SCORE: 6,
+  },
+} as const;
+
+export const PROJECTION = {
+  DEFAULT_MONTHS: 6,
+  MIN_MONTHS: 1,
+  MAX_MONTHS: 24,
+  VARIABLE_EXPENSE_LOOKBACK_DAYS: 90,
+} as const;
+
+export const SUBSCRIPTION_DETECTION = {
+  BENFORD_ANOMALY_THRESHOLD: 5,
+  MIN_OCCURRENCES: 3,
+  MIN_HITS: 2,
+  MONTHLY_INTERVAL_MIN_DAYS: 27,
+  MONTHLY_INTERVAL_MAX_DAYS: 33,
+} as const;

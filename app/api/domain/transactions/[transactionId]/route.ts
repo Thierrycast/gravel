@@ -1,4 +1,4 @@
-import { DomainCategoryKind, DomainTransactionDirection } from "@prisma/client";
+import { DomainCategoryKind, DomainTransactionDirection, SourceProvider } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { jsonOk, jsonError } from "@/lib/core/http";
@@ -24,6 +24,56 @@ function normalizedMerchantName(name: string) {
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
+}
+
+async function findOrCreateSalaryCategory() {
+  const existing = await prisma.domainCategory.findFirst({
+    where: {
+      OR: [
+        { slug: "seed-salary" },
+        { name: { contains: "salario" } },
+        { name: { contains: "salário" } },
+      ],
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (existing) return existing;
+
+  return prisma.domainCategory.create({
+    data: {
+      slug: "seed-salary",
+      name: "Salário",
+      kind: DomainCategoryKind.INCOME,
+      color: "#10b981",
+      sourceProvider: SourceProvider.MANUAL,
+    },
+  });
+}
+
+async function findOrCreateInvestmentCategory() {
+  const existing = await prisma.domainCategory.findFirst({
+    where: {
+      OR: [
+        { slug: "seed-investments" },
+        { name: { contains: "investimento" } },
+      ],
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (existing) return existing;
+
+  return prisma.domainCategory.create({
+    data: {
+      slug: "seed-investments",
+      name: "Investimentos",
+      kind: DomainCategoryKind.EXPENSE,
+
+      color: "#f59e0b",
+      sourceProvider: SourceProvider.MANUAL,
+    },
+  });
 }
 
 export async function GET(
@@ -96,6 +146,25 @@ export async function PUT(
       if (transferCategory) {
         updateData.domainCategoryId = transferCategory.id;
       }
+    }
+
+    if (body.markAsSalary === true) {
+      if (existing.direction !== DomainTransactionDirection.INFLOW) {
+        return jsonError(
+          new Error("Apenas transações de entrada podem ser marcadas como salário"),
+          400,
+        );
+      }
+
+      const salaryCategory = await findOrCreateSalaryCategory();
+      updateData.direction = DomainTransactionDirection.INFLOW;
+      updateData.domainCategoryId = salaryCategory.id;
+    }
+
+    if (body.markAsInvestment === true) {
+      const investmentCategory = await findOrCreateInvestmentCategory();
+      updateData.direction = DomainTransactionDirection.OUTFLOW;
+      updateData.domainCategoryId = investmentCategory.id;
     }
 
     if (typeof body.merchantName === "string" && body.merchantName.trim()) {
@@ -176,6 +245,46 @@ export async function PUT(
         where: { id: transactionId },
         data: updateData,
       });
+
+      if ("domainCategoryId" in updateData && updateData.domainCategoryId) {
+        const assignedCategory = await tx.domainCategory.findUnique({
+          where: { id: String(updateData.domainCategoryId) },
+        });
+        if (
+          assignedCategory &&
+          (assignedCategory.slug === "seed-salary" ||
+            assignedCategory.name.toLowerCase() === "salario" ||
+            assignedCategory.name.toLowerCase() === "salário")
+        ) {
+          const userSetting = await tx.userSetting.upsert({
+            where: { id: "default" },
+            update: {},
+            create: { id: "default" },
+          });
+          let config: Record<string, unknown> = {};
+          if (userSetting.dashboardConfigJson) {
+            try {
+              config = JSON.parse(userSetting.dashboardConfigJson) as Record<string, unknown>;
+            } catch {}
+          }
+          const patterns = Array.isArray(config.salaryPatterns)
+            ? (config.salaryPatterns as string[]).filter(
+                (pattern) => typeof pattern === "string",
+              )
+            : [];
+          const term = existing.description ? existing.description.trim() : "";
+          if (term && !patterns.includes(term)) {
+            patterns.push(term);
+            config.salaryPatterns = patterns;
+            await tx.userSetting.update({
+              where: { id: "default" },
+              data: {
+                dashboardConfigJson: JSON.stringify(config),
+              },
+            });
+          }
+        }
+      }
 
       if ("ignored" in updateData) {
         if (updateData.ignored === true) {

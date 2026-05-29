@@ -191,18 +191,24 @@ export function PluggyConnectClient() {
   }, [])
 
   const loadToken = useCallback(async () => {
+    console.log("[PluggyConnect] Loading token...");
     setTokenState("loading")
     setTokenError(null)
     try {
       const response = await fetch("/api/pluggy/connect-token", {
         method: "POST",
       })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.details || `HTTP ${response.status}`);
+      }
       const data = await response.json()
       if (!data?.accessToken) throw new Error("Token inválido")
+      console.log("[PluggyConnect] Token loaded successfully");
       setToken(data.accessToken)
       setTokenState("ready")
     } catch (err) {
+      console.error("[PluggyConnect] Token load error:", err);
       setTokenState("error")
       setTokenError(err instanceof Error ? err.message : "Falha ao iniciar widget")
     }
@@ -234,6 +240,7 @@ export function PluggyConnectClient() {
   }, [items])
 
   function handleOpenWidget(targetItemId?: string) {
+    console.log("[PluggyConnect] Attempting to open widget. State:", tokenState);
     if (tokenState !== "ready" || !widgetRef.current) {
       setFeedback({
         tone: "negative",
@@ -564,14 +571,17 @@ export function PluggyConnectClient() {
       </div>
 
       {/* Hidden widget mount */}
-      <div className="hidden">
-        {tokenState === "ready" && token ? (
+      <div className={cn(!isOpening && "hidden")}>
+        {tokenState === "ready" && token && isOpening ? (
           <PluggyConnect
             connectToken={token}
             includeSandbox={false}
             updateItem={reconnectItemId ?? undefined}
             innerRef={(instance) => {
               widgetRef.current = instance
+              if (instance && isOpening) {
+                instance.show()
+              }
             }}
             onSuccess={(payload) =>
               void handleSuccess(payload as PluggySuccessPayload)

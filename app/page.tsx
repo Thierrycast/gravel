@@ -109,9 +109,5 @@ export default async function Page({
     },
   });
 
-  return (
-    <div className="container mx-auto py-6">
-      <OverviewDashboard initialData={initialData} />
-    </div>
-  );
+  return <OverviewDashboard initialData={initialData} />;
 }

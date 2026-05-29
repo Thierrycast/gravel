@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { DomainTransactionDirection, Prisma } from "@prisma/client"
+import { DomainCategoryKind, DomainTransactionDirection, Prisma } from "@prisma/client"
 
 import {
   detectExplicitInstallment,
   inferInstallmentGroups,
+  selectCanonicalInstallmentCategoryId,
   stripInstallmentMarker,
 } from "./installments"
 
@@ -92,5 +93,68 @@ describe("installments", () => {
     ])
 
     expect(groups).toHaveLength(0)
+  })
+
+  it("agrupa parcelas explicitas mesmo quando a categoria e centavos divergem", () => {
+    const groups = inferInstallmentGroups([
+      makeTransaction({
+        id: "tx-1",
+        description: "Amazon Prime 1/3",
+        normalizedDescription: "amazon prime 1 3",
+        amount: new Prisma.Decimal("-115.70"),
+        domainCategoryId: "cat-books",
+        occurredAt: new Date("2026-01-10T00:00:00.000Z"),
+      }),
+      makeTransaction({
+        id: "tx-2",
+        description: "Amazon Prime 2/3",
+        normalizedDescription: "amazon prime 2 3",
+        amount: new Prisma.Decimal("-115.69"),
+        domainCategoryId: "cat-streaming",
+        occurredAt: new Date("2026-02-10T00:00:00.000Z"),
+      }),
+    ])
+
+    expect(groups).toHaveLength(1)
+    expect(groups[0]?.totalInstallments).toBe(3)
+    expect(groups[0]?.source).toBe("explicit")
+  })
+
+  it("separa novo ciclo quando a numeracao explicita reinicia", () => {
+    const groups = inferInstallmentGroups([
+      makeTransaction({
+        id: "tx-1",
+        description: "Amazon Prime 11/12",
+        occurredAt: new Date("2026-03-10T00:00:00.000Z"),
+      }),
+      makeTransaction({
+        id: "tx-2",
+        description: "Amazon Prime 12/12",
+        occurredAt: new Date("2026-04-10T00:00:00.000Z"),
+      }),
+      makeTransaction({
+        id: "tx-3",
+        description: "Amazon Prime 1/12",
+        occurredAt: new Date("2026-05-10T00:00:00.000Z"),
+      }),
+    ])
+
+    expect(groups).toHaveLength(2)
+    expect(groups.map((group) => group.transactions.length)).toEqual([2, 1])
+  })
+
+  it("prefere categoria nao-transferencia ao canonizar parcelas", () => {
+    const canonical = selectCanonicalInstallmentCategoryId(
+      [
+        makeTransaction({ id: "tx-1", domainCategoryId: "cat-transfer" }),
+        makeTransaction({ id: "tx-2", domainCategoryId: "cat-shopping" }),
+      ],
+      new Map([
+        ["cat-transfer", DomainCategoryKind.TRANSFER],
+        ["cat-shopping", DomainCategoryKind.EXPENSE],
+      ]),
+    )
+
+    expect(canonical).toBe("cat-shopping")
   })
 })

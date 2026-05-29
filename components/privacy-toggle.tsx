@@ -20,6 +20,8 @@ export function PrivacyToggle() {
           size="icon-sm"
           className="size-8 text-muted-foreground hover:text-foreground"
           onClick={() => setIsPrivate(!isPrivate)}
+          aria-label={isPrivate ? "Mostrar valores" : "Ocultar valores"}
+          aria-pressed={isPrivate}
         >
           {isPrivate ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
         </Button>

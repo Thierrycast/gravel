@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 
 import { normalizeMerchantName } from "./normalization"
+import { cleanMerchantName } from "../projectors/shared"
 
 const LOGO_DEV_CDN = "https://img.logo.dev"
 const LOGO_DEV_DESCRIBE_BASE = "https://api.logo.dev/describe"
@@ -17,6 +18,59 @@ const knownMerchantDomains: Record<string, string> = {
   spotify: "spotify.com",
   uber: "uber.com",
   youtube: "youtube.com",
+  // Brazilian Banks & FinTechs
+  nubank: "nubank.com.br",
+  inter: "bancointer.com.br",
+  itau: "itau.com.br",
+  bradesco: "bradesco.com.br",
+  santander: "santander.com.br",
+  caixa: "caixa.gov.br",
+  pagseguro: "pagseguro.com.br",
+  stone: "stone.co",
+  picpay: "picpay.com",
+  neon: "neon.com.br",
+  c6: "c6bank.com.br",
+  cielo: "cielo.com.br",
+  // Delivery & Transport
+  rappi: "rappi.com.br",
+  "99": "99app.com",
+  "ze delivery": "zedelivery.com.br",
+  // E-commerce & Retail
+  mercadolivre: "mercadolivre.com.br",
+  mercadopago: "mercadopago.com.br",
+  shopee: "shopee.com.br",
+  aliexpress: "aliexpress.com",
+  shein: "shein.com",
+  magalu: "magazineluiza.com.br",
+  americanas: "americanas.com.br",
+  casasbahia: "casasbahia.com.br",
+  // Groceries & Supermarkets
+  carrefour: "carrefour.com.br",
+  "pao de acucar": "gpa.com.br",
+  extra: "extra.com.br",
+  assai: "assai.com.br",
+  "sams club": "samsclub.com.br",
+  // Pharmacies & Health
+  drogaraia: "drogaraia.com.br",
+  drogasil: "drogasil.com.br",
+  paguemenos: "paguemenos.com.br",
+  ultrafarma: "ultrafarma.com.br",
+  panvel: "panvel.com",
+  // Streaming & Games
+  steam: "steampowered.com",
+  epicgames: "epicgames.com",
+  playstation: "playstation.com",
+  xbox: "xbox.com",
+  nintendo: "nintendo.com",
+  // Gym & Wellness
+  gympass: "gympass.com",
+  wellhub: "wellhub.com",
+  smartfit: "smartfit.com.br",
+  // Food & Brands
+  starbucks: "starbucks.com",
+  mcdonalds: "mcdonalds.com.br",
+  burgerking: "burgerking.com.br",
+  cacaushow: "cacaushow.com.br",
 }
 
 function getPublishableKey() {
@@ -62,14 +116,21 @@ export function buildLogoDevCryptoUrl(asset: string) {
 }
 
 export function resolveMerchantDomain(name?: string | null) {
-  const normalized = normalizeMerchantName(name)
+  if (!name) return null
+  const cleaned = cleanMerchantName(name)
+  const normalized = normalizeMerchantName(cleaned || name)
   if (!normalized) return null
 
   const overrides = readDomainOverrides()
   if (overrides[normalized]) return overrides[normalized]
 
   for (const [needle, domain] of Object.entries({ ...knownMerchantDomains, ...overrides })) {
-    if (normalized.includes(needle)) return domain
+    if (needle === "inter" || needle === "c6") {
+      const regex = new RegExp(`\\b${needle}\\b`, "i")
+      if (regex.test(normalized)) return domain
+    } else {
+      if (normalized.includes(needle)) return domain
+    }
   }
 
   return null

@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { ArrowDownRight, ArrowUpRight, Minus, Info } from "lucide-react";
+import { useMemo } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { ArrowDownRight, ArrowUpRight, Minus, Info, ExternalLink } from "lucide-react";
 import {
   AreaChart,
   Area,
@@ -29,6 +31,8 @@ import {
 import { useApi } from "@/hooks/use-api";
 import { useCurrency } from "@/lib/currency-context";
 import { formatPercent } from "@/lib/format";
+import { usePeriod } from "@/hooks/use-period";
+import { PeriodSwitcher } from "@/components/period-switcher";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,13 +60,6 @@ interface OverviewResponse {
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
-
-const PERIOD_OPTIONS = [
-  { label: "3M", months: "3" },
-  { label: "6M", months: "6" },
-  { label: "YTD", months: "12" },
-  { label: "12M", months: "12" },
-] satisfies Array<{ label: string; months: string }>;
 
 const netChartConfig: ChartConfig = {
   net: {
@@ -148,20 +145,32 @@ function LoadingSkeleton() {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
+function monthTransactionsHref(dateStr: string, direction?: "INFLOW" | "OUTFLOW") {
+  const [year, month] = dateStr.split("-").map(Number);
+  const from = `${year}-${String(month).padStart(2, "0")}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const to = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  const params = new URLSearchParams({ period: "custom", from, to });
+  if (direction) params.set("direction", direction);
+  return `/transactions?${params.toString()}`;
+}
+
 export default function CashFlowPage() {
   const { format, formatCompact } = useCurrency();
-  const [selectedPeriod, setSelectedPeriod] = useState(PERIOD_OPTIONS[1]);
+  const period = usePeriod("180d");
+  const router = useRouter();
 
   const { data: cashFlow, loading: cashFlowLoading } = useApi<CashFlowResponse>(
     "/api/domain/metrics/cash-flow",
     {
       groupBy: "month",
-      months: selectedPeriod.months,
+      ...period.params,
     },
   );
 
   const { data: overview, loading: overviewLoading } = useApi<OverviewResponse>(
     "/api/domain/metrics/overview",
+    period.params,
   );
 
   const loading = cashFlowLoading || overviewLoading;
@@ -204,25 +213,7 @@ export default function CashFlowPage() {
             Fluxo de Caixa
           </h1>
 
-          {/* Period pills */}
-          <div className="flex items-center gap-1 rounded-lg border bg-muted/40 p-0.5">
-            {PERIOD_OPTIONS.map((option) => {
-              const active = option.label === selectedPeriod.label;
-              return (
-                <button
-                  key={option.label}
-                  onClick={() => setSelectedPeriod(option)}
-                  className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                    active
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
-          </div>
+          <PeriodSwitcher state={period} />
         </div>
 
         {/* Hero: Resultado Liquido */}
@@ -253,22 +244,30 @@ export default function CashFlowPage() {
 
           {/* Summary row */}
           <div className="mt-4 flex flex-wrap gap-4 sm:gap-6 border-t border-border/50 pt-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+            <Link
+              href={`/transactions?${new URLSearchParams({ ...period.params, direction: "INFLOW" }).toString()}`}
+              className="group cursor-pointer rounded-md p-1 -m-1 hover:bg-muted/30 transition-colors"
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground flex items-center gap-1">
                 Receitas
+                <ExternalLink className="size-2.5 opacity-0 group-hover:opacity-60 transition-opacity" />
               </p>
               <p className="mt-0.5 text-sm font-semibold tabular-nums text-emerald-400">
                 {format(totals.totalIncome)}
               </p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+            </Link>
+            <Link
+              href={`/transactions?${new URLSearchParams({ ...period.params, direction: "OUTFLOW" }).toString()}`}
+              className="group cursor-pointer rounded-md p-1 -m-1 hover:bg-muted/30 transition-colors"
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground flex items-center gap-1">
                 Despesas
+                <ExternalLink className="size-2.5 opacity-0 group-hover:opacity-60 transition-opacity" />
               </p>
               <p className="mt-0.5 text-sm font-semibold tabular-nums text-pink-400">
                 {format(totals.totalExpense)}
               </p>
-            </div>
+            </Link>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
                 Investimentos
@@ -279,7 +278,7 @@ export default function CashFlowPage() {
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                Medio Mensal
+                Médio Mensal
               </p>
               <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">
                 {format(
@@ -318,9 +317,12 @@ export default function CashFlowPage() {
             <CardContent>
               <ChartContainer
                 config={incomeChartConfig}
-                className="h-56 w-full"
+                className="h-56 w-full cursor-pointer"
               >
-                <AreaChart data={chartData}>
+                <AreaChart
+                  data={chartData}
+                  onClick={(d) => d?.activePayload?.[0]?.payload?.date && router.push(monthTransactionsHref(d.activePayload[0].payload.date, "INFLOW"))}
+                >
                   <defs>
                     <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop
@@ -474,9 +476,13 @@ export default function CashFlowPage() {
             <CardContent>
               <ChartContainer
                 config={expenseChartConfig}
-                className="h-56 w-full"
+                className="h-56 w-full cursor-pointer"
               >
-                <BarChart data={chartData} barCategoryGap="20%">
+                <BarChart
+                  data={chartData}
+                  barCategoryGap="20%"
+                  onClick={(d) => d?.activePayload?.[0]?.payload?.date && router.push(monthTransactionsHref(d.activePayload[0].payload.date, "OUTFLOW"))}
+                >
                   <CartesianGrid
                     strokeDasharray="3 3"
                     className="stroke-muted/30"
@@ -517,83 +523,99 @@ export default function CashFlowPage() {
               </ChartContainer>
             </CardContent>
           </Card>
-        </div>
 
-        {/* Net Result over time */}
-        <Card className="rounded-xl border bg-card">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                Resultado Mensal
-              </p>
-              <ChangeBadge value={overview?.summary?.netChange} />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer
-              config={netChartConfig}
-              className="h-60 w-full"
-            >
-              <BarChart data={chartData} barCategoryGap="20%">
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  className="stroke-muted/30"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                  tickFormatter={formatCompact}
-                  width={48}
-                />
-                <ReferenceLine
-                  y={0}
-                  stroke="hsl(var(--border))"
-                  strokeDasharray="3 3"
-                />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value) => format(value as number)}
-                    />
-                  }
-                />
-                <Bar
-                  dataKey="net"
-                  radius={[6, 6, 0, 0]}
-                  fill="hsl(217 91% 60%)"
-                  shape={(props: unknown) => {
-                    const { x, y, width, height, payload } = props as {
-                      x: number;
-                      y: number;
-                      width: number;
-                      height: number;
-                      payload: CashFlowItem;
-                    };
-                    const isNeg = payload.net < 0;
-                    return (
-                      <rect
-                        x={x}
-                        y={y}
-                        width={width}
-                        height={height}
-                        rx={6}
-                        fill={isNeg ? "hsl(0 72% 51%)" : "hsl(217 91% 60%)"}
+          {/* Resultado Mensal chart */}
+          <Card className="rounded-xl border bg-card">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                    Resultado Mensal
+                  </p>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="size-3 text-muted-foreground/60 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Diferença entre receitas e despesas por mês</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <ChangeBadge value={overview?.summary?.netChange} />
+              </div>
+              <CardTitle className="text-xl font-bold tabular-nums text-blue-400">
+                {format(totals.totalNet)}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ChartContainer config={netChartConfig} className="h-56 w-full cursor-pointer">
+                <BarChart
+                  data={chartData}
+                  barCategoryGap="20%"
+                  onClick={(d) => d?.activePayload?.[0]?.payload?.date && router.push(monthTransactionsHref(d.activePayload[0].payload.date))}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    className="stroke-muted/30"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="label"
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                    tickFormatter={formatCompact}
+                    width={48}
+                  />
+                  <ReferenceLine
+                    y={0}
+                    stroke="hsl(var(--border))"
+                    strokeDasharray="3 3"
+                  />
+                  <ChartTooltip
+                    content={
+                      <ChartTooltipContent
+                        formatter={(value) => format(value as number)}
                       />
-                    );
-                  }}
-                />
-              </BarChart>
-            </ChartContainer>
-          </CardContent>
-        </Card>
+                    }
+                  />
+                  <Bar
+                    dataKey="net"
+                    radius={[6, 6, 0, 0]}
+                    fill="hsl(217 91% 60%)"
+                    shape={(props: unknown) => {
+                      const { x, y, width, height, payload } = props as {
+                        x: number;
+                        y: number;
+                        width: number;
+                        height: number;
+                        payload: CashFlowItem;
+                      };
+                      const isNeg = payload.net < 0;
+                      const absHeight = Math.abs(height);
+                      const rectY = height < 0 ? y + height : y;
+                      return (
+                        <rect
+                          x={x}
+                          y={rectY}
+                          width={width}
+                          height={absHeight}
+                          rx={6}
+                          fill={isNeg ? "hsl(0 72% 51%)" : "hsl(217 91% 60%)"}
+                        />
+                      );
+                    }}
+                  />
+                </BarChart>
+              </ChartContainer>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Monthly breakdown table */}
         {chartData.length > 0 && (
@@ -603,42 +625,46 @@ export default function CashFlowPage() {
                 Detalhamento Mensal
               </p>
             </div>
-            <div className="px-2 pb-2">
-              {/* Table header */}
-              <div className="grid grid-cols-5 gap-4 px-4 pb-2 text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                <span>Mes</span>
-                <span className="text-right">Receitas</span>
-                <span className="text-right">Despesas</span>
-                <span className="text-right">Investimentos</span>
-                <span className="text-right">Resultado</span>
-              </div>
-              {/* Rows */}
-              {[...chartData].reverse().map((item) => (
-                <div
-                  key={item.date}
-                  className="grid grid-cols-5 gap-4 rounded-lg px-4 py-2.5 transition-colors hover:bg-muted/30"
-                >
-                  <span className="text-sm font-medium capitalize text-foreground">
-                    {item.label}
-                  </span>
-                  <span className="text-right text-sm tabular-nums text-emerald-400">
-                    {format(item.income)}
-                  </span>
-                  <span className="text-right text-sm tabular-nums text-pink-400">
-                    {format(item.expense)}
-                  </span>
-                  <span className="text-right text-sm tabular-nums text-amber-400">
-                    {format(item.investments ?? 0)}
-                  </span>
-                  <span
-                    className={`text-right text-sm font-medium tabular-nums ${
-                      item.net >= 0 ? "text-blue-400" : "text-red-400"
-                    }`}
-                  >
-                    {format(item.net)}
-                  </span>
+            <div className="px-2 pb-2 overflow-x-auto">
+              <div className="min-w-[600px]">
+                {/* Table header */}
+                <div className="grid grid-cols-5 gap-4 px-4 pb-2 text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                  <span>Mes</span>
+                  <span className="text-right">Receitas</span>
+                  <span className="text-right">Despesas</span>
+                  <span className="text-right">Investimentos</span>
+                  <span className="text-right">Resultado</span>
                 </div>
-              ))}
+                {/* Rows — clicking each navigates to /transactions filtered by that month */}
+                {[...chartData].reverse().map((item) => (
+                  <Link
+                    key={item.date}
+                    href={monthTransactionsHref(item.date)}
+                    className="group grid grid-cols-5 gap-4 rounded-lg px-4 py-2.5 transition-colors hover:bg-muted/30"
+                  >
+                    <span className="flex items-center gap-1 text-sm font-medium capitalize text-foreground">
+                      {item.label}
+                      <ExternalLink className="size-2.5 opacity-0 group-hover:opacity-50 transition-opacity" />
+                    </span>
+                    <span className="text-right text-sm tabular-nums text-emerald-400">
+                      {format(item.income)}
+                    </span>
+                    <span className="text-right text-sm tabular-nums text-pink-400">
+                      {format(item.expense)}
+                    </span>
+                    <span className="text-right text-sm tabular-nums text-amber-400">
+                      {format(item.investments ?? 0)}
+                    </span>
+                    <span
+                      className={`text-right text-sm font-medium tabular-nums ${
+                        item.net >= 0 ? "text-blue-400" : "text-red-400"
+                      }`}
+                    >
+                      {format(item.net)}
+                    </span>
+                  </Link>
+                ))}
+              </div>
             </div>
           </div>
         )}

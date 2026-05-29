@@ -55,6 +55,7 @@ interface PluggyItem {
   pluggyItemId: string
   connectorName: string | null
   status: string | null
+  updatedAt: string
 }
 
 interface SyncStatusResponse {
@@ -65,6 +66,7 @@ interface SyncStatusResponse {
         recentRuns: SyncRun[]
         connectedItems: number
         items: PluggyItem[]
+        lastItemUpdatedAt: string | null
       }
       binance: {
         lastRun: SyncRun | null
@@ -87,11 +89,11 @@ function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime()
   const minutes = Math.floor(diff / 60000)
   if (minutes < 1) return "agora"
-  if (minutes < 60) return `ha ${minutes} min`
+  if (minutes < 60) return `há ${minutes} min`
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `ha ${hours}h`
+  if (hours < 24) return `há ${hours}h`
   const days = Math.floor(hours / 24)
-  return `ha ${days}d`
+  return `há ${days}d`
 }
 
 function duration(start: string, end: string | null): string {
@@ -169,11 +171,11 @@ function LoadingSkeleton() {
 
 const DOMAIN_ITEMS = [
   { key: "accounts" as const, label: "Contas", icon: Wallet },
-  { key: "transactions" as const, label: "Transacoes", icon: ArrowLeftRight },
+  { key: "transactions" as const, label: "Transações", icon: ArrowLeftRight },
   { key: "bills" as const, label: "Faturas", icon: Receipt },
   { key: "investments" as const, label: "Investimentos", icon: Landmark },
-  { key: "crypto" as const, label: "Crypto", icon: Bitcoin },
-  { key: "recurring" as const, label: "Recorrencias", icon: Repeat },
+  { key: "crypto" as const, label: "Cripto", icon: Bitcoin },
+  { key: "recurring" as const, label: "Recorrências", icon: Repeat },
 ]
 
 export default function SyncPage() {
@@ -185,7 +187,7 @@ export default function SyncPage() {
     setSyncing(true)
     try {
       const res = await fetch("/api/admin/sync/full", { method: "POST" })
-      if (!res.ok) throw new Error("Falha ao iniciar sincronizacao")
+      if (!res.ok) throw new Error("Falha ao iniciar sincronização")
       // Wait a bit then refetch status
       setTimeout(() => {
         refetch()
@@ -204,15 +206,19 @@ export default function SyncPage() {
 
   const pluggy = providers?.pluggy
   const binance = providers?.binance
+  const pluggyLastActivity =
+    pluggy?.lastRun?.finishedAt ??
+    pluggy?.lastRun?.startedAt ??
+    pluggy?.lastItemUpdatedAt
 
   return (
     <div className="flex flex-col gap-6 p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Sincronizacao</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Sincronização</h1>
           <p className="text-muted-foreground">
-            Status das conexoes e sincronizacoes de dados
+            Status das conexões e sincronizações de dados
           </p>
         </div>
         <Button onClick={handleSync} disabled={syncing}>
@@ -241,10 +247,10 @@ export default function SyncPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Ultima sincronizacao</span>
+              <span className="text-muted-foreground">Última sincronização</span>
               <span className="font-medium">
-                {pluggy?.lastRun
-                  ? timeAgo(pluggy.lastRun.startedAt)
+                {pluggyLastActivity
+                  ? timeAgo(pluggyLastActivity)
                   : "Nunca"}
               </span>
             </div>
@@ -296,7 +302,7 @@ export default function SyncPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Ultima sincronizacao</span>
+              <span className="text-muted-foreground">Última sincronização</span>
               <span className="font-medium">
                 {binance?.lastRun
                   ? timeAgo(binance.lastRun.startedAt)
@@ -318,10 +324,10 @@ export default function SyncPage() {
           <CardHeader>
             <div className="flex items-center gap-2">
               <Database className="size-5 text-muted-foreground" />
-              <CardTitle>Dados Sincronizados</CardTitle>
+              <CardTitle>Dados sincronizados</CardTitle>
             </div>
             <CardDescription>
-              Total de registros por dominio
+              Total de registros por domínio
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -346,9 +352,9 @@ export default function SyncPage() {
       {/* Recent Sync Runs */}
       <Card>
         <CardHeader>
-          <CardTitle>Execucoes Recentes</CardTitle>
+          <CardTitle>Execuções recentes</CardTitle>
           <CardDescription>
-            Ultimas sincronizacoes realizadas
+            Últimas sincronizações realizadas
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -359,8 +365,8 @@ export default function SyncPage() {
                 <TableHead>Recurso</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Trigger</TableHead>
-                <TableHead>Inicio</TableHead>
-                <TableHead>Duracao</TableHead>
+                <TableHead>Início</TableHead>
+                <TableHead>Duração</TableHead>
                 <TableHead>Erro</TableHead>
               </TableRow>
             </TableHeader>
@@ -371,7 +377,7 @@ export default function SyncPage() {
                     colSpan={7}
                     className="text-center text-muted-foreground"
                   >
-                    Nenhuma execucao encontrada.
+                    Nenhuma execução registrada. O histórico começa após uma sincronização.
                   </TableCell>
                 </TableRow>
               )}

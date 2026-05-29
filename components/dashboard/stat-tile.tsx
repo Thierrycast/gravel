@@ -23,9 +23,9 @@ export function StatTile({
 }) {
   const toneClass = {
     neutral: "text-foreground",
-    positive: "text-emerald-500 dark:text-emerald-400",
-    negative: "text-rose-500 dark:text-rose-400",
-    info: "text-sky-500 dark:text-sky-400",
+    positive: "text-positive",
+    negative: "text-negative",
+    info: "text-info",
   }[tone]
 
   const Wrapper: React.ElementType = href ? Link : "div"

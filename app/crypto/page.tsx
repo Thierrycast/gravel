@@ -81,6 +81,19 @@ function formatQuantity(value: number | null | undefined) {
   return quantityFormatter.format(value ?? 0)
 }
 
+type CryptoAsset = CryptoResponse["results"][number]
+
+function getCostBasisBrl(asset: CryptoAsset): number | null {
+  if (
+    asset.costBasisMissing ||
+    asset.valueBrl == null ||
+    asset.unrealizedPnlBrl == null
+  ) {
+    return null
+  }
+  return asset.valueBrl - asset.unrealizedPnlBrl
+}
+
 function LoadingState() {
   return (
     <div className="flex flex-col gap-6">
@@ -160,6 +173,13 @@ export default function CryptoPage() {
   const pnlValue = summary.totalUnrealizedPnlBrl
   const pnlTone =
     pnlValue > 0 ? "positive" : pnlValue < 0 ? "negative" : "neutral"
+  const investmentValueBrl = results.reduce(
+    (total, asset) => total + (getCostBasisBrl(asset) ?? 0),
+    0
+  )
+  const investmentIsPartial = results.some(
+    (asset) => getCostBasisBrl(asset) == null
+  )
 
   async function handleSaveCost() {
     if (!editingAsset || !newCost) return
@@ -206,10 +226,15 @@ export default function CryptoPage() {
           tone="info"
         />
         <MetricCard
-          label={`Investimento (${currency})`}
-          value={format((summary.totalValueBrl || 0) - (summary.totalUnrealizedPnlBrl || 0))}
-          hint="Custo total de aquisição"
+          label={`Investimento apurado (${currency})`}
+          value={format(investmentValueBrl)}
+          hint={
+            investmentIsPartial
+              ? "Parcial: há ativos sem custo apurado"
+              : "Soma do custo exibido por ativo"
+          }
           icon={DollarSign}
+          muted={investmentIsPartial}
         />
         <MetricCard
           label="PnL não realizado"
@@ -264,7 +289,93 @@ export default function CryptoPage() {
             Nenhuma posição cripto encontrada.
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            <div className="space-y-3 p-3 md:hidden">
+              {results.map((asset) => {
+                const costBasisBrl = getCostBasisBrl(asset)
+                return (
+                  <article key={asset.asset} className="rounded-xl border bg-card p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <Avatar className="size-9">
+                          <AvatarImage src={asset.imageUrl || undefined} />
+                          <AvatarFallback className="bg-muted text-xs">
+                            {asset.asset.slice(0, 2)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <Link
+                            href={`/crypto/${asset.asset.toLowerCase()}`}
+                            className="font-medium text-primary hover:underline"
+                          >
+                            {asset.asset}
+                          </Link>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {formatQuantity(asset.quantity)} unidades
+                          </p>
+                        </div>
+                      </div>
+                      <p className="shrink-0 text-sm font-semibold tabular-nums">
+                        {asset.valueBrl == null ? "—" : format(asset.valueBrl)}
+                      </p>
+                    </div>
+                    <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t pt-3 text-xs">
+                      <div>
+                        <dt className="text-muted-foreground">Custo apurado</dt>
+                        <dd className="mt-0.5 font-medium tabular-nums">
+                          {costBasisBrl == null ? "—" : format(costBasisBrl)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">PnL não realizado</dt>
+                        <dd
+                          className={cn(
+                            "mt-0.5 font-medium tabular-nums",
+                            amountToneClass(asset.unrealizedPnlBrl)
+                          )}
+                        >
+                          {asset.unrealizedPnlBrl == null
+                            ? "—"
+                            : format(asset.unrealizedPnlBrl)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">Portfólio</dt>
+                        <dd className="mt-0.5 font-medium tabular-nums">
+                          {formatSignedPercent(asset.portfolioSharePercent).replace("+", "")}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">Variação 24h</dt>
+                        <dd
+                          className={cn(
+                            "mt-0.5 font-medium tabular-nums",
+                            amountToneClass(asset.change24hPercent)
+                          )}
+                        >
+                          {asset.change24hPercent == null
+                            ? "—"
+                            : formatSignedPercent(asset.change24hPercent)}
+                        </dd>
+                      </div>
+                    </dl>
+                    {asset.costBasisMissing ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingAsset({ asset: asset.asset, currentCost: asset.averagePriceBrl || 0 })
+                          setNewCost(asset.averagePriceBrl?.toString() || "")
+                        }}
+                        className="mt-3 text-xs text-amber-600 underline-offset-4 hover:underline dark:text-amber-400"
+                      >
+                        Definir custo para reconciliar esta posição
+                      </button>
+                    ) : null}
+                  </article>
+                )
+              })}
+            </div>
+            <div className="hidden overflow-x-auto md:block [&_table]:min-w-[1080px]">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -273,13 +384,17 @@ export default function CryptoPage() {
                   <TableHead className="text-right">Preço médio</TableHead>
                   <TableHead className="text-right">Preço atual</TableHead>
                   <TableHead className="text-right">Valor ({currency})</TableHead>
+                  <TableHead className="text-right">Custo apurado</TableHead>
+                  <TableHead className="text-right">PnL não realizado</TableHead>
                   <TableHead className="text-right">% do portfólio</TableHead>
                   <TableHead className="text-right">PnL Realizado</TableHead>
                   <TableHead className="text-right">Variação 24h</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {results.map((asset) => (
+                {results.map((asset) => {
+                  const costBasisBrl = getCostBasisBrl(asset)
+                  return (
                   <TableRow key={asset.asset}>
                     <TableCell>
                       <div className="flex items-center gap-3">
@@ -294,7 +409,8 @@ export default function CryptoPage() {
                             {asset.asset}
                           </Link>
                           {asset.costBasisMissing ? (
-                          <button 
+                          <button
+                            type="button"
                             onClick={() => {
                               setEditingAsset({ asset: asset.asset, currentCost: asset.averagePriceBrl || 0 })
                               setNewCost(asset.averagePriceBrl?.toString() || "")
@@ -327,6 +443,17 @@ export default function CryptoPage() {
                     <TableCell className="text-right font-medium tabular-nums">
                       {asset.valueBrl == null ? "—" : format(asset.valueBrl)}
                     </TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">
+                      {costBasisBrl == null ? "—" : format(costBasisBrl)}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right font-medium tabular-nums",
+                        amountToneClass(asset.unrealizedPnlBrl)
+                      )}
+                    >
+                      {asset.unrealizedPnlBrl == null ? "—" : format(asset.unrealizedPnlBrl)}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums text-muted-foreground">
                       {asset.valueBrl == null
                         ? "—"
@@ -351,10 +478,12 @@ export default function CryptoPage() {
                         : formatSignedPercent(asset.change24hPercent)}
                     </TableCell>
                   </TableRow>
-                ))}
+                  )
+                })}
               </TableBody>
             </Table>
           </div>
+          </>
         )}
       </section>
       <Dialog open={!!editingAsset} onOpenChange={(open) => !open && setEditingAsset(null)}>
