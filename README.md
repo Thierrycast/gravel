@@ -15,9 +15,12 @@ Construído com **Next.js 16**, **React 19**, **Prisma** e **SQLite** — uma ar
 ## 🚀 Tech Stack
 
 - **Frontend**: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, shadcn/ui, Recharts, d3-sankey
+- **Estado / Cache**: TanStack Query (com persist em localStorage — stale-while-revalidate, abre instantâneo offline)
+- **Navegação**: `next-view-transitions` (cross-fade nativo entre rotas, Safari 18+/Chrome 111+)
 - **Backend**: Next.js API Routes, Prisma ORM
 - **Banco de Dados**: SQLite (arquivo único, zero dor de cabeça)
 - **Integrações**: Pluggy (Open Finance BR), Binance (Crypto)
+- **Resiliência**: retries exponenciais nas cotações USD/BRL; banner de falha de sync lendo `OpsSyncRun`
 - **Testes**: Vitest (Unit)
 - **Deploy**: Dockerfile multi-stage (imagem autossuficiente ~470MB)
 
@@ -86,6 +89,7 @@ INTERNAL_API_KEY=
 - 🏗️ [Arquitetura](docs/architecture.md) — Camadas, esquema de dados e fluxo da aplicação.
 - 📖 [API Reference](docs/api-reference.md) — Endpoints e exemplos de requisição.
 - 🔌 [Integração Pluggy](docs/pluggy.md) — Detalhes do Open Finance.
+- 🧪 [Pluggy Trial e Sandbox](docs/pluggy-trial-guide.md) — Como testar sem plano pago.
 - 🪙 [Integração Binance](docs/binance.md) — Detalhes da sincronização de criptomoedas.
 - 🖥️ [CLI](docs/cli.md) — Guia da linha de comando do Gravel.
 
