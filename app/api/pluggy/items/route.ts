@@ -29,7 +29,8 @@ export async function GET() {
           connectorName: liveItem?.connector?.name ?? item.connectorName,
           status: liveItem?.status ?? item.status,
         }
-      } catch {
+      } catch (err) {
+        console.warn(`[pluggy/items] failed to sync item ${item.pluggyItemId}:`, err)
         return item
       }
     })
