@@ -32,16 +32,28 @@ interface RecurringExpenseRule {
   lastDate: string
   confidence: number
   isManual: boolean
+  isInstallment?: boolean
+  currentInstallment?: number
+  totalInstallments?: number
 }
 
 interface RecurringExpenseSummary {
   totalMonthlyExpenses: number
+  fixedMonthlyExpenses: number
+  installmentMonthlyExpenses: number
+  referenceMonth: string
   count: number
 }
 
 interface RecurringExpenseData {
   rules: RecurringExpenseRule[]
   summary: RecurringExpenseSummary
+  monthlyTotals: Array<{
+    month: number
+    fixed: number
+    installments: number
+    total: number
+  }>
 }
 
 const frequencyLabel: Record<string, string> = {
@@ -72,22 +84,25 @@ const MONTH_FULL = [
 export default function RecurringExpensesPage() {
   const { format, formatCompact } = useCurrency()
   const currentMonth = new Date().getMonth()
-  const { data, loading, error, refetch } = useApi<RecurringExpenseData>("/api/recurring/expenses")
+  const currentYear = new Date().getFullYear()
+  const { data, loading, error, refetch } = useApi<RecurringExpenseData>("/api/recurring/expenses", {
+    year: String(currentYear),
+    month: String(currentMonth + 1),
+  })
   
   if (error) {
     return <PageError message="Erro ao carregar despesas recorrentes" refetch={refetch} />
   }
   const rules = data?.rules ?? []
-  const monthlyTotal = rules.reduce(
-    (sum, r) => sum + Math.abs(Number(r.amount)),
-    0
-  )
+  const monthlyTotal = data?.summary.totalMonthlyExpenses ?? 0
 
   const chartData = (() => {
-    if (rules.length === 0) return []
-    return MONTHS.map((month) => ({
+    if (!data) return []
+    return MONTHS.map((month, index) => ({
       month,
-      expenses: monthlyTotal,
+      expenses: data.monthlyTotals[index]?.total ?? 0,
+      fixed: data.monthlyTotals[index]?.fixed ?? 0,
+      installments: data.monthlyTotals[index]?.installments ?? 0,
     }))
   })()
 
@@ -116,11 +131,11 @@ export default function RecurringExpensesPage() {
       <div className="rounded-xl border bg-card p-6">
         <div className="flex items-center justify-between mb-4">
           <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-            Este ano / {new Date().getFullYear()}
+            Este ano / {currentYear}
           </p>
           <div className="flex items-center gap-2">
             <div className="size-2.5 rounded-full bg-rose-500" />
-            <span className="text-xs text-muted-foreground">Despesas Recorrentes</span>
+            <span className="text-xs text-muted-foreground">Fixas + parcelas devidas</span>
           </div>
         </div>
 
@@ -150,6 +165,14 @@ export default function RecurringExpensesPage() {
           {/* Month summary */}
           <div className="w-44 rounded-lg border bg-popover p-4 shrink-0 hidden lg:block">
             <div className="text-sm font-semibold mb-2">{MONTH_FULL[currentMonth]}</div>
+            <div className="flex justify-between text-xs text-muted-foreground mb-1">
+              <span>Fixas</span>
+              <span>{format(data?.summary.fixedMonthlyExpenses ?? 0)}</span>
+            </div>
+            <div className="flex justify-between text-xs text-muted-foreground mb-2">
+              <span>Parcelas</span>
+              <span>{format(data?.summary.installmentMonthlyExpenses ?? 0)}</span>
+            </div>
             <div className="border-t pt-2 flex justify-between">
               <span className="text-sm font-semibold">Total</span>
               <span className="text-sm font-bold tabular-nums text-pink-400">
@@ -164,7 +187,7 @@ export default function RecurringExpensesPage() {
       <div>
         <div className="mb-4">
           <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-            Despesas Recorrentes
+            Despesas recorrentes e parcelas ativas
           </h3>
         </div>
 
@@ -190,7 +213,9 @@ export default function RecurringExpensesPage() {
                         {rule.category}
                       </Badge>
                       <Badge variant="outline" className="text-xs">
-                        {frequencyLabel[rule.frequency] ?? rule.frequency}
+                        {rule.isInstallment
+                          ? `Parcela ${rule.currentInstallment ?? 0}/${rule.totalInstallments ?? "?"}`
+                          : (frequencyLabel[rule.frequency] ?? rule.frequency)}
                       </Badge>
                     </div>
                   </div>

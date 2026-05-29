@@ -166,9 +166,16 @@ export default function RecurringIncomePage() {
         </div>
 
         {rules.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-8 text-center">
-            Nenhuma receita recorrente encontrada.
-          </p>
+          <div className="rounded-xl border border-dashed border-muted/50 p-8 text-center space-y-2">
+            <p className="text-sm font-medium text-muted-foreground">Nenhuma receita recorrente detectada</p>
+            <p className="text-xs text-muted-foreground/70 max-w-xs mx-auto">
+              Receitas recorrentes são identificadas automaticamente a partir do histórico de transações. Entradas com padrão mensal consistente (salário, aluguéis, freelance) aparecerão aqui após a sincronização.
+            </p>
+            <p className="text-xs text-muted-foreground/60 mt-2">
+              Dica: você pode marcar entradas individualmente como &quot;Salário&quot; na tela de Transações.
+            </p>
+
+          </div>
         ) : (
           <div className="space-y-2">
             {rules.map((rule) => (

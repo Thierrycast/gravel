@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import {
   RefreshCw,
@@ -9,7 +10,11 @@ import {
   Save,
   Loader2,
   Shield,
-  Palette
+  Palette,
+  Plus,
+  X,
+  Tags,
+  Sparkles
 } from "lucide-react"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -20,9 +25,11 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { ThemePicker } from "@/components/theme-picker"
 import { useApi } from "@/hooks/use-api"
+import { useCurrency } from "@/lib/currency-context"
 
 type SettingsFormData = {
   monthlySalary: number
+  effectiveMonthlySalary?: number
   showFutureSalary: boolean
   showFutureAccounts: boolean
   syncIntervalHours: number
@@ -32,9 +39,36 @@ type SettingsFormData = {
   vaultInactivityMin: number
 }
 
+type SalarySource = {
+  pattern: string
+  lastAmount: number | null
+  lastDate: string | null
+  lastDescription: string | null
+}
+
+type SalarySuggestion = {
+  pattern: string
+  averageAmount: number
+  lastDate: string
+  lastDescription: string
+}
+
+type SettingsResponse = SettingsFormData & {
+  salaryPatterns?: string[]
+  salarySources?: SalarySource[]
+  salarySuggestions?: SalarySuggestion[]
+}
+
 export default function SettingsPage() {
-  const { data: settings, loading, refetch } = useApi<SettingsFormData>("/api/settings")
+  const { data: settings, loading, refetch } =
+    useApi<SettingsResponse>("/api/settings")
+  const queryClient = useQueryClient()
+  const { format } = useCurrency()
   const [saving, setSaving] = useState(false)
+  const [salaryPatterns, setSalaryPatterns] = useState<string[]>([])
+  const [salarySources, setSalarySources] = useState<SalarySource[]>([])
+  const [salarySuggestions, setSalarySuggestions] = useState<SalarySuggestion[]>([])
+  const [newPattern, setNewPattern] = useState("")
   const [formData, setFormData] = useState<SettingsFormData>({
     monthlySalary: 0,
     showFutureSalary: false,
@@ -58,8 +92,73 @@ export default function SettingsPage() {
         vaultMasterPassword: settings.vaultMasterPassword || "",
         vaultInactivityMin: settings.vaultInactivityMin,
       })
+      if (Array.isArray(settings.salaryPatterns)) {
+        setSalaryPatterns(settings.salaryPatterns)
+      }
+      if (Array.isArray(settings.salarySources)) {
+        setSalarySources(settings.salarySources)
+      }
+      if (Array.isArray(settings.salarySuggestions)) {
+        setSalarySuggestions(settings.salarySuggestions)
+      }
     }
   }, [settings])
+
+  async function addPattern() {
+    const trimmed = newPattern.trim()
+    if (!trimmed || salaryPatterns.includes(trimmed)) return
+    const updated = [...salaryPatterns, trimmed]
+    
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ salaryPatterns: updated }),
+      })
+      if (!res.ok) throw new Error("Falha ao salvar padrão")
+      setNewPattern("")
+      toast.success(`Fonte "${trimmed}" cadastrada! (Prepare-se para o cascalho)`)
+      void queryClient.invalidateQueries({ queryKey: ["api"] })
+      refetch()
+    } catch {
+      toast.error("Erro ao adicionar fonte de salário")
+    }
+  }
+
+  async function acceptSuggestion(pattern: string) {
+    if (salaryPatterns.includes(pattern)) return
+    const updated = [...salaryPatterns, pattern]
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ salaryPatterns: updated }),
+      })
+      if (!res.ok) throw new Error("Falha ao salvar padrão")
+      toast.success(`Fonte "${pattern}" ativada! (O Toá do passado e do futuro está garantido)`)
+      void queryClient.invalidateQueries({ queryKey: ["api"] })
+      refetch()
+    } catch {
+      toast.error("Erro ao aceitar sugestão de salário")
+    }
+  }
+
+  async function removePattern(pattern: string) {
+    const updated = salaryPatterns.filter((p) => p !== pattern)
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ salaryPatterns: updated }),
+      })
+      if (!res.ok) throw new Error("Falha ao remover padrão")
+      toast.success(`Fonte "${pattern}" removida (Adeus a esse cascalho?)`)
+      void queryClient.invalidateQueries({ queryKey: ["api"] })
+      refetch()
+    } catch {
+      toast.error("Erro ao remover fonte de salário")
+    }
+  }
 
   async function saveSettings() {
     setSaving(true)
@@ -71,6 +170,7 @@ export default function SettingsPage() {
       })
       if (!res.ok) throw new Error("Falha ao salvar")
       toast.success("Configurações salvas! Seu cascalho agradece.")
+      void queryClient.invalidateQueries({ queryKey: ["api"] })
       refetch()
     } catch {
       toast.error("Erro ao salvar configurações")
@@ -125,7 +225,7 @@ export default function SettingsPage() {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="vaultInactivity">Bloqueio Automático (Inatividade em Minutos)</Label>
+                <Label htmlFor="vaultInactivity">Bloquear após inatividade (minutos)</Label>
                 <div className="flex items-center gap-3">
                   <Input 
                     id="vaultInactivity" 
@@ -168,26 +268,33 @@ export default function SettingsPage() {
           <CardContent className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="syncInterval">Intervalo de Pooling (Horas)</Label>
+                <Label htmlFor="syncInterval">Atualização automática (horas)</Label>
                 <Input 
                   id="syncInterval" 
                   type="number" 
                   value={formData.syncIntervalHours}
                   onChange={(e) => setFormData({ ...formData, syncIntervalHours: parseInt(e.target.value) })}
                 />
+                <p className="text-xs text-muted-foreground">
+                  O sistema revisita suas contas para buscar novos dados a cada X horas.
+                </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="lookback">Lookback Window (Dias)</Label>
+                <Label htmlFor="lookback">Período de busca (dias)</Label>
                 <Input 
                   id="lookback" 
                   type="number" 
                   value={formData.syncLookbackDays}
                   onChange={(e) => setFormData({ ...formData, syncLookbackDays: parseInt(e.target.value) })}
                 />
+                <p className="text-xs text-muted-foreground">
+                  O app procura transações ocorridas nos últimos X dias em cada sincronização.
+                </p>
               </div>
             </div>
           </CardContent>
         </Card>
+
 
         {/* Financial Core */}
         <Card>
@@ -211,6 +318,12 @@ export default function SettingsPage() {
                   onChange={(e) => setFormData({ ...formData, monthlySalary: parseFloat(e.target.value) })}
                 />
               </div>
+              {(!formData.showFutureSalary || formData.monthlySalary <= 0) && (
+                <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+                  A projeção não incluirá salário enquanto houver valor zero ou
+                  a opção de projetar salário estiver desligada.
+                </p>
+              )}
             </div>
             
             <Separator />
@@ -236,6 +349,118 @@ export default function SettingsPage() {
                 onCheckedChange={(checked) => setFormData({ ...formData, showFutureAccounts: checked })}
               />
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Salary Patterns */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Tags className="size-5 text-primary" />
+              <CardTitle>Padrões de Salário</CardTitle>
+            </div>
+            <CardDescription>
+              Adicione palavras-chave para identificar automaticamente transações de salário (ex: &quot;Nubank&quot;, &quot;Salário&quot;, &quot;XYZ SA&quot;).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {salarySuggestions.length > 0 && (
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-primary font-semibold text-sm">
+                  <Sparkles className="size-4 animate-pulse" />
+                  <span>Sugestões de Salário Detectadas</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Identificamos depósitos recorrentes com valores parecidos nos últimos meses. Deseja rastrear alguma dessas fontes como seu salário?
+                </p>
+                <div className="grid gap-2">
+                  {salarySuggestions.map((sug) => (
+                    <div
+                      key={sug.pattern}
+                      className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3 transition-all hover:border-primary/30"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <span className="font-semibold text-xs block truncate text-foreground">{sug.pattern}</span>
+                        <span className="text-[10px] text-muted-foreground block truncate">
+                          Média: {format(sug.averageAmount)}/mês • Última: {sug.lastDescription || sug.pattern} ({new Date(sug.lastDate).toLocaleDateString("pt-BR")})
+                        </span>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => acceptSuggestion(sug.pattern)}
+                        className="gap-1.5 px-2.5 h-8 shrink-0 border-primary/30 text-primary hover:bg-primary/10 hover:text-primary transition-all text-xs font-medium"
+                      >
+                        <Sparkles className="size-3" />
+                        Sim, é meu salário
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Input
+                placeholder="Ex: Nubank, Salário, XYZ SA..."
+                value={newPattern}
+                onChange={(e) => setNewPattern(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addPattern() } }}
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={addPattern}
+                disabled={!newPattern.trim()}
+                className="gap-1.5 shrink-0"
+              >
+                <Plus className="size-4" />
+                Adicionar
+              </Button>
+            </div>
+
+            {salarySources.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic">Nenhuma fonte de salário cadastrada ainda. Marque uma transação de entrada como salário na lista de transações para começar!</p>
+            ) : (
+              <div className="grid gap-3">
+                {salarySources.map((source) => (
+                  <div
+                    key={source.pattern}
+                    className="flex items-center justify-between gap-4 rounded-xl border bg-muted/30 p-3.5 transition-all hover:bg-muted/50"
+                  >
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-sm truncate">{source.pattern}</span>
+                        <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Ativa</span>
+                      </div>
+                      {source.lastDescription ? (
+                        <p className="text-xs text-muted-foreground truncate">
+                          Última: {source.lastDescription} • {new Date(source.lastDate!).toLocaleDateString("pt-BR")}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic">Nenhuma transação recebida ainda no período de busca.</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      {source.lastAmount !== null && (
+                        <span className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                          {format(source.lastAmount)}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removePattern(source.pattern)}
+                        className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all"
+                        aria-label={`Remover fonte ${source.pattern}`}
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
