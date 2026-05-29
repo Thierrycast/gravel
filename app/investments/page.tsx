@@ -54,6 +54,15 @@ const TYPE_LABELS: Record<string, string> = {
   OTHER: "Outros",
 }
 
+const INACTIVE_INVESTMENT_STATUSES = new Set([
+  "CANCELLED",
+  "CLOSED",
+  "REDEEMED",
+  "SOLD",
+  "TOTAL_WITHDRAWAL",
+  "WITHDRAWN",
+])
+
 function getTypeLabel(type: string | null): string {
   if (!type) return "Outros"
   return TYPE_LABELS[type] ?? type
@@ -90,6 +99,14 @@ function getStatusLabel(status: string | null): string {
 function toNumber(value: string | number | null | undefined): number {
   if (value == null) return 0
   return typeof value === "string" ? parseFloat(value) || 0 : value
+}
+
+function isActiveInvestmentPosition(investment: Investment): boolean {
+  const status = investment.status?.trim().toUpperCase()
+  return (
+    Math.abs(toNumber(investment.balance)) > 0 &&
+    !INACTIVE_INVESTMENT_STATUSES.has(status ?? "")
+  )
 }
 
 function currencyCodeOf(value?: string | null) {
@@ -155,11 +172,12 @@ export default function InvestmentsPage() {
 
   const investments = useMemo(() => data?.results ?? [], [data])
 
-  const { byCurrency, positionCount, byType } = useMemo(() => {
+  const { byCurrency, activePositionCount, byType } = useMemo(() => {
     const currencyMap = new Map<string, { count: number; balance: number }>()
     const typeMap = new Map<string, { count: number }>()
+    const activeInvestments = investments.filter(isActiveInvestmentPosition)
 
-    for (const inv of investments) {
+    for (const inv of activeInvestments) {
       const currencyCode = currencyCodeOf(inv.currencyCode)
       const bal = toNumber(inv.balance)
       const currency = currencyMap.get(currencyCode) ?? { count: 0, balance: 0 }
@@ -186,7 +204,7 @@ export default function InvestmentsPage() {
 
     return {
       byCurrency: byCurrencyArr,
-      positionCount: investments.length,
+      activePositionCount: activeInvestments.length,
       byType: byTypeArr,
     }
   }, [investments])
@@ -237,7 +255,7 @@ export default function InvestmentsPage() {
             <CardHeader>
               <CardDescription className="flex items-center gap-1.5">
                 <TrendingUp className="size-3.5" />
-                Total por moeda
+                Total ativo por moeda
               </CardDescription>
               <CardTitle className="space-y-1 text-base">
                 {byCurrency.length === 0 ? (
@@ -264,24 +282,26 @@ export default function InvestmentsPage() {
             <CardHeader>
               <CardDescription className="flex items-center gap-1.5">
                 <Layers className="size-3.5" />
-                Posições
+                Posições ativas
               </CardDescription>
-              <CardTitle className="text-2xl">{positionCount}</CardTitle>
+              <CardTitle className="text-2xl">{activePositionCount}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
             <CardHeader>
               <CardDescription className="flex items-center gap-1.5">
                 <BarChart3 className="size-3.5" />
-                Por Tipo
+                Ativas por tipo
               </CardDescription>
               <CardTitle className="text-sm font-normal">
                 <div className="flex flex-wrap gap-2 mt-1">
-                  {byType.map((t) => (
-                    <Badge key={t.type} variant="secondary">
-                      {t.type}: {t.count}
-                    </Badge>
-                  ))}
+                  {byType.length === 0
+                    ? "—"
+                    : byType.map((t) => (
+                        <Badge key={t.type} variant="secondary">
+                          {t.type}: {t.count}
+                        </Badge>
+                      ))}
                 </div>
               </CardTitle>
             </CardHeader>

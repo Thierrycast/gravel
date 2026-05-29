@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Area,
   CartesianGrid,
@@ -13,7 +13,10 @@ import {
   YAxis,
 } from "recharts";
 
+import { useCurrency } from "@/lib/currency-context";
+
 type ChartMode = "price" | "pnl" | "quantity" | "invested";
+type ChartPeriod = "1M" | "3M" | "6M" | "1A" | "Tudo";
 
 export type CryptoAssetChartPoint = {
   date: string;
@@ -39,20 +42,27 @@ const chartModes: Array<{ key: ChartMode; label: string }> = [
   { key: "invested", label: "Investido" },
 ];
 
-function formatCurrency(value: number) {
-  return value.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    maximumFractionDigits: Math.abs(value) >= 1000 ? 0 : 2,
-  });
-}
+const chartPeriods: Array<{ key: ChartPeriod; label: string; days: number | null }> = [
+  { key: "1M", label: "1M", days: 30 },
+  { key: "3M", label: "3M", days: 90 },
+  { key: "6M", label: "6M", days: 180 },
+  { key: "1A", label: "1A", days: 365 },
+  { key: "Tudo", label: "Tudo", days: null },
+];
 
 function formatQuantity(value: number) {
   return value.toLocaleString("pt-BR", { maximumFractionDigits: 8 });
 }
 
-function formatValue(mode: ChartMode, value: number) {
-  return mode === "quantity" ? formatQuantity(value) : formatCurrency(value);
+export function CryptoCurrencyValue({
+  value,
+  fallback = "—",
+}: {
+  value: number | null | undefined;
+  fallback?: string;
+}) {
+  const { format } = useCurrency();
+  return <>{value == null ? fallback : format(value)}</>;
 }
 
 export function CryptoAssetChart({
@@ -66,7 +76,14 @@ export function CryptoAssetChart({
   currentPrice?: number | null;
   operations: CryptoAssetOperationMarker[];
 }) {
+  const { format } = useCurrency();
   const [mode, setMode] = useState<ChartMode>("price");
+  const [selectedPeriod, setSelectedPeriod] = useState<ChartPeriod>("1A");
+  const formatValue = useCallback(
+    (selectedMode: ChartMode, value: number) =>
+      selectedMode === "quantity" ? formatQuantity(value) : format(value),
+    [format],
+  );
   const markerData = useMemo(
     () =>
       operations.map((operation) => ({
@@ -76,8 +93,24 @@ export function CryptoAssetChart({
     [operations],
   );
 
+  const periodDays = chartPeriods.find((p) => p.key === selectedPeriod)?.days ?? null;
+
+  const filteredData = useMemo(() => {
+    if (periodDays === null) return data;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - periodDays);
+    return data.filter((point) => new Date(point.date) >= cutoff);
+  }, [data, periodDays]);
+
+  const filteredMarkerData = useMemo(() => {
+    if (periodDays === null) return markerData;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - periodDays);
+    return markerData.filter((op) => new Date(op.date) >= cutoff);
+  }, [markerData, periodDays]);
+
   const [min, max] = useMemo(() => {
-    const values = data.map((point) => point[mode]).filter(Number.isFinite);
+    const values = filteredData.map((point) => point[mode]).filter(Number.isFinite);
     if (mode === "price") {
       if (averagePrice != null) values.push(averagePrice);
       if (currentPrice != null) values.push(currentPrice);
@@ -91,31 +124,49 @@ export function CryptoAssetChart({
       1,
     );
     return [minValue - padding, maxValue + padding];
-  }, [averagePrice, currentPrice, data, mode]);
+  }, [averagePrice, currentPrice, filteredData, mode]);
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap gap-1">
-        {chartModes.map((option) => (
-          <button
-            key={option.key}
-            type="button"
-            onClick={() => setMode(option.key)}
-            className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-              mode === option.key
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted/60 text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-1">
+          {chartModes.map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => setMode(option.key)}
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                mode === option.key
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted/60 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {chartPeriods.map((period) => (
+            <button
+              key={period.key}
+              type="button"
+              onClick={() => setSelectedPeriod(period.key)}
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                selectedPeriod === period.key
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted/60 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {period.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="h-72 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
-            data={data}
+            data={filteredData}
             margin={{ top: 12, right: 8, left: 0, bottom: 0 }}
           >
             <defs>
@@ -174,8 +225,8 @@ export function CryptoAssetChart({
                       <div className="mt-2 border-t pt-2 text-xs text-muted-foreground">
                         <div>{marker.type === "BUY" ? "Compra" : "Venda"}</div>
                         <div>Qtd. {formatQuantity(marker.quantity)}</div>
-                        <div>Preço {formatCurrency(marker.price)}</div>
-                        <div>Total {formatCurrency(marker.total)}</div>
+                        <div>Preço {format(marker.price)}</div>
+                        <div>Total {format(marker.total)}</div>
                       </div>
                     ) : null}
                   </div>
@@ -215,10 +266,11 @@ export function CryptoAssetChart({
               strokeWidth={2}
               isAnimationActive={false}
             />
-            {mode === "price" && markerData.length > 0 && (
+            {mode === "price" && filteredMarkerData.length > 0 && (
               <Scatter
-                data={markerData}
+                data={filteredMarkerData}
                 dataKey="operationPrice"
+                isAnimationActive={false}
                 shape={(props: unknown) => {
                   const { cx, cy, payload } = props as {
                     cx: number;
