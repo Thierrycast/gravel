@@ -30,6 +30,20 @@ export interface Transaction {
   merchantName: string | null;
   effectiveMerchant?: string | null;
   merchantLogoUrl?: string | null;
+  isSalary?: boolean;
+  isSelfTransfer?: boolean;
+  transferFromAccountName?: string | null;
+  transferFromAccountImageUrl?: string | null;
+  transferToAccountName?: string | null;
+  transferToAccountImageUrl?: string | null;
+  linkedLend?: {
+    id: string;
+    friendName: string;
+    amount: number;
+    dueDate: string;
+    status: string;
+    role: "loan-outflow" | "payment-inflow";
+  } | null;
   enrichmentStatus?: string | null;
   installmentGroupId?: string | null;
   installmentNumber?: number | null;

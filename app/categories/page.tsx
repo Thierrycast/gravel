@@ -563,7 +563,7 @@ function AutomacoesTab() {
               <select
                 value={matchField}
                 onChange={(e) => setMatchField(e.target.value)}
-                className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                className="h-9 w-full rounded-md border bg-background px-3 text-base md:text-sm"
               >
                 <option value="description">Descrição</option>
                 <option value="merchantName">Nome do Comerciante</option>
@@ -699,6 +699,8 @@ function CategoriesPageContent() {
     {
       ...period.params,
       limit: "30",
+      showFutureAccounts: String(showFuture),
+      showFutureSalary: String(showSalary),
     },
   );
 
@@ -866,15 +868,15 @@ function CategoriesPageContent() {
       />
 
       {/* Tab navigation */}
-      <div className="flex gap-1 rounded-lg bg-muted p-1">
+      <div className="flex max-w-full gap-1 overflow-x-auto rounded-lg bg-muted p-1 whitespace-nowrap scrollbar-none [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {tabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+            className={`flex shrink-0 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all ${
               activeTab === tab.key
                 ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-background/20"
             }`}
           >
             {tab.icon}

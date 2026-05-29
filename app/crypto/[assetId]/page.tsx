@@ -16,7 +16,7 @@ import { Prisma } from "@prisma/client";
 import { getCryptoAssetMetrics } from "@/lib/domain/analytics";
 import { getUsdBrlRate } from "@/lib/exchange-rate";
 import { prisma } from "@/lib/prisma";
-import { formatCurrency, formatPercent } from "@/lib/format";
+import { formatPercent } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,6 +29,7 @@ import {
 
 import {
   CryptoAssetChart,
+  CryptoCurrencyValue,
   type CryptoAssetChartPoint,
   type CryptoAssetOperationMarker,
 } from "./crypto-asset-chart";
@@ -275,12 +276,10 @@ async function AssetOverview({ assetId }: { assetId: string }) {
       </div>
 
       {/* KPI cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         <MetricCard
           label="Preço Atual"
-          value={
-            currentPriceBrl != null ? formatCurrency(currentPriceBrl) : "—"
-          }
+          value={<CryptoCurrencyValue value={currentPriceBrl} />}
           icon={Activity}
         />
         <MetricCard
@@ -288,15 +287,13 @@ async function AssetOverview({ assetId }: { assetId: string }) {
           value={
             asset.costBasisMissing
               ? "N/A"
-              : avgPriceBrl != null
-                ? formatCurrency(avgPriceBrl)
-                : "—"
+              : <CryptoCurrencyValue value={avgPriceBrl} />
           }
           icon={DollarSign}
         />
         <MetricCard
           label="Valor de Mercado"
-          value={valueBrl != null ? formatCurrency(valueBrl) : "—"}
+          value={<CryptoCurrencyValue value={valueBrl} />}
           icon={Bitcoin}
         />
         <MetricCard
@@ -304,9 +301,7 @@ async function AssetOverview({ assetId }: { assetId: string }) {
           value={
             asset.costBasisMissing
               ? "N/A"
-              : pnlBrl != null
-                ? formatCurrency(pnlBrl)
-                : "—"
+              : <CryptoCurrencyValue value={pnlBrl} />
           }
           icon={isPositive ? TrendingUp : TrendingDown}
           tone={isPositive ? "positive" : "negative"}
@@ -322,9 +317,9 @@ async function AssetOverview({ assetId }: { assetId: string }) {
             asset.costBasisMissing
               ? "N/A"
               : toBrl(asset.realizedPnl, asset.quoteAsset, rate) != null
-                ? formatCurrency(
-                    toBrl(asset.realizedPnl, asset.quoteAsset, rate),
-                  )
+                ? <CryptoCurrencyValue
+                    value={toBrl(asset.realizedPnl, asset.quoteAsset, rate)}
+                  />
                 : "—"
           }
           icon={isPositive ? TrendingUp : TrendingDown}
@@ -341,9 +336,9 @@ async function AssetOverview({ assetId }: { assetId: string }) {
             asset.costBasisMissing
               ? "N/A"
               : toBrl(asset.totalCostBasis, asset.quoteAsset, rate) != null
-                ? formatCurrency(
-                    toBrl(asset.totalCostBasis, asset.quoteAsset, rate),
-                  )
+                ? <CryptoCurrencyValue
+                    value={toBrl(asset.totalCostBasis, asset.quoteAsset, rate)}
+                  />
                 : "—"
           }
           icon={DollarSign}
@@ -389,9 +384,11 @@ async function AssetOverview({ assetId }: { assetId: string }) {
             </h2>
             <p className="text-sm leading-6 text-muted-foreground">
               Você tem {qtyFmt.format(asset.quantity.toNumber())} {asset.asset}
-              {avgPriceBrl != null
-                ? ` a preço médio de ${formatCurrency(avgPriceBrl)}`
-                : ""}
+              {avgPriceBrl != null ? (
+                <>
+                  {" "}a preço médio de <CryptoCurrencyValue value={avgPriceBrl} />
+                </>
+              ) : null}
               .
               {avgCurrentDiffPercent != null
                 ? ` O preço atual está ${formatPercent(Math.abs(avgCurrentDiffPercent)).replace("-", "")} ${avgCurrentDiffPercent >= 0 ? "acima" : "abaixo"} do seu médio.`
@@ -437,19 +434,23 @@ async function AssetOverview({ assetId }: { assetId: string }) {
               <InfoRow label="Trades Totais" value={String(asset.tradeCount)} />
               <InfoRow
                 label="Maior Compra"
-                value={maxBuy != null ? formatCurrency(maxBuy) : "N/A"}
+                value={
+                  maxBuy != null ? <CryptoCurrencyValue value={maxBuy} /> : "N/A"
+                }
                 border
               />
               <InfoRow
                 label="Menor Compra"
-                value={minBuy != null ? formatCurrency(minBuy) : "N/A"}
+                value={
+                  minBuy != null ? <CryptoCurrencyValue value={minBuy} /> : "N/A"
+                }
                 border
               />
               <InfoRow
                 label="Mín. do Período"
                 value={
                   periodMinPrice != null
-                    ? formatCurrency(periodMinPrice)
+                    ? <CryptoCurrencyValue value={periodMinPrice} />
                     : "N/A"
                 }
                 border
@@ -458,7 +459,7 @@ async function AssetOverview({ assetId }: { assetId: string }) {
                 label="Máx. do Período"
                 value={
                   periodMaxPrice != null
-                    ? formatCurrency(periodMaxPrice)
+                    ? <CryptoCurrencyValue value={periodMaxPrice} />
                     : "N/A"
                 }
                 border
@@ -534,10 +535,10 @@ async function AssetOverview({ assetId }: { assetId: string }) {
                         {qtyFmt.format(operation.quantity)}
                       </td>
                       <td className="py-3 text-right font-mono">
-                        {formatCurrency(operation.price)}
+                        <CryptoCurrencyValue value={operation.price} />
                       </td>
                       <td className="py-3 text-right font-mono font-medium">
-                        {formatCurrency(operation.total)}
+                        <CryptoCurrencyValue value={operation.total} />
                       </td>
                     </tr>
                   ))}
@@ -562,7 +563,7 @@ function InfoRow({
   border = true,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   border?: boolean;
 }) {
   return (
@@ -585,7 +586,7 @@ function MetricCard({
   tone = "neutral",
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   icon: React.ComponentType<{ className?: string }>;
   tone?: "neutral" | "positive" | "negative";
 }) {
@@ -596,14 +597,14 @@ function MetricCard({
   }[tone];
 
   return (
-    <section className="surface flex flex-col gap-2 p-4">
+    <section className="surface flex flex-col justify-between gap-1 p-3 sm:p-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-medium text-muted-foreground">{label}</p>
-        <Icon className="h-4 w-4 text-muted-foreground" />
+        <p className="text-[10px] sm:text-xs font-medium uppercase tracking-wider text-muted-foreground truncate">{label}</p>
+        <Icon className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground shrink-0" />
       </div>
       <p
         className={cn(
-          "text-2xl font-semibold tracking-tight tabular-nums",
+          "text-lg sm:text-xl md:text-2xl font-semibold tracking-tight tabular-nums truncate mt-1",
           toneClass,
         )}
       >

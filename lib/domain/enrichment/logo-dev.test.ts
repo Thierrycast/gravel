@@ -15,6 +15,9 @@ describe("logo-dev helpers", () => {
 
   it("resolve dominios conhecidos sem chamada externa", () => {
     expect(resolveMerchantDomain("Netflix Brasil")).toBe("netflix.com")
+    expect(resolveMerchantDomain("Banco Inter")).toBe("bancointer.com.br")
+    expect(resolveMerchantDomain("Bizzinternet")).toBeNull()
+    expect(resolveMerchantDomain("C6 Bank")).toBe("c6bank.com.br")
   })
 
   it("monta CDN com publishable key, sem secret key", () => {

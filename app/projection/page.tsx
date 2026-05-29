@@ -8,10 +8,13 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
+  ReferenceLine,
 } from "recharts";
-import { Lightbulb, ChevronDown, ChevronUp } from "lucide-react";
+
+import { Lightbulb, ChevronDown, ChevronUp, Info } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import { useCurrency } from "@/lib/currency-context";
+
 import {
   Card,
   CardHeader,
@@ -40,17 +43,26 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { PageError } from "@/components/page-error";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface ProjectionMonth {
   month: number;
   year: number;
   label: string;
+  knownIncome?: number;
+  estimatedSalary?: number;
   income: number;
   recurringExpenses: number;
   installments: number;
   variableExpenses: number;
   projected: number;
   balance: number;
+  startingBalance?: number;
 }
 
 interface ProjectionSummary {
@@ -62,6 +74,12 @@ interface ProjectionSummary {
 interface ProjectionData {
   months: ProjectionMonth[];
   summary: ProjectionSummary;
+}
+
+interface SettingsResponse {
+  monthlySalary: number;
+  effectiveMonthlySalary?: number;
+  showFutureSalary: boolean;
 }
 
 const horizons = [
@@ -94,15 +112,28 @@ const chartConfig: ChartConfig = {
 };
 
 export default function ProjectionPage() {
-  const { format } = useCurrency();
+  const { format, formatCompact } = useCurrency();
   const [months, setMonths] = useState("6");
   const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
-  const [includeSalary, setIncludeSalary] = useState(true);
+  const [salaryOverride, setSalaryOverride] = useState<boolean | null>(null);
   const [includeInstallments, setIncludeInstallments] = useState(true);
   const [includeVariableExpenses, setIncludeVariableExpenses] = useState(true);
 
-  const { data, loading, error, refetch } = useApi<ProjectionData>(
-    "/api/projection",
+  const { data: settings, loading: settingsLoading } =
+    useApi<SettingsResponse>("/api/settings");
+  const salaryAmount =
+    settings?.effectiveMonthlySalary ?? settings?.monthlySalary ?? 0;
+  const hasSalary = salaryAmount > 0;
+  const includeSalary =
+    hasSalary && (salaryOverride ?? settings?.showFutureSalary ?? false);
+
+  const {
+    data,
+    loading: projectionLoading,
+    error,
+    refetch,
+  } = useApi<ProjectionData>(
+    settings ? "/api/projection" : null,
     {
       months,
       showFutureSalary: String(includeSalary),
@@ -110,6 +141,25 @@ export default function ProjectionPage() {
       includeVariableExpenses: String(includeVariableExpenses),
     },
   );
+  const loading = settingsLoading || projectionLoading;
+  const chartData = useMemo(
+    () =>
+      (data?.months ?? []).map((month) => ({
+        ...month,
+        recurringExpenses: -month.recurringExpenses,
+        installments: -month.installments,
+        variableExpenses: -month.variableExpenses,
+      })),
+    [data],
+  );
+  const firstMonth = data?.months?.[0] ?? null;
+  const lastMonth = data?.months?.at(-1) ?? null;
+  const worstMonth =
+    data?.months?.reduce<ProjectionMonth | null>(
+      (worst, month) =>
+        !worst || month.balance < worst.balance ? month : worst,
+      null,
+    ) ?? null;
 
   const insights = useMemo(() => {
     const monthsData = data?.months ?? [];
@@ -120,7 +170,9 @@ export default function ProjectionPage() {
       variant: "default" | "destructive" | "secondary";
     }[] = [];
 
-    const installmentMonths = monthsData.filter((month) => month.installments > 0);
+    const installmentMonths = monthsData.filter(
+      (month) => month.installments > 0,
+    );
     if (
       installmentMonths.length > 0 &&
       installmentMonths.length < monthsData.length
@@ -133,7 +185,8 @@ export default function ProjectionPage() {
 
     const overBudget = monthsData.filter(
       (month) =>
-        month.recurringExpenses + month.installments + month.variableExpenses > month.income,
+        month.recurringExpenses + month.installments + month.variableExpenses >
+        month.income,
     );
     if (overBudget.length > 0) {
       const excess =
@@ -186,12 +239,18 @@ export default function ProjectionPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-w-0 max-w-full flex-col gap-6 overflow-x-hidden">
       {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-          Proje&ccedil;&atilde;o de Saldo
-        </h1>
+      <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            Proje&ccedil;&atilde;o de Saldo
+          </h1>
+          <p className="mt-1 max-w-full text-sm text-muted-foreground">
+            Visualize o impacto das suas despesas recorrentes e parcelas no
+            futuro.
+          </p>
+        </div>
         <div className="flex gap-0.5">
           {horizons.map((h) => (
             <button
@@ -209,17 +268,68 @@ export default function ProjectionPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4 rounded-xl border bg-card px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Switch
-            id="projection-salary"
-            checked={includeSalary}
-            onCheckedChange={setIncludeSalary}
-          />
-          <Label htmlFor="projection-salary" className="text-xs font-medium">
-            Salário
-          </Label>
+      <div className="rounded-xl border border-sky-500/30 bg-sky-500/5 p-4 text-sm text-sky-700 dark:text-sky-300">
+        <div className="flex items-start gap-3">
+          <Info className="mt-0.5 size-4 shrink-0" />
+          <div className="min-w-0 space-y-1">
+            <p className="font-semibold text-sky-600 dark:text-sky-400">
+              Nota sobre o período
+            </p>
+            <p className="opacity-90">
+              A projeção inicia sempre no <strong>mês seguinte</strong> ao atual.
+              Salário estimado entra apenas como complemento quando não há uma
+              receita recorrente ou transação futura de salário cobrindo o mês.
+            </p>
+          </div>
         </div>
+      </div>
+
+      {(salaryOverride ?? settings?.showFutureSalary ?? false) && !hasSalary && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-300">
+          <div className="flex items-start gap-3">
+            <Lightbulb className="mt-0.5 size-4 shrink-0" />
+            <div className="min-w-0 space-y-1">
+              <p className="font-semibold text-amber-600 dark:text-amber-400">
+                Salário não configurado
+              </p>
+              <p className="opacity-90">
+                Você ativou a inclusão de salário, mas o valor configurado é R$
+                0,00. Vá em <strong>Configurações</strong> para definir seu
+                salário mensal líquido.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3 sm:gap-4">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="projection-salary"
+                  checked={includeSalary}
+                  disabled={!hasSalary}
+                  onCheckedChange={
+                    hasSalary ? setSalaryOverride : undefined
+                  }
+                />
+                <Label
+                  htmlFor="projection-salary"
+                  className={`text-xs font-medium ${!hasSalary ? "cursor-not-allowed opacity-60" : ""}`}
+                >
+                  Salário
+                </Label>
+              </div>
+            </TooltipTrigger>
+            {!hasSalary && (
+              <TooltipContent side="top">
+                Configure seu salário em Configurações para ativar
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
         <div className="flex items-center gap-2">
           <Switch
             id="projection-installments"
@@ -240,8 +350,53 @@ export default function ProjectionPage() {
             onCheckedChange={setIncludeVariableExpenses}
           />
           <Label htmlFor="projection-variable" className="text-xs font-medium">
-            Subcategorias
+            Gastos variáveis
           </Label>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-xl border bg-card p-3">
+          <p className="text-xs font-medium text-muted-foreground">
+            Próximo mês
+          </p>
+          <p
+            className={`mt-1 text-lg font-semibold tabular-nums ${
+              (firstMonth?.projected ?? 0) >= 0
+                ? "text-emerald-500"
+                : "text-red-500"
+            }`}
+          >
+            {format(firstMonth?.projected ?? 0)}
+          </p>
+        </div>
+        <div className="rounded-xl border bg-card p-3">
+          <p className="text-xs font-medium text-muted-foreground">
+            Saldo no fim do período
+          </p>
+          <p
+            className={`mt-1 text-lg font-semibold tabular-nums ${
+              (lastMonth?.balance ?? 0) >= 0
+                ? "text-blue-500"
+                : "text-red-500"
+            }`}
+          >
+            {format(lastMonth?.balance ?? 0)}
+          </p>
+        </div>
+        <div className="rounded-xl border bg-card p-3">
+          <p className="text-xs font-medium text-muted-foreground">
+            Menor saldo projetado
+          </p>
+          <p
+            className={`mt-1 text-lg font-semibold tabular-nums ${
+              (worstMonth?.balance ?? 0) >= 0
+                ? "text-foreground"
+                : "text-red-500"
+            }`}
+          >
+            {format(worstMonth?.balance ?? 0)}
+          </p>
         </div>
       </div>
 
@@ -252,11 +407,13 @@ export default function ProjectionPage() {
             <Card key={idx}>
               <CardContent className="flex items-center gap-3 pt-4">
                 <Lightbulb className="size-5 shrink-0 text-muted-foreground" />
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <Badge variant={insight.variant} className="text-xs">
                     Insight
                   </Badge>
-                  <span className="text-sm">{insight.title}</span>
+                  <span className="min-w-0 break-words text-sm">
+                    {insight.title}
+                  </span>
                 </div>
               </CardContent>
             </Card>
@@ -293,68 +450,97 @@ export default function ProjectionPage() {
       </div>
 
       {/* Main Chart */}
-      <Card>
+      <Card className="min-w-0">
         <CardHeader>
           <CardTitle>Projeção Mensal</CardTitle>
           <CardDescription>
-            Receitas, despesas e saldo projetado por mês
+            Receitas, despesas e saldo projetado por mês.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <ChartContainer config={chartConfig} className="h-80 w-full">
-            <ComposedChart data={data?.months ?? []} accessibilityLayer>
-              <CartesianGrid vertical={false} />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} />
-              <YAxis
-                tickFormatter={(value) =>
-                  !isFinite(value) ? "—" : `R$${(value / 1000).toFixed(0)}k`
-                }
-                tickLine={false}
-                axisLine={false}
-              />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    formatter={(value, name) => (
-                      <span>
-                        {chartConfig[name as keyof typeof chartConfig]?.label}:{" "}
-                        {format(Number(value))}
-                      </span>
-                    )}
-                  />
-                }
-              />
-              <ChartLegend content={<ChartLegendContent />} />
-              <Bar
-                dataKey="income"
-                fill="var(--color-income)"
-                radius={[4, 4, 0, 0]}
-              />
-              <Bar
-                dataKey="recurringExpenses"
-                fill="var(--color-recurringExpenses)"
-                radius={[4, 4, 0, 0]}
-              />
-              <Bar
-                dataKey="installments"
-                fill="var(--color-installments)"
-                radius={[4, 4, 0, 0]}
-              />
-              <Bar
-                dataKey="variableExpenses"
-                fill="var(--color-variableExpenses)"
-                radius={[4, 4, 0, 0]}
-              />
-              <Line
-                dataKey="balance"
-                type="monotone"
-                stroke="var(--color-balance)"
-                strokeWidth={2}
-                strokeDasharray="6 3"
-                dot={false}
-              />
-            </ComposedChart>
-          </ChartContainer>
+        <CardContent className="min-w-0">
+          <div className="w-full max-w-full overflow-x-auto">
+            <ChartContainer
+              config={chartConfig}
+              className="h-80 w-full min-w-0"
+            >
+              <ComposedChart data={chartData} accessibilityLayer>
+                <CartesianGrid vertical={false} />
+                <ReferenceLine y={0} stroke="var(--border)" />
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={false}
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={(value: string) => {
+                    const [year, month] = value.split("-");
+                    const date = new Date(Number(year), Number(month) - 1, 1);
+                    return date.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
+                  }}
+                />
+                <YAxis
+                  tickFormatter={(value) =>
+                    !isFinite(value) ? "—" : formatCompact(Number(value))
+                  }
+                  tickLine={false}
+                  axisLine={false}
+                  width={48}
+                  tick={{ fontSize: 11 }}
+                />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(value, name) => (
+                        <span>
+                          {chartConfig[name as keyof typeof chartConfig]?.label}
+                          :{" "}
+                          {format(
+                            name === "income" || name === "balance"
+                              ? Number(value)
+                              : Math.abs(Number(value)),
+                          )}
+                        </span>
+                      )}
+                    />
+                  }
+                />
+                <ChartLegend
+                  content={<ChartLegendContent />}
+                  wrapperStyle={{ paddingTop: 8, flexWrap: "wrap", gap: 4 }}
+                />
+                <Bar
+                  dataKey="income"
+                  fill="var(--color-income)"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
+                  dataKey="recurringExpenses"
+                  stackId="outflow"
+                  fill="var(--color-recurringExpenses)"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
+                  dataKey="installments"
+                  stackId="outflow"
+                  fill="var(--color-installments)"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
+                  dataKey="variableExpenses"
+                  stackId="outflow"
+                  fill="var(--color-variableExpenses)"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Line
+                  dataKey="balance"
+                  type="monotone"
+                  stroke="var(--color-balance)"
+                  strokeWidth={2}
+                  strokeDasharray="6 3"
+                  dot={false}
+                />
+              </ComposedChart>
+            </ChartContainer>
+          </div>
         </CardContent>
       </Card>
 
@@ -370,11 +556,13 @@ export default function ProjectionPage() {
           <div className="flex flex-col gap-2">
             {(data?.months ?? []).map((month, idx) => {
               const isExpanded = expandedMonth === month.label;
-              const prevBalance =
-                idx > 0 ? (data?.months?.[idx - 1]?.balance ?? 0) : 0;
-              const totalExpenses =
-                month.recurringExpenses + month.installments + month.variableExpenses;
-              const result = month.income - totalExpenses;
+              const startingBalance =
+                month.startingBalance ??
+                (idx > 0
+                  ? (data?.months?.[idx - 1]?.balance ?? 0)
+                  : month.balance - month.projected);
+              const projectedDelta = month.projected;
+              const result = month.balance;
 
               return (
                 <div key={month.label} className="rounded-lg border">
@@ -397,7 +585,9 @@ export default function ProjectionPage() {
                     <div className="flex items-center gap-4">
                       <span
                         className={`text-sm font-semibold ${
-                          month.balance >= 0 ? "text-emerald-400" : "text-red-400"
+                          month.balance >= 0
+                            ? "text-emerald-400"
+                            : "text-red-400"
                         }`}
                       >
                         {format(month.balance)}
@@ -420,15 +610,21 @@ export default function ProjectionPage() {
                         </TableHeader>
                         <TableBody>
                           <TableRow>
-                            <TableCell>Saldo Inicial</TableCell>
+                            <TableCell>Saldo inicial</TableCell>
                             <TableCell className="text-right font-medium">
-                              {format(prevBalance)}
+                              {format(startingBalance)}
                             </TableCell>
                           </TableRow>
                           <TableRow>
-                            <TableCell>Receitas</TableCell>
+                            <TableCell>Receitas conhecidas</TableCell>
                             <TableCell className="text-right font-medium text-emerald-600">
-                              {format(month.income)}
+                              {format(month.knownIncome ?? month.income)}
+                            </TableCell>
+                          </TableRow>
+                          <TableRow>
+                            <TableCell>Receita estimada</TableCell>
+                            <TableCell className="text-right font-medium text-emerald-600">
+                              {format(month.estimatedSalary ?? 0)}
                             </TableCell>
                           </TableRow>
                           <TableRow>
@@ -450,8 +646,22 @@ export default function ProjectionPage() {
                             </TableCell>
                           </TableRow>
                           <TableRow>
+                            <TableCell className="font-medium">
+                              Variação projetada
+                            </TableCell>
+                            <TableCell
+                              className={`text-right font-medium ${
+                                projectedDelta >= 0
+                                  ? "text-emerald-600"
+                                  : "text-red-500"
+                              }`}
+                            >
+                              {format(projectedDelta)}
+                            </TableCell>
+                          </TableRow>
+                          <TableRow>
                             <TableCell className="font-semibold">
-                              Resultado
+                              Saldo final projetado
                             </TableCell>
                             <TableCell
                               className={`text-right font-semibold ${

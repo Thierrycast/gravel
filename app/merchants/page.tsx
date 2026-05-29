@@ -146,7 +146,11 @@ function MerchantsContent() {
     refetch: refetchSpending,
   } = useApi<SpendingResponse>(
     "/api/domain/metrics/spending/merchants",
-    period.params,
+    {
+      ...period.params,
+      showFutureAccounts: String(showFuture),
+      showFutureSalary: String(showSalary),
+    },
   );
   const {
     data: merchantsData,
@@ -288,11 +292,12 @@ function MerchantsContent() {
             <CardHeader>
               <div className="flex items-center gap-1.5">
                 <Store className="size-4 text-muted-foreground" />
-                <CardDescription>Total de Transacoes</CardDescription>
+                <CardDescription>Total de transações</CardDescription>
               </div>
               <CardTitle>{totalTransactions}</CardTitle>
             </CardHeader>
           </Card>
+
         </div>
       )}
 
@@ -332,7 +337,7 @@ function MerchantsContent() {
                 <TableRow>
                   <TableHead>Comerciante</TableHead>
                   <TableHead>CNPJ</TableHead>
-                  <TableHead className="text-center">Transacoes</TableHead>
+                  <TableHead className="text-center">Transações</TableHead>
                   <TableHead className="text-right">Total Gasto</TableHead>
                   <TableHead className="text-right">% do Total</TableHead>
                 </TableRow>

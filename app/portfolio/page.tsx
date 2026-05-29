@@ -16,6 +16,9 @@ import { useApi } from "@/hooks/use-api"
 import { amountToneClass } from "@/lib/format"
 import { useCurrency } from "@/lib/currency-context"
 import { cn } from "@/lib/utils"
+import { NetWorthChart } from "@/components/dashboard/net-worth-chart"
+import { usePeriod } from "@/hooks/use-period"
+import { PeriodSwitcher } from "@/components/period-switcher"
 
 interface PortfolioItem {
   name: string
@@ -62,6 +65,33 @@ const compositionPalette = [
   "bg-violet-500",
   "bg-cyan-500",
 ]
+
+type DisplayCurrency = "BRL" | "USD"
+
+const displayCurrencyFormatters: Record<DisplayCurrency, Intl.NumberFormat> = {
+  BRL: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }),
+  USD: new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }),
+}
+
+function normalizeDisplayZero(value: number) {
+  return Math.abs(value) < 0.005 ? 0 : value
+}
+
+function formatMoneyWithRate(
+  valueBrl: number | null | undefined,
+  currency: DisplayCurrency,
+  usdBrlRate: number,
+  isPrivate: boolean
+) {
+  if (isPrivate) return "••••"
+  if (valueBrl == null || !Number.isFinite(valueBrl)) return "—"
+
+  const displayValue =
+    currency === "USD" ? valueBrl / usdBrlRate : valueBrl
+  return displayCurrencyFormatters[currency].format(
+    normalizeDisplayZero(displayValue)
+  )
+}
 
 function LoadingState() {
   return (
@@ -154,33 +184,33 @@ function PortfolioColumn({
   format: (val: number) => string
 }) {
   return (
-    <section className="surface flex flex-col gap-5 p-5">
-      <div className="flex flex-col gap-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="section-eyebrow">{eyebrow}</p>
-            <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+    <section className="surface flex flex-col gap-5 p-5 min-w-0 overflow-hidden">
+      <div className="flex flex-col gap-3 min-w-0">
+        <div className="flex items-start justify-between gap-3 min-w-0">
+          <div className="min-w-0">
+            <p className="section-eyebrow truncate">{eyebrow}</p>
+            <h2 className="text-lg font-semibold tracking-tight truncate">{title}</h2>
+            <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{subtitle}</p>
           </div>
-          <Badge variant="outline" className="rounded-full px-3">
+          <Badge variant="outline" className="rounded-full px-3 shrink-0">
             {items.length} {items.length === 1 ? "item" : "itens"}
           </Badge>
         </div>
 
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="section-eyebrow">Total</p>
-            <p className="mt-1 text-[28px] font-semibold tracking-tight tabular-nums">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between min-w-0">
+          <div className="min-w-0">
+            <p className="section-eyebrow truncate">Total</p>
+            <p className="mt-1 text-[28px] font-semibold tracking-tight tabular-nums truncate">
               {format(total)}
             </p>
           </div>
-          <div className="grid gap-2 text-sm text-muted-foreground">{stats}</div>
+          <div className="grid gap-2 text-sm text-muted-foreground min-w-0">{stats}</div>
         </div>
 
         <CompositionBar items={items} />
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-3 min-w-0">
         {items.length === 0 ? (
           <p className="text-sm text-muted-foreground">Nenhum item encontrado.</p>
         ) : (
@@ -221,9 +251,26 @@ function getLiabilityLabel(type: string) {
   return "Passivo"
 }
 
+interface NetWorthPoint {
+  date: string
+  netWorth: number
+  assets?: number | null
+  liabilities?: number | null
+}
+
+interface NetWorthHistoryResponse {
+  summary: { points: NetWorthPoint[] }
+  results: NetWorthPoint[]
+}
+
 export default function PortfolioPage() {
-  const { format } = useCurrency()
+  const { currency, isPrivate } = useCurrency()
   const portfolio = useApi<PortfolioResponse>("/api/portfolio")
+  const netWorthPeriod = usePeriod("12m")
+  const netWorthHistory = useApi<NetWorthHistoryResponse>(
+    "/api/domain/metrics/net-worth",
+    netWorthPeriod.params,
+  )
 
   if (portfolio.loading) {
     return <LoadingState />
@@ -239,6 +286,9 @@ export default function PortfolioPage() {
   }
 
   const { breakdown, liabilities, netWorth } = portfolio.data
+  const usdBrlRate = breakdown.crypto.usdBrlRate
+  const formatPortfolioMoney = (value: number | null | undefined) =>
+    formatMoneyWithRate(value, currency, usdBrlRate, isPrivate)
 
   return (
     <div className="flex flex-col gap-6">
@@ -246,6 +296,11 @@ export default function PortfolioPage() {
         eyebrow="Portfólio"
         title="Patrimônio consolidado"
         description="Visão separada entre patrimônio fiat e carteira cripto, com passivos destacados fora das posições."
+        actions={
+          <Badge variant="outline" className="h-8 rounded-full px-3 text-xs font-medium">
+            Valores em {currency} · USD/BRL {usdBrlRate.toFixed(2)}
+          </Badge>
+        }
       />
 
       <section className="surface flex flex-col gap-5 p-5 md:p-6">
@@ -258,29 +313,29 @@ export default function PortfolioPage() {
                 amountToneClass(netWorth, { neutralOnZero: true })
               )}
             >
-              {format(netWorth)}
+              {formatPortfolioMoney(netWorth)}
             </p>
             <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-              O topo já soma patrimônio fiat e cripto, mas a composição abaixo mantém os dois universos separados.
+              O patrimônio líquido é calculado somando seus ativos (fiat e cripto) e subtraindo os passivos em aberto (faturas de cartões e empréstimos).
             </p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <SummaryStat
               label="Fiat total"
-              value={format(breakdown.fiat.total)}
+              value={formatPortfolioMoney(breakdown.fiat.total)}
               tone="info"
               icon={Landmark}
             />
             <SummaryStat
               label="Cripto total"
-              value={format(breakdown.crypto.total)}
+              value={formatPortfolioMoney(breakdown.crypto.total)}
               tone="neutral"
               icon={Bitcoin}
             />
             <SummaryStat
               label="Passivos"
-              value={format(liabilities.total)}
+              value={formatPortfolioMoney(liabilities.total)}
               tone="negative"
               icon={CreditCard}
             />
@@ -301,19 +356,19 @@ export default function PortfolioPage() {
           subtitle="Saldo bancário e aplicações tradicionais, sem misturar exposição cripto."
           total={breakdown.fiat.total}
           items={breakdown.fiat.items}
-          format={format}
+          format={formatPortfolioMoney}
           stats={
             <>
               <div className="flex items-center justify-between gap-4">
                 <span>Liquidez</span>
                 <span className="font-medium tabular-nums">
-                  {format(breakdown.fiat.liquid)}
+                  {formatPortfolioMoney(breakdown.fiat.liquid)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4">
                 <span>Investimentos</span>
                 <span className="font-medium tabular-nums">
-                  {format(breakdown.fiat.investments)}
+                  {formatPortfolioMoney(breakdown.fiat.investments)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4">
@@ -326,7 +381,7 @@ export default function PortfolioPage() {
                     })
                   )}
                 >
-                  {format(breakdown.fiat.netWorth)}
+                  {formatPortfolioMoney(breakdown.fiat.netWorth)}
                 </span>
               </div>
             </>
@@ -336,16 +391,16 @@ export default function PortfolioPage() {
         <PortfolioColumn
           eyebrow="Cripto"
           title="Carteira digital"
-          subtitle={`Valores convertidos para BRL com USD/BRL ${breakdown.crypto.usdBrlRate.toFixed(2)}.`}
+          subtitle={`Base cripto em USD/USDT, exibida em ${currency} com USD/BRL ${usdBrlRate.toFixed(2)}.`}
           total={breakdown.crypto.total}
           items={breakdown.crypto.items}
-          format={format}
+          format={formatPortfolioMoney}
           stats={
             <>
               <div className="flex items-center justify-between gap-4">
                 <span>Exposição líquida</span>
                 <span className="font-medium tabular-nums">
-                  {format(breakdown.crypto.netWorth)}
+                  {formatPortfolioMoney(breakdown.crypto.netWorth)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4">
@@ -365,6 +420,44 @@ export default function PortfolioPage() {
             </>
           }
         />
+      </section>
+
+      {/* Net Worth history chart */}
+      <section className="surface flex flex-col gap-4 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="section-eyebrow">Histórico</p>
+            <h2 className="text-lg font-semibold tracking-tight">
+              Evolução do patrimônio
+            </h2>
+          </div>
+          <PeriodSwitcher
+            state={netWorthPeriod}
+            options={["mtd", "90d", "180d", "12m", "ytd", "all"]}
+          />
+        </div>
+        <div className="h-72 w-full">
+          {netWorthHistory.loading ? (
+            <div className="flex h-full items-center justify-center">
+              <div className="size-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            </div>
+          ) : (
+            <NetWorthChart
+              history={netWorthHistory.data?.results ?? []}
+              period={
+                netWorthPeriod.period === "all"
+                  ? "ALL"
+                  : netWorthPeriod.period === "mtd"
+                    ? "1M"
+                    : netWorthPeriod.period === "90d"
+                      ? "3M"
+                      : netWorthPeriod.period === "180d"
+                        ? "6M"
+                        : "1Y"
+              }
+            />
+          )}
+        </div>
       </section>
 
       <section className="surface flex flex-col gap-4 p-5">
@@ -397,7 +490,7 @@ export default function PortfolioPage() {
                   <CreditCard className="size-4 shrink-0 text-muted-foreground" />
                 </div>
                 <p className="mt-3 text-lg font-semibold tabular-nums text-rose-500 dark:text-rose-400">
-                  {format(item.value)}
+                  {formatPortfolioMoney(item.value)}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {item.percentage.toFixed(1)}% do total de passivos

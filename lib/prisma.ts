@@ -1,36 +1,45 @@
-// O cofre central onde todo o nosso "cascalho" fica guardado.
-import { PrismaClient } from "@prisma/client"
+import { PrismaClient } from "@prisma/client";
 
 declare global {
-  var prismaBase: PrismaClient | undefined
+  var prismaBase: PrismaClient | undefined;
 }
 
+/**
+ * Cofre central para persistência de dados financeiros.
+ * Implementa padrão Singleton e ativa modo WAL para SQLite.
+ */
 const prismaBase =
   globalThis.prismaBase ||
   new PrismaClient({
-    log: ["error", "warn"],
-  })
+    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
+  });
 
 const prismaBootstrap = globalThis.prismaBase
   ? Promise.resolve()
-  : prismaBase.$connect()
+  : prismaBase
+      .$connect()
       .then(async () => {
-        await prismaBase.$queryRawUnsafe(`PRAGMA journal_mode = WAL;`)
-        await prismaBase.$queryRawUnsafe(`PRAGMA synchronous = NORMAL;`)
-        await prismaBase.$queryRawUnsafe(`PRAGMA busy_timeout = 5000;`)
+        // WAL mode melhora drasticamente performance e evita locks no SQLite
+        await prismaBase.$queryRawUnsafe(`PRAGMA journal_mode = WAL;`);
       })
       .catch((err) => {
-        console.error("Failed to configure SQLite pragmas:", err)
-      })
+        if (process.env.NODE_ENV === "development") {
+          console.warn("⚠️ Falha ao configurar PRAGMA WAL no SQLite:", err);
+        }
+      });
 
-void prismaBootstrap
+void prismaBootstrap;
 
-export const prisma = prismaBase
+export const prisma = prismaBase;
 
+/**
+ * Garante que a conexão e configurações do banco estejam prontas.
+ * Útil para Server Components e Scripts de CLI.
+ */
 export async function ensurePrismaReady() {
-  await prismaBootstrap
+  await prismaBootstrap;
 }
 
 if (process.env.NODE_ENV !== "production") {
-  globalThis.prismaBase = prismaBase
+  globalThis.prismaBase = prismaBase;
 }

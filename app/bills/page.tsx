@@ -17,6 +17,7 @@ import { formatDate, daysUntil, daysUntilLabel } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
 import { PageError } from "@/components/page-error";
 
@@ -24,6 +25,7 @@ interface Bill {
   id: string;
   accountId: string | null;
   accountName: string;
+  institutionName: string | null;
   dueDate: string;
   totalAmount: number;
   minimumPayment: number;
@@ -31,6 +33,7 @@ interface Bill {
   paidAt?: string | null;
   closingDate: string;
 }
+
 
 interface BillsSummary {
   totalOpen: number;
@@ -53,7 +56,31 @@ interface BillsSummaryResponse {
   summary: BillsSummary;
 }
 
-function getStatusConfig(status: string, dueDate: string) {
+const DISPLAY_CURRENCY_THRESHOLD = 0.005;
+
+function normalizeDisplayedAmount(value: number): number {
+  return Math.abs(value) < DISPLAY_CURRENCY_THRESHOLD ? 0 : value;
+}
+
+function normalizeDisplayedBill(bill: Bill): Bill {
+  const totalAmount = normalizeDisplayedAmount(bill.totalAmount);
+  // If manually marked as paid, override status
+  const status = bill.paidAt
+    ? "PAID"
+    : totalAmount === 0 && bill.status !== "PAID"
+      ? "CLOSED"
+      : bill.status;
+  return {
+    ...bill,
+    accountName: bill.accountName.trim(),
+    institutionName: bill.institutionName?.trim() ?? null,
+    totalAmount,
+    minimumPayment: normalizeDisplayedAmount(bill.minimumPayment),
+    status,
+  };
+}
+
+function getStatusConfig(status: string, dueDate: string, totalAmount: number) {
   const days = daysUntil(dueDate);
 
   if (status === "PAID") {
@@ -62,6 +89,14 @@ function getStatusConfig(status: string, dueDate: string) {
       className: "bg-blue-400/10 text-blue-400 border-blue-400/20",
       icon: CheckCircle2,
       dotColor: "bg-blue-400",
+    };
+  }
+  if (totalAmount === 0) {
+    return {
+      label: "Sem saldo",
+      className: "bg-emerald-400/10 text-emerald-400 border-emerald-400/20",
+      icon: CheckCircle2,
+      dotColor: "bg-emerald-400",
     };
   }
   if (status === "CLOSED") {
@@ -124,6 +159,8 @@ const monthNames = [
 
 export default function BillsPage() {
   const { format } = useCurrency();
+  const formatBillAmount = (value: number) =>
+    format(normalizeDisplayedAmount(value));
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -150,23 +187,76 @@ export default function BillsPage() {
   const loading = billsLoading || summaryLoading;
 
   const bills = billsData?.results;
-  const summary = summaryData?.summary;
+  const sourceSummary = summaryData?.summary;
+  const displayedBills = useMemo(
+    () => (bills ?? []).map(normalizeDisplayedBill),
+    [bills],
+  );
+
+
+  const summary = useMemo(() => {
+    if (!sourceSummary || !bills) return sourceSummary;
+
+    const amounts = displayedBills.reduce(
+      (totals, bill) => {
+        if (bill.status === "OVERDUE") {
+          totals.overdue += bill.totalAmount;
+          totals.overdueCount += 1;
+        } else if (bill.status === "OPEN") {
+          totals.open += bill.totalAmount;
+          totals.openCount += 1;
+        } else if (bill.status === "PAID" || bill.status === "CLOSED") {
+          totals.paid += bill.totalAmount;
+          totals.paidCount += 1;
+        }
+        return totals;
+      },
+      {
+        open: 0,
+        overdue: 0,
+        paid: 0,
+        openCount: 0,
+        overdueCount: 0,
+        paidCount: 0,
+      },
+    );
+
+    return {
+      totalOpen: amounts.open,
+      totalOverdue: amounts.overdue,
+      totalPaid: amounts.paid,
+      counts: {
+        total: displayedBills.length,
+        open: amounts.openCount,
+        overdue: amounts.overdueCount,
+        paid: amounts.paidCount,
+      },
+      upcoming: sourceSummary.upcoming
+        .map(normalizeDisplayedBill)
+        .filter((bill) => bill.status === "OPEN"),
+    };
+  }, [bills, displayedBills, sourceSummary]);
 
   const sortedBills = useMemo(() => {
-    const list = bills ?? [];
-    return [...list].sort((a, b) => {
-      const statusOrder: Record<string, number> = {
-        OVERDUE: 0,
-        OPEN: 1,
-        CLOSED: 2,
-        PAID: 3,
-      };
-      const aOrder = statusOrder[a.status] ?? 1;
-      const bOrder = statusOrder[b.status] ?? 1;
-      if (aOrder !== bOrder) return aOrder - bOrder;
-      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-    });
-  }, [bills]);
+    return displayedBills
+      .filter((bill) => {
+        // Drop CLOSED bills with zero amount — they are noise (no action needed)
+        if (bill.status === "CLOSED" && bill.totalAmount === 0) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const statusOrder: Record<string, number> = {
+          OVERDUE: 0,
+          OPEN: 1,
+          CLOSED: 2,
+          PAID: 3,
+        };
+        const aOrder = statusOrder[a.status] ?? 1;
+        const bOrder = statusOrder[b.status] ?? 1;
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      });
+  }, [displayedBills]);
 
   if (billsError || summaryError) {
     return (
@@ -227,44 +317,76 @@ export default function BillsPage() {
 
   const isCurrentMonth =
     selectedMonth === now.getMonth() && selectedYear === now.getFullYear();
+  const isFutureMonth =
+    new Date(selectedYear, selectedMonth, 1) >
+    new Date(now.getFullYear(), now.getMonth(), 1);
+  const periodDescription = isCurrentMonth
+    ? "Mês atual"
+    : isFutureMonth
+      ? "Período futuro - exibe faturas disponíveis"
+      : "Período histórico";
 
   return (
-    <div className="flex flex-col gap-6 p-4 sm:p-6 lg:p-10 max-w-5xl mx-auto w-full">
+    <div className="flex flex-col gap-6 max-w-5xl mx-auto w-full">
       {/* Period Navigation */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <h1 className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
           Faturas
         </h1>
-        <div className="flex items-center gap-1">
-          {!isCurrentMonth && (
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-1">
+            {!isCurrentMonth && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                onClick={resetToToday}
+              >
+                Hoje
+              </Button>
+            )}
             <Button
               variant="ghost"
-              size="sm"
-              className="h-7 px-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
-              onClick={resetToToday}
+              size="icon"
+              className="size-7"
+              onClick={navigateToPreviousMonth}
+              aria-label="Mês anterior"
             >
-              Hoje
+              <ChevronLeft className="size-3.5" />
             </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            onClick={navigateToPreviousMonth}
+            <span
+              className="min-w-[110px] text-center text-sm font-semibold capitalize sm:min-w-[160px]"
+              aria-live="polite"
+            >
+              {monthNames[selectedMonth]} de {selectedYear}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              onClick={navigateToNextMonth}
+              aria-label="Próximo mês"
+              disabled={
+                new Date(selectedYear, selectedMonth + 1, 1) >
+                new Date(now.getFullYear(), now.getMonth() + 2, 1)
+              }
+            >
+              <ChevronRight className="size-3.5" />
+            </Button>
+          </div>
+          <p
+            className={cn(
+              "text-[11px]",
+              isCurrentMonth
+                ? "font-semibold text-primary"
+                : "text-muted-foreground",
+            )}
           >
-            <ChevronLeft className="size-3.5" />
-          </Button>
-          <span className="min-w-[110px] sm:min-w-[160px] text-center text-sm font-semibold capitalize">
-            {monthNames[selectedMonth]} De {selectedYear}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            onClick={navigateToNextMonth}
-          >
-            <ChevronRight className="size-3.5" />
-          </Button>
+            {isCurrentMonth && (
+              <span className="mr-1 inline-block size-1.5 rounded-full bg-primary align-middle" />
+            )}
+            {periodDescription}
+          </p>
         </div>
       </div>
 
@@ -285,7 +407,7 @@ export default function BillsPage() {
             Total das Faturas
           </p>
           <p className="text-4xl font-bold tabular-nums tracking-tight text-pink-400">
-            {format(totalAmount)}
+            {formatBillAmount(totalAmount)}
           </p>
 
           {/* Breakdown by status */}
@@ -295,7 +417,7 @@ export default function BillsPage() {
                 Abertas
               </p>
               <p className="text-sm font-semibold tabular-nums">
-                {format(summary.totalOpen)}
+                {formatBillAmount(summary.totalOpen)}
               </p>
             </div>
             <div className="space-y-1">
@@ -303,7 +425,7 @@ export default function BillsPage() {
                 Vencidas
               </p>
               <p className="text-sm font-semibold tabular-nums text-red-400">
-                {format(summary.totalOverdue)}
+                {formatBillAmount(summary.totalOverdue)}
               </p>
             </div>
             <div className="space-y-1">
@@ -311,7 +433,7 @@ export default function BillsPage() {
                 Pagas
               </p>
               <p className="text-sm font-semibold tabular-nums text-emerald-400">
-                {format(summary.totalPaid)}
+                {formatBillAmount(summary.totalPaid)}
               </p>
             </div>
           </div>
@@ -362,7 +484,7 @@ export default function BillsPage() {
 
       {/* Status summary pills */}
       {!loading && summary && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <div className="rounded-xl border bg-card p-4 space-y-1">
             <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
               Abertas
@@ -371,7 +493,7 @@ export default function BillsPage() {
               {summary.counts.open}
             </p>
             <p className="text-xs tabular-nums text-muted-foreground">
-              {format(summary.totalOpen)}
+              {formatBillAmount(summary.totalOpen)}
             </p>
           </div>
           <div className="rounded-xl border bg-card p-4 space-y-1">
@@ -382,7 +504,7 @@ export default function BillsPage() {
               {summary.counts.overdue}
             </p>
             <p className="text-xs tabular-nums text-muted-foreground">
-              {format(summary.totalOverdue)}
+              {formatBillAmount(summary.totalOverdue)}
             </p>
           </div>
           <div className="rounded-xl border bg-card p-4 space-y-1">
@@ -393,7 +515,7 @@ export default function BillsPage() {
               {summary.counts.paid}
             </p>
             <p className="text-xs tabular-nums text-muted-foreground">
-              {format(summary.totalPaid)}
+              {formatBillAmount(summary.totalPaid)}
             </p>
           </div>
         </div>
@@ -404,7 +526,6 @@ export default function BillsPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
           Faturas do Periodo
         </p>
-
         {loading ? (
           <div className="space-y-2">
             {Array.from({ length: 3 }).map((_, i) => (
@@ -423,27 +544,34 @@ export default function BillsPage() {
         ) : (
           <div className="space-y-2">
             {sortedBills.map((bill) => {
-              const statusConfig = getStatusConfig(bill.status, bill.dueDate);
+              const statusConfig = getStatusConfig(
+                bill.status,
+                bill.dueDate,
+                bill.totalAmount,
+              );
               const StatusIcon = statusConfig.icon;
               const days = daysUntil(bill.dueDate);
 
               return (
                 <div
                   key={bill.id}
-                  className="rounded-xl border bg-card p-5 transition-colors hover:bg-accent/50"
+                  className="rounded-xl border bg-card p-4 transition-colors hover:bg-accent/50"
                 >
-                  <div className="flex items-center gap-4">
-                    {/* Avatar */}
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
+                  {/* Row 1: avatar + info */}
+                  <div className="flex items-start gap-3">
+                    <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
                       {getInitials(bill.accountName)}
                     </div>
-
-                    {/* Info */}
                     <div className="flex-1 min-w-0 space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold truncate">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="text-sm font-semibold truncate max-w-[12rem]">
                           {bill.accountName}
                         </span>
+                        {bill.institutionName && (
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-mono opacity-70 hidden sm:inline">
+                            {bill.institutionName}
+                          </span>
+                        )}
                         <Badge
                           variant="outline"
                           className={cn(
@@ -476,47 +604,47 @@ export default function BillsPage() {
                         </span>
                       </div>
                     </div>
+                  </div>
 
-                    {/* Amount + link */}
-                    <div className="text-right shrink-0 space-y-0.5">
+                  {/* Row 2: amount + actions, indented to align with info */}
+                  <div className="mt-3 flex items-center justify-between pl-[calc(2.25rem+0.75rem)]">
+                    <div className="space-y-0.5">
                       <p className="text-base font-bold tabular-nums text-pink-400">
-                        {format(bill.totalAmount)}
+                        {formatBillAmount(bill.totalAmount)}
                       </p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span className="tabular-nums">
-                          Min: {format(bill.minimumPayment)}
-                        </span>
-                      </div>
+                      <p className="text-xs tabular-nums text-muted-foreground">
+                        Min: {formatBillAmount(bill.minimumPayment)}
+                      </p>
                     </div>
-
-                    {bill.status !== "PAID" && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="shrink-0"
-                        disabled={payingBillId === bill.id}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          markBillAsPaid(bill.id);
-                        }}
+                    <div className="flex items-center gap-2">
+                      {(bill.status === "OPEN" || bill.status === "OVERDUE") && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0 h-8 px-3 text-xs"
+                          disabled={payingBillId === bill.id}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            markBillAsPaid(bill.id);
+                          }}
+                        >
+                          <CheckCircle2 className="size-3.5" />
+                          {payingBillId === bill.id ? "..." : "Paga"}
+                        </Button>
+                      )}
+                      <Link
+                        href={
+                          bill.accountId
+                            ? `/transactions?accountId=${bill.accountId}`
+                            : "/transactions"
+                        }
+                        className="text-muted-foreground hover:text-foreground transition-colors"
                       >
-                        <CheckCircle2 className="size-3.5" />
-                        {payingBillId === bill.id ? "..." : "Paga"}
-                      </Button>
-                    )}
-
-                    <Link
-                      href={
-                        bill.accountId
-                          ? `/transactions?accountId=${bill.accountId}`
-                          : "/transactions"
-                      }
-                      className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <ChevronRight className="size-4" />
-                    </Link>
+                        <ChevronRight className="size-4" />
+                      </Link>
+                    </div>
                   </div>
                 </div>
               );
@@ -526,28 +654,28 @@ export default function BillsPage() {
       </div>
 
       {/* Empty State */}
-      {!loading && (!bills || bills.length === 0) && (
-        <div className="rounded-xl border border-dashed bg-card/50 py-20 flex flex-col items-center text-center">
-          <div className="rounded-2xl bg-muted p-5 mb-5">
-            <CreditCard className="size-8 text-muted-foreground" />
-          </div>
-          <h3 className="text-lg font-bold mb-1">Nenhuma fatura encontrada</h3>
-          <p className="text-sm text-muted-foreground max-w-xs">
-            Nao identificamos registros de faturas para o periodo de{" "}
-            {monthNames[selectedMonth]} de {selectedYear}.
-          </p>
-        </div>
+      {!loading && displayedBills.length === 0 && (
+        <EmptyState
+          className="bg-card/50 py-20"
+          icon={CreditCard}
+          title="Nenhuma fatura encontrada"
+          description={`Não identificamos registros de faturas para o período de ${monthNames[selectedMonth]} de ${selectedYear}.`}
+        />
       )}
 
       {/* Upcoming Bills */}
       {!loading && summary?.upcoming && summary.upcoming.length > 0 && (
         <div className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-            Proximos Vencimentos
+            Próximos vencimentos
           </p>
           <div className="rounded-xl border bg-card divide-y">
             {summary.upcoming.map((bill) => {
-              const statusConfig = getStatusConfig(bill.status, bill.dueDate);
+              const statusConfig = getStatusConfig(
+                bill.status,
+                bill.dueDate,
+                bill.totalAmount,
+              );
               return (
                 <div
                   key={bill.id}
@@ -566,7 +694,7 @@ export default function BillsPage() {
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-sm font-bold tabular-nums">
-                      {format(bill.totalAmount)}
+                      {formatBillAmount(bill.totalAmount)}
                     </p>
                     <p
                       className={cn(

@@ -12,13 +12,18 @@ case "$DATABASE_URL" in
     DB_PATH=${DATABASE_URL#file:}
     DB_DIR=$(dirname "$DB_PATH")
     mkdir -p "$DB_DIR" 2>/dev/null || true
+    chown -R nextjs:nodejs "$DB_DIR" 2>/dev/null || true
     ;;
 esac
+
+# Ensure data directory exists and has correct permissions
+mkdir -p /app/data 2>/dev/null || true
+chown -R nextjs:nodejs /app/data 2>/dev/null || true
 
 # Apply schema — ideal for homelab/personal use. For formal migrations, replace
 # with: prisma migrate deploy
 echo "[gravel] Applying database schema..."
-prisma db push --skip-generate
+su-exec nextjs prisma db push --skip-generate
 
 echo "[gravel] Starting Gravel Finance on :${PORT:-3000}..."
-exec node server.js
+exec su-exec nextjs node server.js

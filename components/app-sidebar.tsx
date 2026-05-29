@@ -1,29 +1,19 @@
-"use client"
+"use client";
 
-import * as React from "react"
+import * as React from "react";
+import Image from "next/image";
+import { Link } from "next-view-transitions";
+import { usePathname } from "next/navigation";
+import { ModeToggle } from "@/components/mode-toggle";
+import { PrivacyToggle } from "@/components/privacy-toggle";
+import { CurrencySelector } from "@/components/currency-selector";
+import { SyncButton } from "@/components/sync-button";
 import {
-  LayoutDashboard,
-  Wallet,
-  ArrowLeftRight,
-  Receipt,
-  TrendingUp,
-  Tags,
-  Bitcoin,
-  PieChart,
-  Calendar,
-  FileText,
-  Link as LinkIcon,
-  Store,
-  Target,
-  Landmark,
-  ArrowUpRight,
-  Activity,
-  Settings2,
-  Sparkles,
-  Brain,
-} from "lucide-react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
+  NAV_MAIN,
+  NAV_FINANCE,
+  NAV_INVESTMENTS,
+  NAV_PLANNING,
+} from "@/lib/constants/navigation";
 
 import {
   Sidebar,
@@ -36,117 +26,41 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@/components/ui/sidebar"
+  useSidebar,
+} from "@/components/ui/sidebar";
 
-const mainNavItems = [
-  {
-    title: "Vis\u00e3o Geral",
-    href: "/",
-    icon: LayoutDashboard,
-  },
-  {
-    title: "Transa\u00e7\u00f5es",
-    href: "/transactions",
-    icon: ArrowLeftRight,
-  },
-  {
-    title: "Recorr\u00eancias",
-    href: "/recurring",
-    icon: Calendar,
-  },
-  {
-    title: "Receitas",
-    href: "/recurring/income",
-    icon: ArrowUpRight,
-  },
-  {
-    title: "Fluxo de Caixa",
-    href: "/cash-flow",
-    icon: TrendingUp,
-  },
-]
+const NAV_ITEMS = [
+  ...NAV_MAIN,
+  ...NAV_FINANCE,
+  ...NAV_INVESTMENTS,
+  ...NAV_PLANNING,
+];
 
-const financeNavItems = [
-  {
-    title: "Contas",
-    href: "/accounts",
-    icon: Wallet,
-  },
-  {
-    title: "Faturas",
-    href: "/bills",
-    icon: Receipt,
-  },
-  {
-    title: "Categorias",
-    href: "/categories",
-    icon: Tags,
-  },
-  {
-    title: "Comerciantes",
-    href: "/merchants",
-    icon: Store,
-  },
-]
-
-const investmentNavItems = [
-  {
-    title: "Portf\u00f3lio",
-    href: "/portfolio",
-    icon: PieChart,
-  },
-  {
-    title: "Investimentos",
-    href: "/investments",
-    icon: Landmark,
-  },
-  {
-    title: "Crypto",
-    href: "/crypto",
-    icon: Bitcoin,
-  },
-]
-
-const planningNavItems = [
-  {
-    title: "Insights AI",
-    href: "/insights",
-    icon: Brain,
-  },
-  {
-    title: "Proje\u00e7\u00f5es",
-    href: "/projection",
-    icon: Activity,
-  },
-  {
-    title: "Cen\u00e1rios",
-    href: "/scenarios",
-    icon: Sparkles,
-  },
-  {
-    title: "Metas",
-    href: "/goals",
-    icon: Target,
-  },
-  {
-    title: "Relat\u00f3rios",
-    href: "/reports",
-    icon: FileText,
-  },
-  {
-    title: "Configura\u00e7\u00f5es",
-    href: "/settings",
-    icon: Settings2,
-  },
-  {
-    title: "Conex\u00f5es",
-    href: "/connect",
-    icon: LinkIcon,
-  },
-]
+function activeRouteHref(pathname: string) {
+  return NAV_ITEMS.filter(({ href }) =>
+    href === "/"
+      ? pathname === "/"
+      : pathname === href || pathname.startsWith(`${href}/`),
+  ).sort((left, right) => right.href.length - left.href.length)[0]?.href;
+}
 
 export function AppSidebar() {
-  const pathname = usePathname()
+  const pathname = usePathname();
+  const { isMobile, setOpenMobile } = useSidebar();
+  const activeHref = activeRouteHref(pathname);
+
+  // Close mobile sidebar on navigation
+  React.useEffect(() => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  }, [pathname, isMobile, setOpenMobile]);
+
+  const handleNavigate = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
 
   return (
     <Sidebar collapsible="icon">
@@ -154,13 +68,23 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <Link href="/">
+              <Link href="/" onClick={handleNavigate}>
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg shadow-lg shadow-primary/20 overflow-hidden group-data-[collapsible=icon]:size-8">
-                  <img src="/icon.png" alt="Gravel Logo" className="size-full object-cover rounded-md" />
+                  <Image
+                    src="/icon.png"
+                    alt="Gravel Logo"
+                    width={32}
+                    height={32}
+                    className="size-full rounded-md object-cover"
+                  />
                 </div>
-                <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-black text-lg tracking-tighter uppercase italic">Gravel</span>
-                  <span className="text-xs text-muted-foreground font-medium uppercase tracking-widest">Finance OS</span>
+                <div className="flex flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden">
+                  <span className="font-black text-lg tracking-tighter uppercase italic">
+                    Gravel
+                  </span>
+                  <span className="text-xs text-muted-foreground font-medium uppercase tracking-widest">
+                    Finance OS
+                  </span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -170,13 +94,22 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Organiza&ccedil;&atilde;o</SidebarGroupLabel>
+          <SidebarGroupLabel>Organização</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainNavItems.map((item) => (
+              {NAV_MAIN.map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href))}>
-                    <Link href={item.href}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={activeHref === item.href}
+                  >
+                    <Link
+                      href={item.href}
+                      aria-current={
+                        activeHref === item.href ? "page" : undefined
+                      }
+                      onClick={handleNavigate}
+                    >
                       <item.icon />
                       <span>{item.title}</span>
                     </Link>
@@ -191,10 +124,19 @@ export function AppSidebar() {
           <SidebarGroupLabel>Controle Financeiro</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {financeNavItems.map((item) => (
+              {NAV_FINANCE.map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={pathname === item.href}>
-                    <Link href={item.href}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={activeHref === item.href}
+                  >
+                    <Link
+                      href={item.href}
+                      aria-current={
+                        activeHref === item.href ? "page" : undefined
+                      }
+                      onClick={handleNavigate}
+                    >
                       <item.icon />
                       <span>{item.title}</span>
                     </Link>
@@ -209,10 +151,19 @@ export function AppSidebar() {
           <SidebarGroupLabel>Investimentos</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {investmentNavItems.map((item) => (
+              {NAV_INVESTMENTS.map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={pathname === item.href}>
-                    <Link href={item.href}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={activeHref === item.href}
+                  >
+                    <Link
+                      href={item.href}
+                      aria-current={
+                        activeHref === item.href ? "page" : undefined
+                      }
+                      onClick={handleNavigate}
+                    >
                       <item.icon />
                       <span>{item.title}</span>
                     </Link>
@@ -224,13 +175,22 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Vis&atilde;o Estrat&eacute;gica</SidebarGroupLabel>
+          <SidebarGroupLabel>Visão Estratégica</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {planningNavItems.map((item) => (
+              {NAV_PLANNING.map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={pathname === item.href}>
-                    <Link href={item.href}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={activeHref === item.href}
+                  >
+                    <Link
+                      href={item.href}
+                      aria-current={
+                        activeHref === item.href ? "page" : undefined
+                      }
+                      onClick={handleNavigate}
+                    >
                       <item.icon />
                       <span>{item.title}</span>
                     </Link>
@@ -242,11 +202,33 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter>
-        <div className="px-3 py-2 text-xs font-mono text-muted-foreground tracking-wider border-t border-border">
-          SYS::OK
+      <SidebarFooter className="p-3 border-t border-border/60 bg-muted/20">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-2 px-1 md:hidden">
+            <div className="flex items-center gap-1">
+              <ModeToggle />
+              <PrivacyToggle />
+            </div>
+            <SyncButton />
+          </div>
+          <div className="md:hidden">
+            <CurrencySelector />
+          </div>
+          <div className="px-1 py-1 text-[10px] font-mono text-muted-foreground/60 tracking-[0.2em] flex items-center justify-between group-data-[collapsible=icon]:hidden">
+            <span>SYS::READY</span>
+            <span className="animate-pulse">●</span>
+          </div>
+          <a
+            href="https://github.com/Thierrycast"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group-data-[collapsible=icon]:hidden px-1 text-[10px] text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors leading-relaxed"
+          >
+            Desenvolvido por Thierry Castro
+          </a>
         </div>
       </SidebarFooter>
+
     </Sidebar>
-  )
+  );
 }
