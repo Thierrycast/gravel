@@ -1,62 +1,77 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { Link } from "next-view-transitions";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   ArrowLeftRight,
   Wallet,
   Calendar,
   MoreHorizontal,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
-import { useSidebar } from "@/components/ui/sidebar"
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useSidebar } from "@/components/ui/sidebar";
 
 const tabs = [
   { href: "/", icon: LayoutDashboard, label: "Painel" },
   { href: "/transactions", icon: ArrowLeftRight, label: "Transações" },
   { href: "/accounts", icon: Wallet, label: "Contas" },
   { href: "/recurring", icon: Calendar, label: "Recorrências" },
-]
+];
 
 export function BottomNav() {
-  const pathname = usePathname()
-  const { toggleSidebar } = useSidebar()
+  const pathname = usePathname();
+  const { openMobile, setOpenMobile } = useSidebar();
   const activeHref = tabs
     .filter(({ href }) =>
-      href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`)
+      href === "/"
+        ? pathname === "/"
+        : pathname === href || pathname.startsWith(`${href}/`),
     )
-    .sort((a, b) => b.href.length - a.href.length)[0]?.href
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-stretch border-t border-border bg-background/95 backdrop-blur-md md:hidden"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    <nav
+      aria-label="Navegação principal"
+      // view-transition-name: nav persists across page transitions — no flicker.
+      // padding-bottom via inline style is the most reliable way to handle
+      // env(safe-area-inset-bottom) cross-browser, as Tailwind arbitrary values
+      // for env() can sometimes not compile correctly.
+      className="fixed bottom-0 left-0 right-0 z-50 select-none md:hidden [view-transition-name:bottom-nav] border-t border-border/60 bg-background/80 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-background/65 bottom-nav-pwa"
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
-      {tabs.map(({ href, icon: Icon, label }) => {
-        const isActive = activeHref === href
-        return (
-          <Link
-            key={href}
-            href={href}
-            className={cn(
-              "flex flex-1 flex-col items-center justify-center gap-0.5 text-xs font-mono tracking-widest transition-colors",
-              isActive
-                ? "text-primary"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <Icon className={cn("size-5", isActive && "stroke-[2.5px]")} />
-            <span>{label}</span>
-          </Link>
-        )
-      })}
-      <button
-        onClick={toggleSidebar}
-        className="flex flex-1 flex-col items-center justify-center gap-0.5 text-xs font-mono tracking-widest text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <MoreHorizontal className="size-5" />
-        <span>Menu</span>
-      </button>
+      <div className="flex h-16 items-stretch">
+        {tabs.map(({ href, icon: Icon, label }) => {
+          const isActive = activeHref === href;
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-current={isActive ? "page" : undefined}
+              className={cn(
+                "flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 font-mono text-[11px] tracking-tight transition-colors sm:text-xs sm:tracking-wider",
+                isActive
+                  ? "text-primary"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Icon className={cn("size-5", isActive && "stroke-[2.5px]")} />
+              <span className="max-w-full truncate">{label}</span>
+            </Link>
+          );
+        })}
+        <button
+          type="button"
+          aria-label={openMobile ? "Fechar menu completo" : "Abrir menu completo"}
+          aria-expanded={openMobile}
+          aria-haspopup="dialog"
+          onClick={() => setOpenMobile(!openMobile)}
+          className="flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 font-mono text-[11px] tracking-tight text-muted-foreground transition-colors hover:text-foreground sm:text-xs sm:tracking-wider"
+        >
+          <MoreHorizontal className="size-5" />
+          <span>Menu</span>
+        </button>
+      </div>
     </nav>
-  )
+  );
 }
