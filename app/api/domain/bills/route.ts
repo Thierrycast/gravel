@@ -47,7 +47,9 @@ export async function GET(request: Request) {
       prisma.domainAccount.findMany(),
     ]);
 
-    const accountMap = new Map(accounts.map((a) => [a.id, a.name]));
+    const accountMap = new Map(
+      accounts.map((a) => [a.id, { name: a.name, institution: a.institutionName }]),
+    );
 
     // Map to UI-expected fields
     const mapped = bills.map((bill) => {
@@ -61,15 +63,19 @@ export async function GET(request: Request) {
         } catch {}
       }
 
+      const account = bill.domainAccountId
+        ? accountMap.get(bill.domainAccountId)
+        : null;
+
+      const totalAmount = Number(bill.totalAmount);
       return {
         id: bill.id,
         accountId: bill.domainAccountId ?? null,
-        accountName: bill.domainAccountId
-          ? (accountMap.get(bill.domainAccountId) ?? "Conta")
-          : "Conta",
+        accountName: (account?.name ?? "Conta").trim(),
+        institutionName: (account?.institution ?? null)?.trim() ?? null,
         dueDate: bill.dueDate,
-        totalAmount: bill.totalAmount,
-        minimumPayment: bill.minimumPaymentAmount,
+        totalAmount,
+        minimumPayment: Number(bill.minimumPaymentAmount),
         status: normalizeBillStatus(
           bill.status,
           bill.dueDate,
@@ -80,9 +86,14 @@ export async function GET(request: Request) {
       };
     });
 
+    // Drop bills that are pure floating-point residuals (< R$0.01 in absolute terms)
+    // These come from Pluggy as leftover precision artifacts and add noise.
+    const NOISE_THRESHOLD = 0.01;
+    const filtered = mapped.filter((b) => Math.abs(b.totalAmount) >= NOISE_THRESHOLD);
+
     return jsonOk({
       summary: { total },
-      results: mapped,
+      results: filtered,
       meta: { page: pagination.page, pageSize: pagination.pageSize },
     });
   } catch (error) {
