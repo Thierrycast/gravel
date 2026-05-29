@@ -197,14 +197,11 @@ export default function AccountsPage() {
     const delta = direction === "add" ? amount : -amount;
     setSavingCash(true);
     try {
-      const res = await fetch(
-        `/api/domain/accounts/${selectedAccount.id}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ delta }),
-        },
-      );
+      const res = await fetch(`/api/domain/accounts/${selectedAccount.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ delta }),
+      });
       if (!res.ok) throw new Error("Erro ao ajustar saldo");
       setSelectedAccount((prev) =>
         prev ? { ...prev, balance: prev.balance + delta } : prev,
@@ -220,7 +217,7 @@ export default function AccountsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-w-0 flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -231,7 +228,7 @@ export default function AccountsPage() {
             Bancos, carteiras e saldos atuais
           </p>
         </div>
-        <Button asChild className="self-start sm:self-auto">
+        <Button variant="outline" asChild className="self-start sm:self-auto">
           <Link href="/connect">
             <Plus data-icon="inline-start" />
             Adicionar Conta
@@ -240,7 +237,7 @@ export default function AccountsPage() {
       </div>
 
       {/* Period Selector */}
-      <div className="flex justify-end">
+      <div className="flex justify-start sm:justify-end">
         <PeriodSwitcher state={period} />
       </div>
 
@@ -249,9 +246,9 @@ export default function AccountsPage() {
         <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardHeader>
-              <CardDescription>Patrimônio Líquido</CardDescription>
+              <CardDescription>Saldo líquido nas contas</CardDescription>
               <CardTitle
-                className={`text-2xl font-mono ${
+                className={`break-words font-mono text-2xl ${
                   allocationData.summary.totalBalance >= 0
                     ? "text-emerald-400"
                     : "text-destructive"
@@ -264,7 +261,7 @@ export default function AccountsPage() {
           <Card>
             <CardHeader>
               <CardDescription>Contas Bancárias</CardDescription>
-              <CardTitle className="text-2xl font-mono">
+              <CardTitle className="break-words font-mono text-2xl">
                 {format(totalBank)}
               </CardTitle>
             </CardHeader>
@@ -273,7 +270,7 @@ export default function AccountsPage() {
             <CardHeader>
               <CardDescription>Dívida em Cartões</CardDescription>
               <CardTitle
-                className={`text-2xl font-mono ${totalCredit > 0 ? "text-destructive" : "text-emerald-400"}`}
+                className={`break-words font-mono text-2xl ${totalCredit > 0 ? "text-destructive" : "text-emerald-400"}`}
               >
                 {format(totalCredit)}
               </CardTitle>
@@ -307,16 +304,16 @@ export default function AccountsPage() {
             ))
           : institutionGroups.map((group) => (
               <section key={group.institution} className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
                     <Avatar>
                       <AvatarImage src={group.logoUrl || undefined} />
                       <AvatarFallback>
                         {getInitials(group.institution)}
                       </AvatarFallback>
                     </Avatar>
-                    <div>
-                      <h2 className="text-xl font-semibold">
+                    <div className="min-w-0">
+                      <h2 className="break-words text-xl font-semibold">
                         {group.institution}
                       </h2>
                       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -343,11 +340,11 @@ export default function AccountsPage() {
                     return (
                       <Card
                         key={account.id}
-                        className="cursor-pointer transition-shadow hover:shadow-md"
+                        className="min-w-0 cursor-pointer transition-shadow hover:shadow-md"
                         onClick={() => handleAccountClick(account)}
                       >
                         <CardHeader>
-                          <div className="flex items-center gap-3">
+                          <div className="flex min-w-0 items-start gap-3">
                             <Avatar>
                               <AvatarImage
                                 src={account.imageUrl || undefined}
@@ -358,30 +355,33 @@ export default function AccountsPage() {
                                 )}
                               </AvatarFallback>
                             </Avatar>
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium truncate">
+                            <div className="min-w-0 flex-1 space-y-2">
+                              <div
+                                className="truncate font-medium"
+                                title={account.name}
+                              >
                                 {account.name}
                               </div>
                               <div className="text-xs text-muted-foreground">
                                 {account.institution}
                               </div>
+                              <Badge
+                                variant={credit ? "secondary" : "outline"}
+                                className="max-w-full truncate"
+                              >
+                                {getTypeLabel(account.subtype || account.kind)}
+                              </Badge>
                             </div>
-                            <Badge
-                              variant={credit ? "secondary" : "outline"}
-                              className="shrink-0"
-                            >
-                              {getTypeLabel(account.subtype || account.kind)}
-                            </Badge>
                           </div>
                         </CardHeader>
                         <CardContent className="space-y-3">
                           <div>
-                            <div className="flex items-center justify-between text-sm mb-1">
+                            <div className="mb-1 grid gap-1 text-sm sm:flex sm:items-center sm:justify-between sm:gap-2">
                               <span className="text-muted-foreground">
                                 {credit ? "Fatura Atual" : "Saldo"}
                               </span>
                               <span
-                                className={`font-semibold ${
+                                className={`break-words font-semibold sm:text-right ${
                                   credit && account.balance > 0
                                     ? "text-destructive"
                                     : "text-foreground"
@@ -399,9 +399,9 @@ export default function AccountsPage() {
                                 <Progress
                                   value={Math.min(allocation.percentage, 100)}
                                 />
-                                <div className="text-xs text-muted-foreground mt-1 text-right">
+                                <div className="mt-1 text-xs text-muted-foreground sm:text-right">
                                   {formatPercent(allocation.percentage)} do
-                                  patrimônio
+                                  saldo positivo em contas
                                 </div>
                               </>
                             )}
@@ -445,7 +445,7 @@ export default function AccountsPage() {
             <SheetDescription>{selectedAccount?.institution}</SheetDescription>
           </SheetHeader>
           {selectedAccount && (
-            <div className="flex flex-col gap-4 px-4 pb-4">
+            <div className="flex flex-col gap-4 overflow-y-auto px-4 pb-6">
               <div className="flex items-center gap-3">
                 <Avatar size="lg">
                   <AvatarImage src={selectedAccount.imageUrl || undefined} />
@@ -644,11 +644,11 @@ export default function AccountsPage() {
                 return (
                   <div className="space-y-2">
                     <div className="text-sm font-medium">
-                      Alocação no Patrimônio
+                      Alocação entre contas
                     </div>
                     <Progress value={Math.min(allocation.percentage, 100)} />
                     <div className="text-xs text-muted-foreground">
-                      {formatPercent(allocation.percentage)} do total (
+                      {formatPercent(allocation.percentage)} do saldo positivo (
                       {format(allocation.balance)})
                     </div>
                   </div>
