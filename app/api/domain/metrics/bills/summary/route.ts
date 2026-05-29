@@ -36,18 +36,24 @@ export async function GET(request: Request) {
     const accounts = await prisma.domainAccount.findMany();
     const accountMap = new Map(accounts.map((a) => [a.id, a.name]));
 
+    const NOISE_THRESHOLD = 0.01;
+
     // Map upcoming bills with account names
-    const mappedUpcoming = summary.upcoming.map((bill) => ({
-      id: bill.id,
-      accountName: bill.domainAccountId
-        ? (accountMap.get(bill.domainAccountId) ?? "Conta")
-        : "Conta",
-      dueDate: bill.dueDate,
-      totalAmount: bill.totalAmount,
-      minimumPayment: bill.minimumPaymentAmount,
-      status: normalizeBillStatus(bill.status, bill.dueDate, bill.totalAmount),
-      closingDate: null,
-    }));
+    const mappedUpcoming = summary.upcoming
+      .filter((bill) => Math.abs(Number(bill.totalAmount)) >= NOISE_THRESHOLD)
+      .map((bill) => ({
+        id: bill.id,
+        accountName: (
+          bill.domainAccountId
+            ? (accountMap.get(bill.domainAccountId) ?? "Conta")
+            : "Conta"
+        ).trim(),
+        dueDate: bill.dueDate,
+        totalAmount: bill.totalAmount,
+        minimumPayment: bill.minimumPaymentAmount,
+        status: normalizeBillStatus(bill.status, bill.dueDate, bill.totalAmount),
+        closingDate: null,
+      }));
 
     return jsonOk({
       summary: {
