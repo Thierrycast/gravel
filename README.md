@@ -3,12 +3,12 @@
   
   # Gravel Finance
 
-  ✨ Um dashboard financeiro pessoal com agregação de dados bancários (Pluggy Open Finance) e crypto (Binance).
+  ✨ Um sistema operacional financeiro pessoal com dados bancários (Pluggy Open Finance), crypto (Binance), revisão operacional e explicabilidade de cálculos.
 </div>
 
 <br />
 
-Construído com **Next.js 16**, **React 19**, **Prisma** e **SQLite** — uma arquitetura *local-first*, sem dependências de serviços SaaS externos além dos provedores de dados. Ideal para homelab e uso pessoal com controle total sobre sua privacidade financeira.
+Construído com **Next.js 16**, **React 19**, **Prisma** e **SQLite** — uma arquitetura *local-first*, sem dependências de serviços SaaS externos além dos provedores de dados. O Gravel evoluiu de dashboard para Finance OS: explica números, abre drill-downs consistentes, gera Inbox financeira e conduz fechamento do mês.
 
 ---
 
@@ -72,14 +72,14 @@ INTERNAL_API_KEY=
 | Comando | Descrição |
 |---------|-----------|
 | `pnpm dev` | Servidor de desenvolvimento. |
-| `pnpm build` | Build de produção (modo standalone). |
-| `pnpm start` | Inicia o build de produção. |
+| `pnpm build` | Build de produção (modo standalone) e cópia de assets para `.next/standalone`. |
+| `pnpm start` | Inicia o build standalone gerado por `pnpm build`. |
 | `pnpm lint` | Executa o ESLint. |
 | `pnpm test` | Testes unitários (Vitest). |
 | `pnpm test:watch` | Testes em modo watch. |
 | `pnpm db:push` | Sincroniza o schema do Prisma com o SQLite. |
 | `pnpm db:migrate` | Gera uma migration do banco de dados. |
-| `pnpm gravel` | Ferramenta de CLI local (`doctor`, `snapshot`, `diff`, `sync`). |
+| `pnpm gravel` | Ferramenta de CLI local (`doctor`, `snapshot`, `diff`, `ops`, `project`, `review`). |
 
 ---
 
@@ -108,6 +108,10 @@ pnpm gravel snapshot finance --for-llm
 
 # Comparar dois snapshots
 pnpm gravel diff ./before ./after
+
+# Inbox financeira e fechamento do mês
+pnpm gravel review inbox
+pnpm gravel review monthly-close --month 2026-06
 ```
 
 Para mais comandos, consulte o [Guia da CLI](docs/cli.md).
@@ -147,21 +151,20 @@ docker run -p 3000:3000 \
 
 ---
 
-## 📈 Status do Build
+## 📈 Status de Validação
 
-- `pnpm lint` — ✅ 0 erros, 0 avisos
-- `pnpm test` — ✅ Testes rodando 100% OK
-- `pnpm build` — ✅ Artefato standalone com sucesso
-- `docker build` — ✅ Imagem otimizada (~470 MB)
+- `pnpm exec tsc --noEmit` — checagem de tipos global.
+- `pnpm exec eslint ...` — lint focado nas telas e rotas alteradas.
+- Validação HTTP manual cobre dashboard, transações, categorias, contas, faturas, portfólio, relatórios, configurações, conexões, Inbox e fechamento mensal.
 
 ---
 
 ## ✨ Destaques Recentes
 
-- 📊 **Exportação de CSV Direta na UI**: Botão no cabeçalho das Transações respeitando todos os filtros ativos.
-- 📈 **Detalhamento Cripto Profundo**: Gráficos históricos, visão de PnL por ativo e custo médio móvel real.
-- 🌊 **Sankey Chart Inteligente**: Visualização moderna do fluxo do seu dinheiro, com modo privacidade e curvatura controlada.
-- 🧠 **Snapshot de IA**: Pipeline otimizada para "alimentar" sua IA com as métricas essenciais e gerar insights poderosos sobre seu dinheiro.
+- 🧾 **Composição dos KPIs**: cards principais explicam fórmula, inclusões, exclusões, fonte e drill-down exato.
+- 📥 **Inbox Financeira**: central acionável para categorias incertas, faturas próximas, salário não confirmado, conexões atrasadas e metas em risco.
+- ✅ **Fechamento do Mês**: checklist operacional para revisar receitas, transferências, faturas, categorias, recorrências e metas.
+- 🔌 **Conexões Humanas**: instituições com status, última sincronização, contas/importações e UUID apenas em detalhes técnicos.
 
 ---
 
