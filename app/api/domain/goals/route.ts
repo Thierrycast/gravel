@@ -3,10 +3,9 @@ import { getDomainGoals } from "@/lib/domain/queries"
 
 export const dynamic = "force-dynamic"
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url)
-    const payload = await getDomainGoals(searchParams)
+    const payload = await getDomainGoals()
     return jsonOk(payload)
   } catch (error) {
     return jsonError(error)

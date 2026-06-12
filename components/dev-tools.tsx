@@ -16,13 +16,14 @@ export function DevTools() {
       e.preventDefault();
       e.stopPropagation();
 
-      let target = e.target as any;
+      let target = e.target as HTMLElement | null;
       let source: { fileName: string; lineNumber?: number; columnNumber?: number } | null = null;
 
       while (target && !source) {
-          const key = Object.keys(target).find(k => k.startsWith('__reactFiber$'));
-        if (key) {
-          let fiber = target[key];
+        const fiberKey = Object.keys(target).find(k => k.startsWith('__reactFiber$'));
+        if (fiberKey) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let fiber = (target as any)[fiberKey];
           
           while (fiber && !source) {
             if (fiber._debugSource) {

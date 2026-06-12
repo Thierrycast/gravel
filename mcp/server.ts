@@ -379,10 +379,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       }
       case "get_goals":
-        result = await getDomainGoals(params);
+        result = await getDomainGoals();
         break;
       case "get_scenarios":
-        result = await getDomainScenarios(params);
+        result = await getDomainScenarios();
         break;
       case "analyze_financial_health": {
         const [overview, recurring, insights] = await Promise.all([
