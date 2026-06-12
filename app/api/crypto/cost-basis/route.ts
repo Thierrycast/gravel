@@ -23,9 +23,7 @@ export async function POST(request: Request) {
       },
     })
 
-    // Reprocess metadata to reflect the manual change if needed
-    // In a real app we might want to recalculate PnL immediately
-    // but the next sync/projection will do it anyway.
+    // next sync/projection will recalculate PnL automatically
     
     return NextResponse.json({ success: true, asset: updated.asset })
   } catch (error) {

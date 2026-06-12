@@ -354,3 +354,46 @@ export function isOutstandingBill(
   const normalized = normalizeBillStatus(status, dueDate, totalAmount, now);
   return normalized === "OPEN" || normalized === "OVERDUE";
 }
+
+export function isSalaryLikeTransaction({
+  categoryName,
+  parentCategoryName,
+  description,
+  merchantName,
+  salaryPatterns,
+}: {
+  categoryName?: string | null;
+  parentCategoryName?: string | null;
+  description?: string | null;
+  merchantName?: string | null;
+  salaryPatterns: string[];
+}): boolean {
+  const normCat = `${categoryName ?? ""} ${parentCategoryName ?? ""}`
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+  if (
+    normCat.includes("seed-salary") ||
+    normCat.includes("salario") ||
+    normCat.includes("salary")
+  ) {
+    return true;
+  }
+  if (salaryPatterns.length === 0) return false;
+  const lookup = [description, merchantName]
+    .filter(Boolean)
+    .join(" ")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim();
+  if (!lookup) return false;
+  return salaryPatterns.some((pattern) => {
+    const p = pattern
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .trim();
+    return p.length > 0 && (lookup.includes(p) || p.includes(lookup));
+  });
+}

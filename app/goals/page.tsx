@@ -47,9 +47,6 @@ import { useApi } from "@/hooks/use-api"
 import { useCurrency } from "@/lib/currency-context"
 import { formatDateFull, daysUntilLabel } from "@/lib/format"
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 interface Goal {
   id: string
@@ -130,9 +127,6 @@ const GOAL_TEMPLATES: readonly GoalTemplate[] = [
   },
 ] as const
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function progressColor(pct: number): string {
   if (pct > 75) return "bg-green-500"
@@ -161,9 +155,7 @@ async function copyDebugId(id: string, label: string) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
+
 
 export default function GoalsPage() {
   const { format } = useCurrency()
@@ -194,7 +186,6 @@ export default function GoalsPage() {
   const contributionNextPct =
     contributionTarget > 0 ? Math.min((contributionNext / contributionTarget) * 100, 100) : 0
 
-  // --- Dialog handlers ---
 
   function openCreate() {
     setEditingGoal(null)
@@ -273,7 +264,6 @@ export default function GoalsPage() {
     refetch()
   }
 
-  // --- Contribute handlers ---
 
   function openContribute(goal: Goal) {
     setContributeGoal(goal)
@@ -305,7 +295,6 @@ export default function GoalsPage() {
     }
   }
 
-  // --- Loading ---
 
   if (loading) {
     return (
@@ -325,7 +314,6 @@ export default function GoalsPage() {
     )
   }
 
-  // --- Empty state ---
 
   if (goals.length === 0) {
     return (
@@ -383,7 +371,6 @@ export default function GoalsPage() {
     )
   }
 
-  // --- Main render ---
 
   return (
     <div className="space-y-6 p-6">
@@ -648,9 +635,7 @@ export default function GoalsPage() {
   )
 }
 
-// ---------------------------------------------------------------------------
-// GoalDialog sub-component
-// ---------------------------------------------------------------------------
+
 
 function GoalDialog({
   open,

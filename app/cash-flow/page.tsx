@@ -34,7 +34,6 @@ import { formatPercent } from "@/lib/format";
 import { usePeriod } from "@/hooks/use-period";
 import { PeriodSwitcher } from "@/components/period-switcher";
 
-// ── Types ────────────────────────────────────────────────────────────────────
 
 interface CashFlowItem {
   date: string;
@@ -59,7 +58,6 @@ interface OverviewResponse {
   };
 }
 
-// ── Constants ────────────────────────────────────────────────────────────────
 
 const netChartConfig: ChartConfig = {
   net: {
@@ -89,7 +87,6 @@ const incomeChartConfig: ChartConfig = {
   },
 };
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatMonth(dateStr: string) {
   const date = new Date(dateStr + "T00:00:00");
@@ -97,7 +94,6 @@ function formatMonth(dateStr: string) {
   return date.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" });
 }
 
-// ── Change Badge ─────────────────────────────────────────────────────────────
 
 function ChangeBadge({
   value,
@@ -125,7 +121,6 @@ function ChangeBadge({
   );
 }
 
-// ── Loading ──────────────────────────────────────────────────────────────────
 
 function LoadingSkeleton() {
   return (
@@ -143,7 +138,6 @@ function LoadingSkeleton() {
   );
 }
 
-// ── Page ─────────────────────────────────────────────────────────────────────
 
 function monthTransactionsHref(dateStr: string, direction?: "INFLOW" | "OUTFLOW") {
   const [year, month] = dateStr.split("-").map(Number);

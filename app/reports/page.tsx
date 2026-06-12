@@ -202,7 +202,6 @@ export default function ReportsPage() {
     apiParams,
   );
 
-  // Fetch all categories for hierarchy support
   const { data: allCategoriesData } = useApi<DomainCategoriesResponse>(
     "/api/domain/categories",
     {
@@ -220,17 +219,15 @@ export default function ReportsPage() {
     );
   }, [spending]);
 
-  // Compute aggregated categories (roll up to parent)
+  
   const aggregatedCategories = useMemo(() => {
     if (!spending?.results || !allCategoriesData?.results) return [];
 
-    // Build map of categoryId -> parentId
     const catParentMap = new Map<string, string | null>();
     allCategoriesData.results.forEach((cat) => {
       catParentMap.set(cat.id, cat.parentId);
     });
 
-    // Build map of rootId -> aggregated amount & count
     const rootAmounts: Record<string, number> = {};
     const rootCounts: Record<string, number> = {};
 
@@ -245,7 +242,6 @@ export default function ReportsPage() {
       rootCounts[rootId] = (rootCounts[rootId] || 0) + item.count;
     });
 
-    // Get root category details (only those with aggregated amount)
     const rootCategories = allCategoriesData.results.filter(
       (cat) => !cat.parentId && rootAmounts[cat.id] !== undefined,
     );
@@ -310,7 +306,6 @@ export default function ReportsPage() {
   const netChange = overview?.summary?.netChange ?? null;
   const totalSpending = spending?.summary?.total ?? 0;
 
-  // Derived stats
   const savingsRate =
     monthlyIncome >= MIN_INCOME_FOR_SAVINGS_RATE
       ? (netResult / monthlyIncome) * 100
@@ -322,7 +317,6 @@ export default function ReportsPage() {
 
   const dailyAvgSpend = monthlyExpenses / Math.max(daysInPeriod, 1);
 
-  // Income/expense ratio
   const total = monthlyIncome + monthlyExpenses;
   const incomePercent = total > 0 ? (monthlyIncome / total) * 100 : 50;
 

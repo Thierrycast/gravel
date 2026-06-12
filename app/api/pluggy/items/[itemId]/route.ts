@@ -15,8 +15,7 @@ export async function DELETE(
     return NextResponse.json({ error: "itemId obrigatório" }, { status: 400 })
   }
 
-  // Best-effort remote disconnect — we still drop the local pointer if it fails
-  // so the user can recover from a stale state.
+  // best-effort: local pointer dropped even on remote failure so user can recover
   try {
     await deletePluggyRemoteItem(itemId)
   } catch {

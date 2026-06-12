@@ -9,7 +9,6 @@ type DashboardConfig = {
 }
 
 async function getSalarySuggestions(salaryPatterns: string[]) {
-  // Load all inflow transactions of the last 120 days
   const cutoff = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000)
   const inflows = await prisma.domainTransaction.findMany({
     where: {
@@ -25,7 +24,6 @@ async function getSalarySuggestions(salaryPatterns: string[]) {
     },
   })
 
-  // Group by clean description
   const groups: Record<string, typeof inflows> = {}
   for (const tx of inflows) {
     if (!tx.description) continue
@@ -36,7 +34,6 @@ async function getSalarySuggestions(salaryPatterns: string[]) {
     groups[clean].push(tx)
   }
 
-  // Get salary category details to check if it's already salary
   const salaryCat = await prisma.domainCategory.findFirst({
     where: {
       OR: [
@@ -57,36 +54,31 @@ async function getSalarySuggestions(salaryPatterns: string[]) {
   for (const [description, txs] of Object.entries(groups)) {
     if (txs.length < 2) continue
 
-    // Check if it's already marked as salary
     if (salaryCat && txs.some(tx => tx.domainCategoryId === salaryCat.id)) {
       continue
     }
 
-    // Check if it's already in the salaryPatterns
     if (salaryPatterns.some(p => description.toLowerCase().includes(p.toLowerCase()) || p.toLowerCase().includes(description.toLowerCase()))) {
       continue
     }
 
-    // Check distinct months
     const months = new Set(txs.map(tx => {
       const d = new Date(tx.occurredAt)
       return `${d.getUTCFullYear()}-${d.getUTCMonth()}`
     }))
     if (months.size < 2) continue
 
-    // Check amount variance
     const amounts = txs.map(tx => Number(tx.amount))
     const min = Math.min(...amounts)
     const max = Math.max(...amounts)
     const sum = amounts.reduce((a, b) => a + b, 0)
     const avg = sum / amounts.length
 
-    if (avg < 200) continue // Skip small amounts less than R$ 200
+    if (avg < 200) continue
 
     const variancePercent = (max - min) / avg
-    if (variancePercent > 0.15) continue // Limit to 15% variance
+    if (variancePercent > 0.15) continue
 
-    // Find last transaction
     txs.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
     const lastTx = txs[0]
 
@@ -108,7 +100,6 @@ export async function GET() {
     create: { id: "default" },
   })
 
-  // Parse patterns
   let salaryPatterns: string[] = []
   if (settings.dashboardConfigJson) {
     try {
@@ -119,7 +110,6 @@ export async function GET() {
     } catch {}
   }
 
-  // Fetch last transaction for each pattern
   const salarySources = await Promise.all(
     salaryPatterns.map(async (pattern) => {
       const lastTx = await prisma.domainTransaction.findFirst({
@@ -185,7 +175,6 @@ export async function PATCH(request: Request) {
     config.salaryPatterns = salaryPatterns
     updatedConfigJson = JSON.stringify(config)
 
-    // Recategorize matching transactions retroactively!
     const salaryCat = await prisma.domainCategory.findFirst({
       where: {
         OR: [

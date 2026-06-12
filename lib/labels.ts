@@ -15,13 +15,11 @@ export function getTypeLabel(kind: string | null): string {
     INVESTMENT: "Investimento",
     CASH: "Carteira Física",
     OTHER: "Outro",
-    // Pluggy raw subtype values
     CHECKING_ACCOUNT: "Conta Corrente",
     CREDIT_CARD: "Cartão de Crédito",
     SAVINGS_ACCOUNT: "Poupança",
     PAYMENT_ACCOUNT: "Conta de Pagamento",
     CASH_MANAGEMENT: "Gestão de Caixa",
-    // Investment types
     FIXED_INCOME: "Renda Fixa",
     MUTUAL_FUND: "Fundo de Investimento",
     STOCK: "Ações",

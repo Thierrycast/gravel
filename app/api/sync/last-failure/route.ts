@@ -35,7 +35,6 @@ export async function GET() {
       }),
     ])
 
-    // Suppress the banner if a successful run happened *after* the error.
     const supersededBySuccess =
       latestError &&
       latestSuccess &&

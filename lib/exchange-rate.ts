@@ -14,7 +14,7 @@ declare global {
   var usdBrlSource: ExchangeRateSource | undefined
 }
 
-const CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutes
+const CACHE_TTL_MS = 30 * 60 * 1000
 const HARDCODED_USD_BRL_FALLBACK = 5.8
 
 const RETRY_BASE_MS = 200
