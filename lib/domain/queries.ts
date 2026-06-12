@@ -822,6 +822,26 @@ export async function getDashboardTransactions(searchParams: URLSearchParams) {
   }
 }
 
+export async function getDomainGoals(_searchParams: URLSearchParams) {
+  const goals = await prisma.goal.findMany({
+    orderBy: [{ targetDate: "asc" }, { createdAt: "desc" }],
+  });
+  return {
+    summary: { total: goals.length },
+    results: goals,
+  };
+}
+
+export async function getDomainScenarios(_searchParams: URLSearchParams) {
+  const scenarios = await prisma.domainScenarioEvent.findMany({
+    orderBy: [{ date: "asc" }, { createdAt: "desc" }],
+  });
+  return {
+    summary: { total: scenarios.length },
+    results: scenarios,
+  };
+}
+
 export async function getUserSettings(searchParams?: URLSearchParams) {
   const setting = await prisma.userSetting.findFirst()
 
@@ -882,4 +902,19 @@ export async function getUserSettings(searchParams?: URLSearchParams) {
   }
 
   return base
+}
+
+export async function getDomainGoals(searchParams: URLSearchParams) {
+  const goals = await prisma.goal.findMany({
+    where: { active: true },
+    orderBy: { targetDate: "asc" },
+  });
+  return { results: goals };
+}
+
+export async function getDomainScenarios(searchParams: URLSearchParams) {
+  const events = await prisma.domainScenarioEvent.findMany({
+    orderBy: { occurredAt: "asc" },
+  });
+  return { results: events };
 }
