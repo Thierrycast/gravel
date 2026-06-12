@@ -573,7 +573,6 @@ export function inferBillStatus(
 
   // Past due date
   if (dueDay < today) {
-    // If due date was more than 90 days ago, likely paid/closed or abandoned
     const daysPast = Math.floor(
       (today.getTime() - dueDay.getTime()) / (1000 * 60 * 60 * 24),
     );

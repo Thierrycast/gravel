@@ -54,7 +54,6 @@ export async function GET(
   }
 
   if (!upstream.ok) {
-    // Serve spothq fallback on 404 or other errors
     const fallback = `https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/128/color/${safe}.png`;
     return Response.redirect(fallback, 302);
   }

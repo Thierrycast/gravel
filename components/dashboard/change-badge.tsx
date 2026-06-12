@@ -11,7 +11,6 @@ export function ChangeBadge({
   const positive = reverse ? value < 0 : value > 0
   const negative = reverse ? value > 0 : value < 0
   
-  // Use strings instead of components for simplicity in server components if needed,
   // but since this is small it's fine.
   return (
     <span 

@@ -9,10 +9,7 @@ export const dynamic = "force-dynamic"
  */
 export async function GET() {
   try {
-    // Testa leitura básica
     await prisma.$queryRawUnsafe("SELECT 1")
-    
-    // Testa escrita (dentro de transação segura que faz rollback)
     await prisma.$executeRawUnsafe("BEGIN IMMEDIATE")
     await prisma.$executeRawUnsafe("ROLLBACK")
     

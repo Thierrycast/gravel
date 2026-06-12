@@ -62,8 +62,6 @@ export default async function RootLayout({
     process.env.npm_lifecycle_event !== "build" &&
     process.env.NEXT_PHASE !== "phase-production-build";
 
-  // Trigger auto-sync check on server-side load (fire-and-forget background check)
-  // Skip this during production build/prerender to avoid touching a not-yet-migrated DB.
   if (shouldRunAutoSync) {
     checkAndTriggerAutoSync().catch((err) =>
       console.error("[layout] auto-sync check failed", err)

@@ -34,7 +34,6 @@ import {
   type CryptoAssetOperationMarker,
 } from "./crypto-asset-chart";
 
-// ─── Helpers ────────────────────────────────────────────────
 const USD_QUOTES = new Set(["USDT", "FDUSD", "USDC", "BUSD", "USD"]);
 
 function toBrl(
@@ -100,7 +99,6 @@ function buildAnalyticalChartData(
   });
 }
 
-// ─── Server Data Component ─────────────────────────────────
 async function AssetOverview({ assetId }: { assetId: string }) {
   const searchParams = new URLSearchParams();
   searchParams.set("asset", assetId);
@@ -125,18 +123,17 @@ async function AssetOverview({ assetId }: { assetId: string }) {
 
   const rate = new Prisma.Decimal(usdBrl);
 
-  // Convert Decimals → numbers in BRL
+  
   const currentPriceBrl = toBrl(asset.currentPrice, asset.quoteAsset, rate);
   const avgPriceBrl = toBrl(asset.averageCost, asset.quoteAsset, rate);
   const valueBrl = toBrl(asset.currentValue, asset.quoteAsset, rate);
   const pnlBrl = toBrl(asset.unrealizedPnl, asset.quoteAsset, rate);
   const isPositive = (pnlBrl ?? 0) >= 0;
 
-  // Get trading symbol for the asset
+  
   const tradingInfo = selectPreferredTradingSymbol(assetId, exchangeInfo);
   const quoteAsset = tradingInfo?.quoteAsset ?? "USDT";
 
-  // Fetch historical price data from Binance klines API
   let chartData: { date: string; price: number }[] = [];
 
   if (tradingInfo?.symbol) {
@@ -152,7 +149,7 @@ async function AssetOverview({ assetId }: { assetId: string }) {
         const timestamp = kline[0];
         const date = new Date(timestamp).toISOString().split("T")[0];
 
-        // Convert to BRL if needed
+        
         let priceInBrl = closePrice;
         if (quoteAsset.toUpperCase() === "BRL") {
           priceInBrl = closePrice;
@@ -166,7 +163,7 @@ async function AssetOverview({ assetId }: { assetId: string }) {
       });
     } catch (error) {
       console.error("Failed to fetch klines:", error);
-      // Fallback to database snapshots if API fails
+      
       const history = await prisma.binanceAssetPriceSnapshot.findMany({
         where: { asset: assetId },
         orderBy: { fetchedAt: "asc" },
@@ -179,7 +176,7 @@ async function AssetOverview({ assetId }: { assetId: string }) {
       }));
     }
   } else {
-    // Fallback to database snapshots if no trading symbol found
+    
     const history = await prisma.binanceAssetPriceSnapshot.findMany({
       where: { asset: assetId },
       orderBy: { fetchedAt: "asc" },
@@ -555,7 +552,6 @@ async function AssetOverview({ assetId }: { assetId: string }) {
   );
 }
 
-// ─── Small UI pieces ────────────────────────────────────────
 
 function InfoRow({
   label,
@@ -614,7 +610,6 @@ function MetricCard({
   );
 }
 
-// ─── Loading skeleton ───────────────────────────────────────
 
 function LoadingState() {
   return (
@@ -639,7 +634,6 @@ function LoadingState() {
   );
 }
 
-// ─── Page ───────────────────────────────────────────────────
 
 export default async function CryptoAssetPage({
   params,

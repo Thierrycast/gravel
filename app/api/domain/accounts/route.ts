@@ -49,9 +49,6 @@ export async function GET(request: Request) {
         .map((item) => [item.domainAccountId, item]),
     );
 
-    // Group accounts by sourceParentId to derive the real institution name.
-    // Each Pluggy item corresponds to one real bank connection, so all accounts
-    // under the same item belong to the same institution.
     const groupNames = new Map<string, string[]>();
     for (const account of payload.results) {
       if (!account.sourceParentId) continue;
@@ -74,8 +71,6 @@ export async function GET(request: Request) {
       const activityItem = activityMap.get(account.id);
       const spentItem = spentMap.get(account.id);
 
-      // Prefer group-derived brand name; fall back to stored institutionName
-      // (only if it's not a Pluggy internal name).
       const groupName = account.sourceParentId
         ? (groupInstitution.get(account.sourceParentId) ?? null)
         : null;

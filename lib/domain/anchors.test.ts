@@ -61,7 +61,6 @@ describe("createBalanceAnchor", () => {
 
     await createBalanceAnchor("acc-1", 2026, 4)
     const aggArgs = aggregateMock.mock.calls[0][0] as MockedAggregateArgs
-    // The critical change from the audit: inclusive gte, not exclusive gt.
     expect(aggArgs.where.occurredAt).toHaveProperty("gte")
     expect(aggArgs.where.occurredAt).not.toHaveProperty("gt")
   })
