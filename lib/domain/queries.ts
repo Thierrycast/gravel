@@ -903,18 +903,3 @@ export async function getUserSettings(searchParams?: URLSearchParams) {
 
   return base
 }
-
-export async function getDomainGoals(searchParams: URLSearchParams) {
-  const goals = await prisma.goal.findMany({
-    where: { active: true },
-    orderBy: { targetDate: "asc" },
-  });
-  return { results: goals };
-}
-
-export async function getDomainScenarios(searchParams: URLSearchParams) {
-  const events = await prisma.domainScenarioEvent.findMany({
-    orderBy: { occurredAt: "asc" },
-  });
-  return { results: events };
-}

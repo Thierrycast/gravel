@@ -367,11 +367,3 @@ export async function getSpendingTrendsMetrics(searchParams: URLSearchParams) {
     results,
   };
 }
-
-export async function getSpendingTrendsMetrics(searchParams: URLSearchParams) {
-  // Implementação básica para restaurar o build
-  return {
-    trends: [],
-    period: searchParams.get("period") ?? "last6months",
-  };
-}
