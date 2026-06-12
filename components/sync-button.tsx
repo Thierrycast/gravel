@@ -5,7 +5,7 @@ import { AlertTriangle, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
-const POLL_INTERVAL_MS = 5_000 // poll status every 5s while syncing
+const POLL_INTERVAL_MS = 5_000
 const POLL_LOOKBACK_MS = 10_000
 
 type SyncStatus = "idle" | "syncing" | "done" | "error"
@@ -165,7 +165,6 @@ export function SyncButton({ showTime = false, className }: SyncButtonProps) {
   const startPollingRef = useRef<() => void>(() => {})
   const MAX_POLLS = 60 // 5 minutes at 5s intervals (full sync can take time)
 
-  // Read-only status fetch; sync mutations stay behind the explicit button click.
   const refreshSyncState = useCallback(async () => {
     try {
       const [syncData, settingsData] = await Promise.all([
@@ -236,7 +235,6 @@ export function SyncButton({ showTime = false, className }: SyncButtonProps) {
     [status, refreshSyncState],
   )
 
-  // Keep ref updated
   useEffect(() => {
     startPollingRef.current = startPolling
   }, [startPolling])
@@ -292,7 +290,6 @@ export function SyncButton({ showTime = false, className }: SyncButtonProps) {
     }
   }, [status, startPolling])
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current)

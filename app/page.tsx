@@ -19,7 +19,7 @@ export default async function Page({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const params = await searchParams;
-  // Convert params to URLSearchParams for domain functions
+  
   const urlParams = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (typeof value === "string") {
@@ -31,7 +31,7 @@ export default async function Page({
 
   await ensurePrismaReady();
 
-  // Parallel fetch everything directly from the domain layer (bypassing internal API)
+  
   const cashFlowParams = new URLSearchParams(urlParams);
   cashFlowParams.set("groupBy", "day");
 

@@ -16,7 +16,6 @@ export async function GET() {
   const categories = await prisma.domainCategory.findMany()
   const categoryMap = new Map(categories.map((c) => [c.id, c.name]))
 
-  // Map to UI-expected field names
   const mapped = rules.map((r) => ({
     id: r.id,
     description: r.title,

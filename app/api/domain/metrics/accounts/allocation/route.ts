@@ -8,7 +8,6 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const metrics = await getAccountAllocationMetrics(searchParams)
 
-    // Transform byKind array into keyed object for the frontend
     const byKindMap: Record<string, number> = {}
     for (const entry of metrics.byKind) {
       byKindMap[entry.kind] = Number(entry.balance)

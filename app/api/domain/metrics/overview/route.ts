@@ -14,9 +14,7 @@ export async function GET(request: Request) {
       getUsdBrlRate(),
     ])
 
-    // Convert crypto totals (held internally in USD) to BRL, then propagate
-    // the new value through every aggregate that includes crypto so all
-    // downstream fields stay consistent with the wire-format expectations.
+    // crypto is stored in USD — convert to BRL and propagate so all aggregates stay consistent
     const rate = new Prisma.Decimal(usdBrl)
     const cryptoTotalBrl = summaryRaw.cryptoTotal.mul(rate)
     const cryptoNetWorthBrl = cryptoTotalBrl
@@ -30,8 +28,6 @@ export async function GET(request: Request) {
       usdBrlRate: rate,
     }
 
-    // Compare against the equivalent previous period for headline deltas.
-    // If the user picks "mtd" we compare vs last month, "90d" vs the 90d before, etc.
     const prevParams = new URLSearchParams(searchParams)
     const now = new Date()
     const period = searchParams.get("period") ?? "mtd"
@@ -62,7 +58,6 @@ export async function GET(request: Request) {
         prevFrom = new Date(prevTo.getTime() - 365 * 86400000)
         break
       case "ytd": {
-        // Previous year
         prevFrom = new Date(now.getFullYear() - 1, 0, 1)
         prevTo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate())
         break

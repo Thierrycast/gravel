@@ -47,7 +47,6 @@ function getPeriodWindows(periodType: PeriodType, count: number): PeriodWindow[]
         to: new Date(hYear, hStart + 6, 0, 23, 59, 59, 999),
       });
     } else {
-      // year
       const year = now.getFullYear() - i;
       windows.push({
         label: String(year),
@@ -60,13 +59,10 @@ function getPeriodWindows(periodType: PeriodType, count: number): PeriodWindow[]
   return windows;
 }
 
-// Determine the groupBy and x-axis unit per period type
 function groupByFor(periodType: PeriodType): string {
   return periodType === "month" ? "day" : "month";
 }
 
-// Convert a period string like "2026-05-14" or "2026-05" to an x-axis index
-// relative to the window start. Returns 1-based position.
 function periodToX(
   periodStr: string,
   periodType: PeriodType,
@@ -88,7 +84,6 @@ function periodToX(
   }
 }
 
-// Human-readable x-axis label for each position
 function xLabel(x: number, periodType: PeriodType, windowFrom: Date): string {
   if (periodType === "month") return String(x);
 
@@ -122,7 +117,6 @@ export async function GET(request: Request) {
 
       const metrics = await getCashFlowMetrics(params);
 
-      // Map each bucket to x position + per-metric totals
       const buckets = new Map<number, { net: number; income: number; expense: number }>();
       for (const point of metrics) {
         const x = periodToX(point.period, periodType, window.from);
@@ -134,7 +128,6 @@ export async function GET(request: Request) {
         });
       }
 
-      // Build cumulative points sorted by x
       const sorted = Array.from(buckets.entries()).sort((a, b) => a[0] - b[0]);
       let cumNet = 0;
       let cumIncome = 0;

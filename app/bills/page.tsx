@@ -64,7 +64,6 @@ function normalizeDisplayedAmount(value: number): number {
 
 function normalizeDisplayedBill(bill: Bill): Bill {
   const totalAmount = normalizeDisplayedAmount(bill.totalAmount);
-  // If manually marked as paid, override status
   const status = bill.paidAt
     ? "PAID"
     : totalAmount === 0 && bill.status !== "PAID"

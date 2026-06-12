@@ -61,7 +61,6 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   }, [])
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // Fetch live USD/BRL rate from a lightweight public endpoint
   useEffect(() => {
     fetch("https://economia.awesomeapi.com.br/json/last/USD-BRL")
       .then((r) => r.json())

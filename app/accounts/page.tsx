@@ -115,7 +115,6 @@ export default function AccountsPage() {
 
   const loading = accountsLoading || allocationLoading;
 
-  // Reset nickname editing state when account changes
   useEffect(() => {
     if (selectedAccount) {
       setNicknameInput(selectedAccount.nickname || selectedAccount.name || "");
