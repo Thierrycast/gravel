@@ -6,9 +6,7 @@ export interface ApiPaginationMeta {
   totalPages: number;
 }
 
-// -----------------------------------------------------------------------------
 // Transactions
-// -----------------------------------------------------------------------------
 export interface Transaction {
   id: string;
   description: string;
@@ -78,9 +76,7 @@ export interface MerchantLookup {
   displayName: string;
 }
 
-// -----------------------------------------------------------------------------
 // Accounts
-// -----------------------------------------------------------------------------
 export interface Account {
   id: string;
   name: string;
@@ -125,9 +121,7 @@ export interface AllocationResponse {
   results: AllocationResult[];
 }
 
-// -----------------------------------------------------------------------------
 // Overview / Analytics
-// -----------------------------------------------------------------------------
 export interface OverviewData {
   accountBalance: number;
   investmentsTotal: number;
@@ -162,9 +156,7 @@ export interface TransactionsData {
   results: Transaction[];
 }
 
-// -----------------------------------------------------------------------------
 // Recurring
-// -----------------------------------------------------------------------------
 export interface RecurringRule {
   id: string;
   description: string;

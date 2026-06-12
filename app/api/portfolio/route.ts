@@ -26,10 +26,7 @@ export async function GET() {
     getUsdBrlRate(),
   ])
 
-  // ── Currency normalisation ─────────────────────────────────────────────
-  // Crypto values come from Binance in USD. All bank/investment values are
-  // already in BRL. We must convert crypto to BRL before mixing, otherwise
-  // the totals silently combine two currencies.
+  // Binance crypto is USD; bank/investment values are BRL — convert before mixing or totals silently blend two currencies.
   if (!Number.isFinite(usdBrl) || usdBrl <= 0) {
     return NextResponse.json(
       { error: { message: "Cotacao USD/BRL indisponivel para calcular portfolio" } },
@@ -47,7 +44,6 @@ export async function GET() {
   const liabilitiesTotalNum = Number(liabilitiesTotal.toString())
   const netWorthNum = grossAssetsNum - liabilitiesTotalNum
 
-  // Fiat asset items (banks + investments only)
   const fiatItems: Array<{
     name: string
     type: string
@@ -55,12 +51,11 @@ export async function GET() {
     sharePercent: number
   }> = []
 
-  // CARD/CREDIT accounts in Pluggy hold the outstanding bill as a POSITIVE amount
-  // (i.e. money YOU OWE). They are liabilities and must NOT appear as assets.
+  // Pluggy CARD/CREDIT balance = amount owed (positive) — liability, not an asset
   const creditKinds = new Set(["CARD", "CREDIT"])
 
   for (const account of payload.accounts) {
-    if (creditKinds.has(account.kind)) continue // skip — these are debts
+    if (creditKinds.has(account.kind)) continue
     if (!isBrlCurrency(account.currencyCode)) continue
     const balance = Number(account.balance?.toString() ?? "0")
     if (balance > 0) {
@@ -86,7 +81,6 @@ export async function GET() {
   }
   fiatItems.sort((a, b) => b.value - a.value)
 
-  // Crypto allocations — values normalised to BRL
   const cryptoItems: Array<{
     name: string
     type: string
@@ -110,7 +104,6 @@ export async function GET() {
   }
   cryptoItems.sort((a, b) => b.value - a.value)
 
-  // Combined view (used by legacy components)
   const assetItems = [
     ...fiatItems.map((item) => ({
       ...item,
@@ -146,8 +139,7 @@ export async function GET() {
     if (!isBrlCurrency(account.currencyCode)) continue
     const balance = Number(account.balance?.toString() ?? "0")
     const isCreditAccount = creditKinds.has(account.kind)
-    // Pluggy card accounts usually expose the outstanding balance as a
-    // positive value. Non-card negative balances are still liabilities.
+    // Pluggy card balance is positive (amount owed); non-card negatives are also liabilities
     const liabilityAmount = isCreditAccount
       ? Math.max(balance, 0)
       : Math.max(Math.abs(Math.min(balance, 0)), 0)

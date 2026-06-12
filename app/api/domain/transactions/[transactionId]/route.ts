@@ -341,7 +341,7 @@ export async function DELETE(
     }
 
     await prisma.$transaction(async (tx) => {
-      // Limpar tabelas associadas (se houver registros)
+      
       await tx.ignoredTransaction.deleteMany({
         where: { domainTransactionId: transactionId },
       });
@@ -354,7 +354,7 @@ export async function DELETE(
         where: { domainTransactionId: transactionId },
       });
 
-      // Excluir a transação propriamente dita
+      
       await tx.domainTransaction.delete({
         where: { id: transactionId },
       });

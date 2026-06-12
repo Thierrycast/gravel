@@ -192,7 +192,6 @@ export async function refreshRecurringDerived(options?: {
 
     if (!candidateKey) continue;
 
-    // Use a special key for salary to group them even if merchant differs slightly
     const isSalary = category ? isSalaryCategory(category) : false;
     const groupingKey = isSalary ? "salary_group" : (transaction.domainMerchantId ?? candidateKey);
 
@@ -248,7 +247,6 @@ export async function refreshRecurringDerived(options?: {
     let detectedInterval: string | null = null;
     const { INTERVAL_THRESHOLDS } = RECURRING_DETECTION;
     
-    // If it's a salary group with only 1 occurrence, default to MONTHLY
     if (isSalaryGroup && group.length === 1) {
       detectedInterval = "MONTHLY";
     } else {
@@ -461,7 +459,6 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
     }),
   ]);
 
-  // Variable (non-recurring) expenses: exclude internal transfers and known recurring rules
   const categoryMap = new Map<string, (typeof categories)[number]>(
     categories.map((category) => [category.id, category]),
   );
@@ -519,7 +516,7 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
   );
   const avgVariableExpenses = includeVariableExpenses
     ? safeNumber(totalVariableOutflow.div(3))
-    : 0; // 3-month average
+    : 0;
 
   let currentBalance = overview.accountBalance;
   const monthsData = [] as Array<{
@@ -607,7 +604,6 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
           if (!current || !total) return false;
           if (current >= total) return false;
 
-          // Calculate if this installment should fall into the current projection month
           const txDate = new Date(tx.occurredAt);
           const monthsSinceTx =
             (pointDate.getUTCFullYear() - txDate.getUTCFullYear()) * 12 +
@@ -726,11 +722,9 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
   const totalPastInflow = safeNumber(
     sumDecimals(pastInflowTransactions.map((tx) => tx.amount.abs())),
   );
-  // lookback window is VARIABLE_EXPENSE_LOOKBACK_DAYS (90 days ≈ 3 months)
   const lookbackMonths = PROJECTION.VARIABLE_EXPENSE_LOOKBACK_DAYS / 30;
   const avgRealMonthlyInflow = totalPastInflow / lookbackMonths;
 
-  // Use the higher of real historical inflow or projected monthly income (when salary is set)
   const averageMonthlyIncome =
     monthsData.length > 0
       ? Math.max(

@@ -11,7 +11,6 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
 
-    // Support "month" param (YYYY-MM) from bills page
     const monthParam = searchParams.get("month");
     if (
       monthParam &&
@@ -38,7 +37,6 @@ export async function GET(request: Request) {
 
     const NOISE_THRESHOLD = 0.01;
 
-    // Map upcoming bills with account names
     const mappedUpcoming = summary.upcoming
       .filter((bill) => Math.abs(Number(bill.totalAmount)) >= NOISE_THRESHOLD)
       .map((bill) => ({

@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic"
  */
 export async function GET() {
   try {
-    // Try to find the last full sync first
+    
     let lastRun = await prisma.opsSyncRun.findFirst({
       where: { 
         provider: SourceProvider.MANUAL,
@@ -20,7 +20,6 @@ export async function GET() {
       orderBy: { startedAt: "desc" },
     })
 
-    // If no full sync, fallback to last Pluggy sync
     if (!lastRun) {
       lastRun = await prisma.opsSyncRun.findFirst({
         where: { provider: SourceProvider.PLUGGY },
@@ -54,12 +53,11 @@ export async function POST(req: Request) {
     if (isFull) {
       // Fire-and-forget: start the full sync without blocking the response
       runFullOperationalSync({
-        // Default options for full sync
+        
       }).catch((err) => {
         console.error("[sync/trigger] full sync failed:", err)
       })
     } else {
-      // Fallback for just Pluggy if specifically requested
       const { runPluggySync } = await import("@/lib/ingestion/provider-sync")
       runPluggySync({
         scope: "ui/manual-trigger",

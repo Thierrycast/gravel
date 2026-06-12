@@ -62,7 +62,6 @@ import {
 import { getCategoryEmoji, getCategoryColor } from "@/lib/category-emoji";
 import { cn } from "@/lib/utils";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface OverviewMetricsResponse {
   results: {
@@ -98,7 +97,6 @@ interface OverviewDashboardProps {
   initialData: OverviewDashboardData;
 }
 
-// ── Shared tooltip shell style ────────────────────────────────────────────────
 
 const TOOLTIP_STYLE: React.CSSProperties = {
   backgroundColor: "var(--card)",
@@ -116,13 +114,12 @@ const TOOLTIP_LABEL_STYLE: React.CSSProperties = {
   marginBottom: 6,
 };
 
-// ── CashFlow tooltip — colors match the bars/line ─────────────────────────────
 
 const CASHFLOW_COLORS: Record<string, string> = {
-  income:      "var(--chart-2)",  // emerald
-  expense:     "var(--chart-4)",  // pink/red
-  investments: "var(--chart-3)",  // amber
-  net:         "#1d4ed8",         // Darker blue (blue-700)
+  income:      "var(--chart-2)",
+  expense:     "var(--chart-4)",
+  investments: "var(--chart-3)",
+  net:         "#1d4ed8",
 };
 
 const CASHFLOW_LABELS: Record<string, string> = {
@@ -155,7 +152,6 @@ function CashFlowTooltip({
 }) {
   if (!active) return null;
 
-  // Always render all keys for the current sub-mode, even if value is 0
   const keys =
     subMode === "all"
       ? ["income", "expense", "investments", "net"]
@@ -163,7 +159,6 @@ function CashFlowTooltip({
         ? ["income"]
         : ["expense"];
 
-  // Build value lookup from payload; default to 0 for absent keys
   const valueMap: Record<string, number> = {};
   for (const item of payload ?? []) valueMap[item.dataKey] = item.value;
 
@@ -191,7 +186,6 @@ function CashFlowTooltip({
   );
 }
 
-// ── Categories (donut) tooltip — color matches the slice ─────────────────────
 
 interface PiePayloadItem {
   fill?: string;
@@ -253,7 +247,6 @@ function CategoryTooltip({
   );
 }
 
-// ── Default chart filters ─────────────────────────────────────────────────────
 
 const DEFAULT_FILTERS: ChartFilters = {
   periodType: "month",
@@ -262,7 +255,6 @@ const DEFAULT_FILTERS: ChartFilters = {
   cumulative: true,
 };
 
-// ── Main component ─────────────────────────────────────────────────────────────
 
 export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
   const [mounted, setMounted] = useState(false);
@@ -279,7 +271,6 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
     setChartMode,
   } = useDashboardFilters();
 
-  // ── Header & Period Switcher ──
   const [currentMonthLabel, setCurrentMonthLabel] = useState("");
 
   useEffect(() => {
@@ -291,7 +282,6 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
   }, []);
 
 
-  // ── Lifted comparison chart state (shared with expand dialog) ──
   const [chartFilters, setChartFilters] = useState<ChartFilters>(DEFAULT_FILTERS);
   const [chartData, setChartData] = useState<CompareResponse | null>(null);
   const [chartLoading, setChartLoading] = useState(true);
@@ -320,7 +310,6 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
     setChartFilters((prev) => ({ ...prev, ...patch }));
   }
 
-  // ── Other API data ──
   const { data: overviewData } = useApi<OverviewMetricsResponse>(
     "/api/domain/metrics/overview",
     periodState.params,
@@ -366,7 +355,6 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
     { key: "categories"  as const, label: "Categorias" },
   ];
 
-  // ── Pie chart data (categories donut) ──
   const pieData = categories.results.map((cat, i) => ({
     name: cat.name,
     value: cat.amount,

@@ -47,7 +47,6 @@ export async function checkAndTriggerAutoSync() {
     const now = new Date()
     const lastSyncAt = lastSuccessfulRun?.finishedAt
 
-    // If never synced or last sync was more than intervalHours ago
     const intervalMs = intervalHours * 60 * 60 * 1000
     const needsSync = !lastSyncAt || (now.getTime() - lastSyncAt.getTime()) > intervalMs
 

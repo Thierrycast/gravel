@@ -49,14 +49,12 @@ snapshotCommand
     const paramsWithTop = new URLSearchParams(params)
     paramsWithTop.set("limit", String(topN))
 
-    // Import domain modules
     const { getOverviewMetrics, getCashFlowMetrics, getSpendingByCategoryMetrics, getSpendingByMerchantMetrics, getBillsSummaryMetrics, getCryptoPortfolioMetrics, getCryptoAssetMetrics } = await import("@/lib/domain/analytics")
     const { getRecurringPayload, getProjectionPayload, getPortfolioPayload } = await import("@/lib/domain/derived")
     const { getDomainTransactions, getDomainCategories, getDomainMerchants, getDomainAccounts, getDomainBills } = await import("@/lib/domain/queries")
     const { prisma } = await import("@/lib/prisma")
     const { collectAnomalies } = await import("../collectors/anomalies.js")
 
-    // Collect data
     log.info("Coletando overview...")
     const overview = serializeDecimal(await getOverviewMetrics(params))
 
@@ -108,7 +106,6 @@ snapshotCommand
     log.info("Analisando anomalias...")
     const anomalies = serializeDecimal(await collectAnomalies(params))
 
-    // Build bundle
     const bundle = {
       metadata: {
         generatedAt: new Date().toISOString(),
@@ -140,14 +137,12 @@ snapshotCommand
 
     const fmt = options.format
 
-    // Write bundle JSON
     if (fmt === "bundle" || fmt === "json" || fmt === "all") {
       const bundlePath = path.join(outDir, "analysis-bundle.json")
       writeFileSync(bundlePath, JSON.stringify(bundle, null, 2))
       log.success(`Bundle: ${bundlePath}`)
     }
 
-    // Write JSONL entities
     if (fmt === "all" && !isForLLM) {
       const writers = [
         { name: "transactions", data: (transactions as { results: unknown[] })?.results ?? [] },
@@ -175,7 +170,6 @@ snapshotCommand
       log.success(`Entities: Gerados ${writers.length} arquivos JSONL`)
     }
 
-    // Write prompt-context.md for LLM
     if (isForLLM || fmt === "all") {
       const o = overview as Record<string, number | undefined>
       const md = [
@@ -219,7 +213,6 @@ snapshotCommand
       log.success(`Prompt Context: ${mdPath}`)
     }
 
-    // Write manifest
     const manifest = {
       generatedAt: new Date().toISOString(),
       period,

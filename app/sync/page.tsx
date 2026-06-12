@@ -188,7 +188,6 @@ export default function SyncPage() {
     try {
       const res = await fetch("/api/admin/sync/full", { method: "POST" })
       if (!res.ok) throw new Error("Falha ao iniciar sincronização")
-      // Wait a bit then refetch status
       setTimeout(() => {
         refetch()
         setSyncing(false)

@@ -217,7 +217,6 @@ export default function InvestmentsPage() {
       list.push(inv)
       groups.set(group, list)
     }
-    // Sort groups by total balance desc
     return Array.from(groups.entries())
       .map(([groupKey, items]) => ({
         group: groupKey.split(":")[0],

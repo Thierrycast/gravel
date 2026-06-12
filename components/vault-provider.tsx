@@ -34,7 +34,6 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   const masterPassword = settings?.vaultMasterPassword
   const inactivityMin = settings?.vaultInactivityMin ?? 0
 
-  // Handle Lock logic
   const lock = React.useCallback(() => {
     if (!enabled) return
     setIsLocked(true)

@@ -6,8 +6,6 @@ import { Toaster } from "sonner";
 export function AppToaster() {
   const { resolvedTheme } = useTheme();
 
-  // Map the app's class-based theme to sonner's "light" | "dark".
-  // Any dark variant → "dark"; any light variant → "light".
   const sonnerTheme: "light" | "dark" =
     resolvedTheme === "light" ||
     resolvedTheme === "cyberpunk-light" ||

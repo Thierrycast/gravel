@@ -49,7 +49,6 @@ export function getMerchantLogo(name: string): string | null {
   if (normalized.includes("disney")) return logoProxyUrl("disney.com");
 
   // Generic fallback using Clearbit (free tier/public)
-  // return `https://logo.clearbit.com/${normalized.replace(/\s+/g, '')}.com`
   return null;
 }
 

@@ -13,7 +13,6 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
 
-    // Support "month" param (YYYY-MM) from bills page
     const monthParam = searchParams.get("month");
     let from = parseDateParam(searchParams.get("from"));
     let to = parseDateParam(searchParams.get("to"));
@@ -51,7 +50,6 @@ export async function GET(request: Request) {
       accounts.map((a) => [a.id, { name: a.name, institution: a.institutionName }]),
     );
 
-    // Map to UI-expected fields
     const mapped = bills.map((bill) => {
       let paidAt: string | null = null;
       if (bill.metadataJson) {
@@ -86,8 +84,7 @@ export async function GET(request: Request) {
       };
     });
 
-    // Drop bills that are pure floating-point residuals (< R$0.01 in absolute terms)
-    // These come from Pluggy as leftover precision artifacts and add noise.
+    // Pluggy precision artifact — drop sub-cent floating-point residuals
     const NOISE_THRESHOLD = 0.01;
     const filtered = mapped.filter((b) => Math.abs(b.totalAmount) >= NOISE_THRESHOLD);
 

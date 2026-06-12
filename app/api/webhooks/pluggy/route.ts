@@ -4,11 +4,6 @@ import { timingSafeEqual } from "node:crypto"
 import { prisma } from "@/lib/prisma"
 import { syncPluggyItem } from "@/lib/pluggy-sync"
 
-/**
- * Webhook handler for Pluggy events.
- * Implements Task 3.1: Pluggy Webhook Handler with atomic idempotency,
- * secret validation, and status-tracked processing.
- */
 export async function POST(req: Request) {
   // 1. Shared-secret validation. If PLUGGY_WEBHOOK_SECRET is configured,
   //    require X-Webhook-Secret header to match in constant time.
@@ -84,13 +79,10 @@ export async function POST(req: Request) {
         break
 
       case "item/deleted":
-        if (itemId) {
-          // Mark item as deleted in our domain or clean up
-        }
         break
 
       default:
-        // Unhandled event type
+        break
     }
 
     await prisma.domainSyncState.update({

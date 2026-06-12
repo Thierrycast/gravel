@@ -56,9 +56,6 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useRouter, useSearchParams } from "next/navigation";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 interface SpendingCategory {
   name: string;
@@ -126,9 +123,6 @@ interface AutomationsResponse {
   results: AutomationRule[];
 }
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
 
 type TabKey = "categorias" | "tags" | "automacoes";
 
@@ -146,9 +140,7 @@ const MATCH_TYPE_LABELS: Record<string, string> = {
   REGEX: "Regex",
 };
 
-// ---------------------------------------------------------------------------
-// Loading skeleton
-// ---------------------------------------------------------------------------
+
 
 function LoadingSkeleton() {
   return (
@@ -163,9 +155,7 @@ function LoadingSkeleton() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Category Badge - colored circle with emoji
-// ---------------------------------------------------------------------------
+
 
 function CategoryBadge({
   name,
@@ -190,9 +180,7 @@ function CategoryBadge({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Tags Tab
-// ---------------------------------------------------------------------------
+
 
 function TagsTab() {
   const { data: tagsData, refetch } = useApi<TagsResponse>("/api/tags");
@@ -358,9 +346,7 @@ function TagsTab() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Automations Tab
-// ---------------------------------------------------------------------------
+
 
 function AutomacoesTab() {
   const { data: rulesData, refetch } =
@@ -642,9 +628,7 @@ function AutomacoesTab() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main page
-// ---------------------------------------------------------------------------
+
 
 function CategoriesLoadingFallback() {
   return (
@@ -704,7 +688,6 @@ function CategoriesPageContent() {
     },
   );
 
-  // Fetch all categories for hierarchy
   const { data: allCategoriesData } = useApi<DomainCategoriesResponse>("/api/domain/categories", {
     pageSize: "500",
   });
@@ -718,7 +701,7 @@ function CategoriesPageContent() {
     );
   }, [spending]);
 
-  // Compute aggregated categories (roll up to parent)
+  
   const aggregatedCategories = useMemo(() => {
     if (!spending?.results || !allCategoriesData?.results) return [];
 

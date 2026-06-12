@@ -8,7 +8,6 @@ const ZERO = new Prisma.Decimal(0)
  * A balance anchor is the state of the account balance at the END of a given month.
  */
 export async function createBalanceAnchor(accountId: string, year: number, month: number) {
-  // 1. Find the previous anchor to start from
   const previousAnchor = await prisma.domainBalanceAnchor.findFirst({
     where: {
       domainAccountId: accountId,
@@ -50,7 +49,6 @@ export async function createBalanceAnchor(accountId: string, year: number, month
   const delta = aggregations._sum.amount || ZERO
   const finalBalance = startBalance.plus(delta)
 
-  // 3. Persist the anchor
   return await prisma.domainBalanceAnchor.upsert({
     where: {
       domainAccountId_year_month: {
@@ -121,7 +119,6 @@ export async function rebuildAccountAnchors(accountId: string) {
     }
   }
 
-  // Accumulate delta to produce the closing balance per month.
   let running = ZERO
   const rows = ordered.map((b) => {
     running = running.plus(b.delta)

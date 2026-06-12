@@ -76,7 +76,6 @@ export function useSyncTrigger() {
         } else {
           toast.error(message, { id: SYNC_TOAST_ID, duration: 6_000 })
         }
-        // Return to idle so the button visual recovers after the toast settles.
         setTimeout(() => broadcast("idle"), 3_000)
       }
 

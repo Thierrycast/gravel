@@ -307,3 +307,63 @@ export async function getSpendingByMerchantMetrics(
     },
   };
 }
+
+export async function getSpendingTrendsMetrics(searchParams: URLSearchParams) {
+  const filters = buildMetricFilters(searchParams, { period: "12m" });
+
+  const [transactions, categories] = await Promise.all([
+    prisma.domainTransaction.findMany({
+      where: {
+        ...buildTransactionWhere(filters),
+        direction: DomainTransactionDirection.OUTFLOW,
+        ignored: false,
+      },
+      select: { amount: true, occurredAt: true, domainCategoryId: true },
+    }),
+    prisma.domainCategory.findMany({ select: { id: true, name: true } }),
+  ]);
+
+  const catMap = new Map(categories.map((c) => [c.id, c.name]));
+
+  const buckets = new Map<string, Map<string, number>>();
+
+  for (const tx of transactions) {
+    const catName = (tx.domainCategoryId ? catMap.get(tx.domainCategoryId) : null) ?? "Sem categoria";
+    if (EXCLUDED_SPENDING_CATEGORIES.some((ex) => catName.toLowerCase().includes(ex))) continue;
+    const monthKey = `${tx.occurredAt.getUTCFullYear()}-${String(tx.occurredAt.getUTCMonth() + 1).padStart(2, "0")}`;
+    const monthly = buckets.get(catName) ?? new Map<string, number>();
+    monthly.set(monthKey, (monthly.get(monthKey) ?? 0) + Math.abs(Number(tx.amount)));
+    buckets.set(catName, monthly);
+  }
+
+  const rangeFrom = filters.from ?? new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
+  const rangeTo = filters.to ?? new Date();
+  const months: string[] = [];
+  const cursor = new Date(Date.UTC(rangeFrom.getUTCFullYear(), rangeFrom.getUTCMonth(), 1));
+  while (cursor <= rangeTo) {
+    months.push(`${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`);
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+
+  const topCategories = Array.from(buckets.entries())
+    .map(([name, monthly]) => ({
+      name,
+      total: Array.from(monthly.values()).reduce((a, b) => a + b, 0),
+    }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 8);
+
+  const results = topCategories.map(({ name, total }) => ({
+    category: name,
+    total,
+    trend: months.map((month) => ({
+      period: month,
+      amount: buckets.get(name)?.get(month) ?? 0,
+    })),
+  }));
+
+  return {
+    summary: { months, total: results.length },
+    results,
+  };
+}

@@ -822,6 +822,26 @@ export async function getDashboardTransactions(searchParams: URLSearchParams) {
   }
 }
 
+export async function getDomainGoals() {
+  const goals = await prisma.goal.findMany({
+    orderBy: [{ targetDate: "asc" }, { createdAt: "desc" }],
+  });
+  return {
+    summary: { total: goals.length },
+    results: goals,
+  };
+}
+
+export async function getDomainScenarios() {
+  const scenarios = await prisma.domainScenarioEvent.findMany({
+    orderBy: [{ date: "asc" }, { createdAt: "desc" }],
+  });
+  return {
+    summary: { total: scenarios.length },
+    results: scenarios,
+  };
+}
+
 export async function getUserSettings(searchParams?: URLSearchParams) {
   const setting = await prisma.userSetting.findFirst()
 
