@@ -97,6 +97,7 @@ model DomainAccountSource {
 
   @@unique([sourceProvider, sourceExternalId])
   @@index([domainAccountId])
+  @@index([sourceProvider, domainAccountId])
 }
 
 model DomainTransaction {
@@ -120,6 +121,7 @@ model DomainTransaction {
   merchantLogoUrl       String?
   merchantName          String?
   merchantCnpj          String?
+  paymentDataJson       String?
   ignored               Boolean                    @default(false)
   metadataJson          String?
   createdAt             DateTime                   @default(now())
@@ -342,6 +344,19 @@ model UserSetting {
   vaultInactivityMin  Int      @default(0)
   updatedAt           DateTime @updatedAt
   createdAt           DateTime @default(now())
+}
+
+model AppSecret {
+  id         String   @id @default(cuid())
+  key        String   @unique
+  cipherText String
+  iv         String
+  authTag    String
+  algorithm  String   @default("aes-256-gcm")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([updatedAt])
 }
 
 model DomainLend {
@@ -826,4 +841,11 @@ model OpsSyncLock {
   owner     String
   lockedAt  DateTime @default(now())
   expiresAt DateTime
+}
+
+model SystemMetadata {
+  key       String   @id
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
