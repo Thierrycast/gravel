@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ error: "File not found" }, { status: 404 });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Search failed" }, { status: 500 });
   }
 }

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Check, Edit2, Plus, Trash2, Users, Wallet } from "lucide-react";
+import { Check, Plus, Trash2, Users, Wallet } from "lucide-react";
 
 import { useApi } from "@/hooks/use-api";
 import { useCurrency } from "@/lib/currency-context";
@@ -50,7 +50,6 @@ export function FriendsVault() {
     dueDate: new Date().toISOString().split("T")[0],
   });
 
-  const [payingId, setPayingId] = useState<string | null>(null);
   const [selectedInflowId, setSelectedInflowId] = useState<string>("");
 
   async function handleAdd(e: React.FormEvent) {
@@ -105,7 +104,6 @@ export function FriendsVault() {
       });
       if (!res.ok) throw new Error();
       toast.success("Marcado como pago!");
-      setPayingId(null);
       setSelectedInflowId("");
       refetch();
     } catch (err) {

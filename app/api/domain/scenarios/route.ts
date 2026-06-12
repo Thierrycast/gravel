@@ -3,10 +3,9 @@ import { getDomainScenarios } from "@/lib/domain/queries"
 
 export const dynamic = "force-dynamic"
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url)
-    const payload = await getDomainScenarios(searchParams)
+    const payload = await getDomainScenarios()
     return jsonOk(payload)
   } catch (error) {
     return jsonError(error)
