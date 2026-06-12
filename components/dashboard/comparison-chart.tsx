@@ -12,7 +12,6 @@ import {
 import { ChartContainer, type ChartConfig } from "@/components/ui/chart";
 import { useCurrency } from "@/lib/currency-context";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 export type PeriodType = "month" | "quarter" | "semester" | "year";
 export type Metric = "expense" | "income" | "net";
@@ -57,16 +56,7 @@ interface ComparisonChartProps {
   expanded?: boolean;
 }
 
-// ── Color palette ─────────────────────────────────────────────────────────────
-//
-// Four hues spaced ~90° apart on the wheel for maximum distinctiveness.
-// Works well on dark backgrounds and avoids the "shades of same color" problem.
-//
-//   0 → 330° rose/pink    ●
-//   1 →  42° amber        ●
-//   2 → 168° teal         ●
-//   3 → 262° violet       ●
-
+// Hues ~90° apart on the color wheel — distinct on dark, no same-color shades.
 export const PERIOD_PALETTE: readonly string[] = [
   "hsl(217 91% 60%)",  // blue   — slot 0 (atual)
   "hsl(0   78% 60%)",  // red    — slot 1
@@ -74,11 +64,9 @@ export const PERIOD_PALETTE: readonly string[] = [
   "hsl(142 65% 48%)",  // green  — slot 3
 ];
 
-// All lines are solid. Areas use the slot color with a gradient fill.
 // Opacity in the fill distinguishes current period (stronger) from previous ones.
 const AREA_FILL_OPACITY = [0.22, 0.14, 0.10, 0.07] as const;
 
-// ── Constants ──────────────────────────────────────────────────────────────────
 
 export const PERIOD_OPTIONS: { value: PeriodType; label: string }[] = [
   { value: "month",    label: "Mês" },
@@ -93,17 +81,11 @@ export const METRIC_OPTIONS: { value: Metric; label: string }[] = [
   { value: "net",     label: "Saldo" },
 ];
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
-/**
- * Generates "pretty" ticks for a Y-Axis based on the data range.
- * Dynamically adjusts density to provide a richer set of milestones.
- */
 function getNiceTicks(min: number, max: number): number[] {
   const range = max - min;
   if (range <= 0) return [min, min + 1];
 
-  // Target between 6 and 10 ticks for a more "intelligent" and detailed scale
   const targetTickCount = 8;
   const rawStep = range / (targetTickCount - 1);
   const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
@@ -119,7 +101,6 @@ function getNiceTicks(min: number, max: number): number[] {
   const start = Math.floor(min / step) * step;
   const ticks: number[] = [];
   
-  // Generate ticks ensuring we cover the range
   for (let val = start; val <= max + step * 0.001; val += step) {
     ticks.push(Number(val.toFixed(2)));
   }
@@ -181,9 +162,6 @@ function mergeIntoChartData(
         row[`p${i}`] = val;
         lastValues[i] = val;
       } else {
-        // Missing point for this period at this X coordinate
-        // If cumulative, carry forward the last seen value
-        // If not cumulative, use 0 (so the line continues to the end)
         row[`p${i}`] = cumulative ? (lastValues[i] ?? 0) : 0;
       }
     }
@@ -201,10 +179,6 @@ function buildChartConfig(periods: CmpPeriod[]): ChartConfig {
   }
   return config;
 }
-
-// ── Custom tooltip ────────────────────────────────────────────────────────────
-// Uses the stroke color of each Line so tooltip items match their corresponding
-// chart line — making it immediately clear which value belongs to which period.
 
 interface TooltipPayloadItem {
   dataKey: string;
@@ -227,11 +201,9 @@ function ComparisonTooltip({
 }) {
   if (!active) return null;
 
-  // Build lookup from payload so we can look up values by period index
   const valueByKey: Record<string, number> = {};
   for (const item of payload ?? []) valueByKey[item.dataKey] = item.value;
 
-  // Always render ALL periods, not just those in payload
   // (payload only contains series that have a value at this exact x-point)
   const rows = periods.map((p, idx) => ({
     idx,
@@ -255,20 +227,17 @@ function ComparisonTooltip({
         minWidth: 180,
       }}
     >
-      {/* x-axis label */}
       <p style={{ color: "var(--muted-foreground)", fontWeight: 600, marginBottom: 8, fontSize: 11 }}>
         {label}
       </p>
 
-      {/* One row per period — always all periods */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {rows.map(({ idx, label: periodLabel, color, isCurrent, value }) => (
           <div
             key={idx}
             style={{ display: "flex", alignItems: "center", gap: 8 }}
           >
-            {/* Color swatch */}
-            <span
+              <span
               style={{
                 display: "inline-block",
                 width: 10,
@@ -279,7 +248,6 @@ function ComparisonTooltip({
                 boxShadow: isCurrent ? `0 0 0 2px ${color}33` : undefined,
               }}
             />
-            {/* Period label */}
             <span style={{ color, flexGrow: 1, fontWeight: isCurrent ? 600 : 400 }}>
               {periodLabel}
               {isCurrent && (
@@ -307,7 +275,6 @@ function ComparisonTooltip({
   );
 }
 
-// ── Segmented pill control ────────────────────────────────────────────────────
 
 export function Pills<T extends string>({
   options,
@@ -343,7 +310,6 @@ export function Pills<T extends string>({
   );
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
 
 export function ComparisonChart({
   filters,
@@ -364,21 +330,17 @@ export function ComparisonChart({
 
   return (
     <div className="flex h-full flex-col gap-2.5 overflow-hidden">
-      {/* ── Controls row ── */}
       <div className="flex flex-wrap items-center gap-2">
-        {/* Metric */}
         <Pills options={METRIC_OPTIONS} value={metric} size="xs"
           onChange={(v) => onFiltersChange({ metric: v })} />
 
         <div className="h-3.5 w-px bg-border/60 shrink-0" />
 
-        {/* Period type */}
         <Pills options={PERIOD_OPTIONS} value={periodType} size="xs"
           onChange={(v) => onFiltersChange({ periodType: v })} />
 
         <div className="h-3.5 w-px bg-border/60 shrink-0" />
 
-        {/* Cumulative toggle */}
         <Pills
           size="xs"
           options={[
@@ -391,7 +353,6 @@ export function ComparisonChart({
 
         <div className="h-3.5 w-px bg-border/60 shrink-0" />
 
-        {/* Line count */}
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] text-muted-foreground/70 whitespace-nowrap">Linhas</span>
           <Pills
@@ -407,7 +368,6 @@ export function ComparisonChart({
         </div>
       </div>
 
-      {/* ── Legend ── */}
       {!loading && periods.length > 0 && (
         <div className="flex flex-wrap gap-x-4 gap-y-1">
           {periods.map((p, i) => (
@@ -415,7 +375,6 @@ export function ComparisonChart({
               key={p.label}
               className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
             >
-              {/* Solid or dashed line preview */}
               <svg width="24" height="8" className="shrink-0" aria-hidden>
                 <line
                   x1="0" y1="4" x2="24" y2="4"
@@ -435,7 +394,6 @@ export function ComparisonChart({
         </div>
       )}
 
-      {/* ── Chart ── */}
       <div className={`min-h-0 flex-1 ${expanded ? "min-h-[480px]" : ""}`}>
         {loading ? (
           <div className="flex h-full items-center justify-center">
@@ -454,7 +412,6 @@ export function ComparisonChart({
               data={chartData}
               margin={{ top: 8, right: 12, left: 0, bottom: 4 }}
             >
-              {/* Gradient fills — one per period slot */}
               <defs>
                 {periods.map((_, i) => {
                   const color = PERIOD_PALETTE[i % PERIOD_PALETTE.length];
