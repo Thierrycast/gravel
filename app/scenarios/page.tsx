@@ -111,7 +111,7 @@ export default function ScenariosPage() {
   const outflowTransactions = transactionsData?.results?.filter(t => t.direction === "OUTFLOW") || []
   const inflowTransactions = transactionsData?.results?.filter(t => t.direction === "INFLOW") || []
 
-  // Scenario Form
+  
   const [scenarioForm, setScenarioForm] = useState({
     title: "",
     amount: "",
@@ -119,7 +119,7 @@ export default function ScenariosPage() {
     isRecurring: false,
   })
 
-  // Lend Form
+  
   const [lendForm, setLendForm] = useState({
     friendName: "",
     friendPhone: "",
