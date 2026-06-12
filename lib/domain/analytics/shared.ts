@@ -397,30 +397,3 @@ export function isSalaryLikeTransaction({
     return p.length > 0 && (lookup.includes(p) || p.includes(lookup));
   });
 }
-
-export function isSalaryLikeTransaction({
-  categoryName,
-  parentCategoryName,
-  description,
-  merchantName,
-  salaryPatterns,
-}: {
-  categoryName?: string | null;
-  parentCategoryName?: string | null;
-  description?: string | null;
-  merchantName?: string | null;
-  salaryPatterns: string[];
-}) {
-  const normalize = (s?: string | null) => 
-    s?.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() ?? "";
-  
-  const lookup = [categoryName, parentCategoryName, description, merchantName]
-    .map(normalize)
-    .filter(Boolean)
-    .join(" ");
-
-  return salaryPatterns.some((p) => {
-    const pattern = normalize(p);
-    return pattern.length > 0 && (lookup.includes(pattern) || pattern.includes(lookup));
-  });
-}
