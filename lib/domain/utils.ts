@@ -71,8 +71,12 @@ export function deriveInstitutionFromNames(names: string[]): string | null {
   // 1. Try matching against our comprehensive Pluggy dictionary first
   for (const [institutionName] of Object.entries(PLUGGY_CONNECTOR_MAPPING)) {
     const normalizedTarget = normalizeText(institutionName);
-    if (normalizedTarget && haystack.includes(normalizedTarget)) {
-      return institutionName;
+    if (normalizedTarget) {
+      // Use word boundaries to prevent 'internet' matching 'inter'
+      const regex = new RegExp(`\\b${normalizedTarget}\\b`, "i");
+      if (regex.test(haystack)) {
+        return institutionName;
+      }
     }
   }
 
@@ -96,7 +100,9 @@ export function getInstitutionLogo(
   // 1. Try exact or partial match in our new Pluggy Dictionary
   const pluggyMatch = Object.entries(PLUGGY_CONNECTOR_MAPPING).find(([key]) => {
     const normKey = normalizeText(key);
-    return normKey && normalized.includes(normKey);
+    if (!normKey) return false;
+    const regex = new RegExp(`\\b${normKey}\\b`, "i");
+    return regex.test(normalized);
   });
 
   if (pluggyMatch?.[1]) {
@@ -138,8 +144,9 @@ export function getInstitutionLogo(
     ["bb", "bb.com.br"],
   ];
 
-  const match = knownInstitutions.find(([needle]) =>
-    normalized.includes(needle),
-  );
+  const match = knownInstitutions.find(([needle]) => {
+    const regex = new RegExp(`\\b${needle}\\b`, "i");
+    return regex.test(normalized);
+  });
   return match ? logoProxyUrl(match[1]) : null;
 }
