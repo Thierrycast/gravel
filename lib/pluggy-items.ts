@@ -10,7 +10,7 @@ type SavePluggyItemInput = {
 
 export async function listStoredPluggyItems() {
   return prisma.pluggyItem.findMany({
-    orderBy: [{ updatedAt: "desc" }],
+    orderBy: [{ createdAt: "desc" }],
   })
 }
 
