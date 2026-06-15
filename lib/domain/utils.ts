@@ -2,6 +2,7 @@ import {
   logoProxyUrl,
   resolveMerchantDomain,
 } from "@/lib/domain/enrichment/logo-dev";
+import { PLUGGY_CONNECTOR_MAPPING, getPluggyLogoUrl } from "@/lib/constants/pluggy-connectors";
 
 /**
  * Resolves a reliable logo URL for a given cryptocurrency asset ticker.
@@ -67,23 +68,21 @@ export function deriveInstitutionFromNames(names: string[]): string | null {
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "");
 
-  if (haystack.includes("nubank") || haystack.includes("nu pagamentos") || haystack.includes("nu financeira")) return "Nubank";
-  if (haystack.includes("itau") || haystack.includes("itau unibanco")) return "Itaú";
-  if (haystack.includes("bradesco")) return "Bradesco";
-  if (haystack.includes("santander")) return "Santander";
-  if (haystack.includes("banco do brasil") || haystack.includes("ourocard")) return "Banco do Brasil";
-  if (haystack.includes("caixa economica") || haystack.includes("caixa federal")) return "Caixa Econômica";
-  if (haystack.includes("banco inter") || haystack.includes("inter ") || haystack.includes(" inter")) return "Banco Inter";
-  if (haystack.includes("c6 bank") || haystack.includes("c6bank") || haystack.includes("bandeirado")) return "C6 Bank";
-  if (haystack.includes("mercado pago")) return "Mercado Pago";
-  if (haystack.includes("pagseguro") || haystack.includes("pagbank") || haystack.includes("pag")) return "PagBank";
-  if (haystack.includes("picpay")) return "PicPay";
-  if (haystack.includes("btg")) return "BTG Pactual";
-  if (haystack.includes("xp investimentos") || names.some((name) => name.trim().toUpperCase() === "XP")) return "XP";
-  if (haystack.includes("wise")) return "Wise";
-  if (haystack.includes("binance")) return "Binance";
-  if (haystack.includes("rico")) return "Rico";
-  if (haystack.includes("clear corretora") || haystack.includes("clear ")) return "Clear";
+  // 1. Try matching against our comprehensive Pluggy dictionary first
+  for (const [institutionName] of Object.entries(PLUGGY_CONNECTOR_MAPPING)) {
+    const normalizedTarget = normalizeText(institutionName);
+    if (normalizedTarget && haystack.includes(normalizedTarget)) {
+      return institutionName;
+    }
+  }
+
+  // 2. Legacy fallbacks for specific patterns
+  if (haystack.includes("nu pagamentos") || haystack.includes("nu financeira")) return "Nubank";
+  if (haystack.includes("itau unibanco")) return "Itaú";
+  if (haystack.includes("ourocard")) return "Banco do Brasil";
+  if (haystack.includes("caixa federal")) return "Caixa Econômica Federal";
+  if (haystack.includes("inter ")) return "Inter";
+  if (haystack.includes("pagseguro") || haystack.includes("pagbank")) return "PagBank";
 
   return null;
 }
@@ -93,6 +92,16 @@ export function getInstitutionLogo(
 ): string | null {
   const normalized = normalizeText(name);
   if (!normalized) return null;
+
+  // 1. Try exact or partial match in our new Pluggy Dictionary
+  const pluggyMatch = Object.entries(PLUGGY_CONNECTOR_MAPPING).find(([key]) => {
+    const normKey = normalizeText(key);
+    return normKey && normalized.includes(normKey);
+  });
+
+  if (pluggyMatch?.[1]) {
+    return getPluggyLogoUrl(pluggyMatch[1]);
+  }
 
   const knownInstitutions: Array<[string, string]> = [
     ["nubank", "nubank.com.br"],

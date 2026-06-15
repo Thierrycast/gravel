@@ -203,8 +203,11 @@ export function PluggyConnectClient() {
         throw new Error(errData.details || `HTTP ${response.status}`);
       }
       const data = await response.json()
-      if (!data?.accessToken) throw new Error("Token inválido")
-      console.log("[PluggyConnect] Token loaded successfully");
+      if (!data?.accessToken) {
+        console.error("[PluggyConnect] API returned no accessToken:", data);
+        throw new Error("Token inválido");
+      }
+      console.log("[PluggyConnect] Token loaded successfully. Ends with:", data.accessToken.slice(-10));
       setToken(data.accessToken)
       setTokenState("ready")
     } catch (err) {
@@ -239,23 +242,39 @@ export function PluggyConnectClient() {
     return counts
   }, [items])
 
+  async function sendToInterceptor(data: any, type: string) {
+    try {
+      await fetch("/api/dev/intercept", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...data, type, interceptedAt: new Date().toISOString() }),
+      });
+    } catch (e) {
+      console.warn("[PluggyConnect] Interceptor delivery failed:", e);
+    }
+  }
+
   function handleOpenWidget(targetItemId?: string) {
-    console.log("[PluggyConnect] Attempting to open widget. State:", tokenState);
-    if (tokenState !== "ready" || !widgetRef.current) {
+    console.log("[PluggyConnect] handleOpenWidget called. State:", tokenState, "reconnectId:", targetItemId);
+    
+    if (tokenState !== "ready") {
+      console.warn("[PluggyConnect] Attempted to open widget but token is not ready. Current state:", tokenState);
       setFeedback({
         tone: "negative",
         message: "O widget ainda não está pronto. Aguarde alguns segundos.",
       })
       return
     }
-    setIsOpening(true)
+
     setReconnectItemId(targetItemId ?? null)
-    widgetRef.current.show()
+    setIsOpening(true)
   }
 
   async function handleSuccess(payload: PluggySuccessPayload) {
+    console.log("[PluggyConnect] Success callback triggered:", payload);
     const itemId = payload.item?.id
     if (!itemId) {
+      console.error("[PluggyConnect] Success without itemId");
       setFeedback({
         tone: "negative",
         message: "A conexão concluiu mas não retornou identificador.",
@@ -265,7 +284,8 @@ export function PluggyConnectClient() {
     }
 
     try {
-      await fetch("/api/pluggy/items", {
+      console.log("[PluggyConnect] Saving new item to local DB:", itemId);
+      const response = await fetch("/api/pluggy/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -275,6 +295,11 @@ export function PluggyConnectClient() {
           status: payload.item?.status,
         }),
       })
+
+      if (!response.ok) {
+        throw new Error(`Falha ao salvar conexão (HTTP ${response.status})`);
+      }
+
       await loadItems({ silent: true })
       setFeedback({
         tone: "positive",
@@ -283,6 +308,7 @@ export function PluggyConnectClient() {
           : `Conta ${payload.item?.connector?.name ?? ""} conectada.`,
       })
     } catch (err) {
+      console.error("[PluggyConnect] Post-success save error:", err);
       setFeedback({
         tone: "negative",
         message: err instanceof Error ? err.message : "Falha ao salvar conexão",
@@ -294,6 +320,7 @@ export function PluggyConnectClient() {
   }
 
   function handleError(error: PluggyErrorPayload) {
+    console.error("[PluggyConnect] Error callback triggered:", error);
     const suffix = error.code ? ` (${error.code})` : ""
     setFeedback({
       tone: "negative",
@@ -570,30 +597,33 @@ export function PluggyConnectClient() {
         )}
       </div>
 
-      {/* Hidden widget mount */}
-      <div className={cn(!isOpening && "hidden")}>
-        {tokenState === "ready" && token && isOpening ? (
-          <PluggyConnect
-            connectToken={token}
-            includeSandbox={false}
-            updateItem={reconnectItemId ?? undefined}
-            innerRef={(instance) => {
-              widgetRef.current = instance
-              if (instance && isOpening) {
-                instance.show()
-              }
-            }}
-            onSuccess={(payload) =>
-              void handleSuccess(payload as PluggySuccessPayload)
-            }
-            onError={(error) => handleError(error as PluggyErrorPayload)}
-            onClose={() => {
-              setIsOpening(false)
-              setReconnectItemId(null)
-            }}
-          />
-        ) : null}
-      </div>
+      {/* Widget mount */}
+      {tokenState === "ready" && token && isOpening && (
+        <PluggyConnect
+          connectToken={token}
+          includeSandbox={false}
+          updateItem={reconnectItemId ?? undefined}
+          onSuccess={(payload) => {
+            console.log("[PluggyConnect] SUCCESS RAW PAYLOAD:", JSON.stringify(payload, null, 2));
+            void sendToInterceptor(payload, "SUCCESS");
+            void handleSuccess(payload as PluggySuccessPayload);
+          }}
+          onError={(error) => {
+            console.error("[PluggyConnect] ERROR RAW PAYLOAD:", JSON.stringify(error, null, 2));
+            void sendToInterceptor(error, "ERROR");
+            handleError(error as PluggyErrorPayload);
+          }}
+          onEvent={(event) => {
+            console.log("[PluggyConnect] INTERCEPTED EVENT:", JSON.stringify(event, null, 2));
+            void sendToInterceptor(event, "EVENT");
+          }}
+          onClose={() => {
+            console.log("[PluggyConnect] Close callback triggered");
+            setIsOpening(false)
+            setReconnectItemId(null)
+          }}
+        />
+      )}
     </div>
   )
 }
