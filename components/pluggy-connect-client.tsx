@@ -380,6 +380,7 @@ export function PluggyConnectClient() {
               size="sm"
               onClick={() => void loadItems()}
               disabled={isRefreshing}
+              className="cursor-pointer"
             >
               <RefreshCw
                 className={cn(
@@ -393,6 +394,7 @@ export function PluggyConnectClient() {
               size="sm"
               onClick={() => handleOpenWidget()}
               disabled={tokenState !== "ready" || isOpening}
+              className="cursor-pointer"
             >
               {isOpening ? (
                 <Loader2 className="size-3.5 animate-spin" />
@@ -503,7 +505,7 @@ export function PluggyConnectClient() {
               <p className="text-sm font-medium">Não foi possível listar as conexões</p>
               <p className="text-xs text-muted-foreground">{itemsError}</p>
             </div>
-            <Button size="sm" variant="outline" onClick={() => void loadItems()}>
+            <Button size="sm" variant="outline" onClick={() => void loadItems()} className="cursor-pointer">
               Tentar novamente
             </Button>
           </div>
@@ -524,6 +526,7 @@ export function PluggyConnectClient() {
               size="sm"
               onClick={() => handleOpenWidget()}
               disabled={tokenState !== "ready" || isOpening}
+              className="cursor-pointer"
             >
               <Plug className="size-3.5" />
               Conectar primeiro banco
@@ -585,6 +588,7 @@ export function PluggyConnectClient() {
                         variant="outline"
                         onClick={() => handleOpenWidget(item.pluggyItemId)}
                         disabled={tokenState !== "ready" || isOpening}
+                        className="cursor-pointer"
                       >
                         <RefreshCw className="size-3.5" />
                         Reconectar
@@ -596,6 +600,7 @@ export function PluggyConnectClient() {
                       onClick={() => handleDelete(item)}
                       disabled={isPending}
                       aria-label="Remover conexão"
+                      className="cursor-pointer"
                     >
                       {isPending ? (
                         <Loader2 className="size-3.5 animate-spin" />
@@ -663,7 +668,7 @@ function SummaryStat({ label, value, tone, icon: Icon }: SummaryStatProps) {
           className={cn(
             "size-4",
             toneClass,
-            tone === "info" && "animate-spin"
+            tone === "info" && value !== "0" && "animate-spin"
           )}
         />
       ) : null}
