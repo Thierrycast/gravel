@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge"
 import { PageHeader } from "@/components/page-header"
 import { cn } from "@/lib/utils"
 import { formatDateTime } from "@/lib/format"
+import { LogoImage } from "@/components/logo-image"
 
 type PluggySuccessPayload = {
   item?: {
@@ -46,6 +47,7 @@ type StoredItem = {
   pluggyItemId: string
   connectorName: string | null
   connectorId: number | null
+  imageUrl?: string | null
   status: string | null
   updatedAt?: string | null
 }
@@ -300,6 +302,14 @@ export function PluggyConnectClient() {
         throw new Error(`Falha ao salvar conexão (HTTP ${response.status})`);
       }
 
+      // Trigger global background sync for the new item
+      try {
+        await fetch("/api/sync/trigger", { method: "POST" });
+        console.log("[PluggyConnect] Global sync triggered for new connection.");
+      } catch (syncErr) {
+        console.warn("[PluggyConnect] Failed to trigger global sync:", syncErr);
+      }
+
       await loadItems({ silent: true })
       setFeedback({
         tone: "positive",
@@ -532,7 +542,11 @@ export function PluggyConnectClient() {
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-muted to-muted/70 text-xs font-semibold text-foreground/80 ring-1 ring-border">
-                      {connectorInitials(item.connectorName)}
+                      {item.imageUrl ? (
+                        <LogoImage src={item.imageUrl} alt={item.connectorName ?? ""} className="size-6" />
+                      ) : (
+                        connectorInitials(item.connectorName)
+                      )}
                     </div>
                     <div className="min-w-0 space-y-1">
                       <div className="flex items-center gap-2">
