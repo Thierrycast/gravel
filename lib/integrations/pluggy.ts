@@ -354,6 +354,17 @@ export async function fetchMerchants(params: {
   })
 }
 
+export async function fetchConnectors(params?: {
+  name?: string
+  countries?: string
+  types?: string
+  sandbox?: boolean
+}) {
+  return pluggyRequest("/connectors", {
+    query: params,
+  })
+}
+
 export async function createConnectToken(apiKey?: string) {
   const key = apiKey ?? (await getApiKey())
   const response = await fetch(`${getBaseUrl()}${getConnectTokenPath()}`, {

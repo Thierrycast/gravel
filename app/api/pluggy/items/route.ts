@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 
-import { fetchItem } from "@/lib/integrations/pluggy"
+import { fetchAccounts, fetchItem } from "@/lib/integrations/pluggy"
+import { deriveInstitutionFromNames } from "@/lib/domain/utils"
+import { PLUGGY_CONNECTOR_MAPPING, getPluggyLogoUrl } from "@/lib/constants/pluggy-connectors"
 import {
   listStoredPluggyItems,
   savePluggyItem,
@@ -16,18 +18,40 @@ export async function GET() {
     items.map(async (item) => {
       try {
         const liveItem = await fetchItem(item.pluggyItemId)
+        
+        // Try to derive real name if currently generic
+        let connectorName: string | null | undefined = liveItem?.connector?.name
+        let connectorId: number | null | undefined = liveItem?.connector?.id
+        let imageUrl: string | null | undefined = liveItem?.connector?.imageUrl
+
+        if (!connectorName || ["Pluggy", "MeuPluggy", "PLUGGY"].includes(connectorName)) {
+           const accountsPayload = await fetchAccounts({ itemId: item.pluggyItemId })
+           const derived = deriveInstitutionFromNames((accountsPayload?.results || []).map((a: any) => a.name))
+           if (derived) {
+             connectorName = derived
+             // Look up real ID and logo in our dictionary
+             const mappedId = PLUGGY_CONNECTOR_MAPPING[derived]
+             if (mappedId) {
+               connectorId = mappedId
+               imageUrl = getPluggyLogoUrl(mappedId)
+             }
+           }
+        }
+
         await updateStoredPluggyItem({
           itemId: item.pluggyItemId,
-          connectorId: liveItem?.connector?.id,
-          connectorName: liveItem?.connector?.name,
-          status: liveItem?.status,
+          connectorId: connectorId ?? null,
+          connectorName: connectorName ?? null,
+          status: liveItem?.status ?? null,
+          imageUrl: imageUrl ?? null,
         })
 
         return {
           ...item,
-          connectorId: liveItem?.connector?.id ?? item.connectorId,
-          connectorName: liveItem?.connector?.name ?? item.connectorName,
+          connectorId: connectorId ?? item.connectorId,
+          connectorName: connectorName ?? item.connectorName,
           status: liveItem?.status ?? item.status,
+          imageUrl: imageUrl ?? item.imageUrl,
         }
       } catch (err) {
         console.warn(`[pluggy/items] failed to sync item ${item.pluggyItemId}:`, err)
@@ -43,9 +67,10 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
     | {
         itemId?: string
-        connectorId?: number
-        connectorName?: string
-        status?: string
+        connectorId?: number | null
+        connectorName?: string | null
+        status?: string | null
+        imageUrl?: string | null
       }
     | null
 
@@ -56,11 +81,35 @@ export async function POST(request: Request) {
     )
   }
 
+  let finalConnectorName: string | null | undefined = body.connectorName
+  let finalConnectorId: number | null | undefined = body.connectorId
+  let finalImageUrl: string | null | undefined = body.imageUrl
+
+  // If the name is generic, try to resolve the real institution from accounts
+  if (!finalConnectorName || ["Pluggy", "MeuPluggy", "PLUGGY"].includes(finalConnectorName)) {
+    try {
+      const accountsPayload = await fetchAccounts({ itemId: body.itemId })
+      const accountNames = (accountsPayload?.results || []).map((a: any) => a.name)
+      const derived = deriveInstitutionFromNames(accountNames)
+      if (derived) {
+        finalConnectorName = derived
+        const mappedId = PLUGGY_CONNECTOR_MAPPING[derived]
+        if (mappedId) {
+          finalConnectorId = mappedId
+          finalImageUrl = getPluggyLogoUrl(mappedId)
+        }
+      }
+    } catch (err) {
+      console.warn(`[pluggy/items] failed to derive name for ${body.itemId}:`, err)
+    }
+  }
+
   const item = await savePluggyItem({
     itemId: body.itemId,
-    connectorId: body.connectorId,
-    connectorName: body.connectorName,
-    status: body.status,
+    connectorId: finalConnectorId ?? null,
+    connectorName: finalConnectorName ?? null,
+    status: body.status ?? null,
+    imageUrl: finalImageUrl ?? null,
   })
 
   return NextResponse.json(item)
