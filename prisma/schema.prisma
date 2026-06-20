@@ -503,6 +503,9 @@ model Goal {
   monthlyContribution Decimal   @default(0)
   targetDate          DateTime?
   active              Boolean   @default(true)
+  matchCategorySlug   String?
+  matchKeyword        String?
+  matchDateStart      DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 }

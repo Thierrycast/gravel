@@ -330,16 +330,16 @@ export function SyncButton({ showTime = false, className }: SyncButtonProps) {
         title={buttonTitle}
         aria-label={
           status === "syncing"
-            ? "Sincronizando, aguarde"
+            ? "sync... (Sincronizando, aguarde)"
             : status === "done"
-              ? "Sincronização concluída com sucesso"
+              ? "ok (Sincronização concluída com sucesso)"
               : status === "error"
-                ? "Erro na sincronização, tentar novamente"
+                ? "err (Erro na sincronização, tentar novamente)"
                 : isStale
-                  ? `Sincronização atrasada, última sincronização ${relativeTime}. Clique para sincronizar manualmente`
-                  : `Sincronizar dados${
+                  ? `atualizar (Sincronização atrasada, última sincronização ${relativeTime})`
+                  : `sync (Sincronizar dados${
                       lastSyncAt ? `, última sincronização ${relativeTime}` : ""
-                    }`
+                    })`
         }
       >
         {isStale ? (

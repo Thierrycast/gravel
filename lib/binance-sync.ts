@@ -260,14 +260,26 @@ async function syncTrades(inputSymbols?: string[]) {
         break
       }
 
+      const tradeIdsInPage = page.map((t) => String(t.id)).filter(Boolean)
+      const existingTrades = await prisma.binanceTradeRecord.findMany({
+        where: {
+          symbol,
+          tradeId: { in: tradeIdsInPage },
+        },
+        select: { tradeId: true },
+      })
+      const existingIds = new Set(existingTrades.map((t) => t.tradeId))
+
       for (const trade of page) {
         if (trade.id === undefined) continue
+        const tradeIdStr = String(trade.id)
+        if (existingIds.has(tradeIdStr)) continue
 
         const currentInserted = await createIfNew(() =>
           prisma.binanceTradeRecord.create({
             data: {
               symbol,
-              tradeId: String(trade.id),
+              tradeId: tradeIdStr,
               orderId:
                 trade.orderId !== undefined ? String(trade.orderId) : undefined,
               baseAsset: symbolInfo?.baseAsset ?? undefined,
@@ -357,6 +369,18 @@ async function syncPrices() {
     const mapped = symbolToAsset.get(currentSymbol)
     if (!mapped) continue
 
+    const payloadHash = hashPayload(current)
+    const exists = await prisma.binanceAssetPriceSnapshot.findUnique({
+      where: {
+        asset_symbol_payloadHash: {
+          asset: mapped.asset,
+          symbol: currentSymbol,
+          payloadHash,
+        },
+      },
+    })
+    if (exists) continue
+
     inserted += await createIfNew(() =>
       prisma.binanceAssetPriceSnapshot.create({
         data: {
@@ -364,7 +388,7 @@ async function syncPrices() {
           symbol: currentSymbol,
           quoteAsset: mapped.quoteAsset,
           price: decimalFromString(current.price),
-          payloadHash: hashPayload(current),
+          payloadHash,
           payloadJson: JSON.stringify(current),
         },
       })
@@ -372,6 +396,18 @@ async function syncPrices() {
   }
 
   for (const synthetic of syntheticPrices) {
+    const payloadHash = hashPayload(synthetic)
+    const exists = await prisma.binanceAssetPriceSnapshot.findUnique({
+      where: {
+        asset_symbol_payloadHash: {
+          asset: synthetic.asset,
+          symbol: synthetic.symbol,
+          payloadHash,
+        },
+      },
+    })
+    if (exists) continue
+
     inserted += await createIfNew(() =>
       prisma.binanceAssetPriceSnapshot.create({
         data: {
@@ -379,7 +415,7 @@ async function syncPrices() {
           symbol: synthetic.symbol,
           quoteAsset: synthetic.quoteAsset,
           price: decimalFromString(synthetic.price),
-          payloadHash: hashPayload(synthetic),
+          payloadHash,
           payloadJson: JSON.stringify(synthetic),
         },
       })
