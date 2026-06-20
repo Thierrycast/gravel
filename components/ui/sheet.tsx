@@ -66,6 +66,7 @@ function SheetContent({
           className
         )}
         {...props}
+        aria-describedby={props["aria-describedby"] || undefined}
       >
         {children}
         {showCloseButton && (

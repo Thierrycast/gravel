@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import {
   BarChart,
   Bar,
@@ -85,6 +86,12 @@ export default function RecurringExpensesPage() {
   const { format, formatCompact } = useCurrency()
   const currentMonth = new Date().getMonth()
   const currentYear = new Date().getFullYear()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   const { data, loading, error, refetch } = useApi<RecurringExpenseData>("/api/recurring/expenses", {
     year: String(currentYear),
     month: String(currentMonth + 1),
@@ -106,7 +113,7 @@ export default function RecurringExpensesPage() {
     }))
   })()
 
-  if (loading) {
+  if (!mounted || loading) {
     return (
       <div className="flex flex-col gap-6 p-6">
         <Skeleton className="h-8 w-64" />

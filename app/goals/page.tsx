@@ -54,9 +54,13 @@ interface Goal {
   emoji: string
   targetAmount: string
   currentAmount: string
+  manualAmount?: number
   monthlyContribution: string
   targetDate: string | null
   active: boolean
+  matchCategorySlug?: string | null
+  matchKeyword?: string | null
+  matchDateStart?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -77,6 +81,9 @@ interface GoalFormData {
   currentAmount: string
   monthlyContribution: string
   targetDate: string
+  matchCategorySlug: string
+  matchKeyword: string
+  matchDateStart: string
 }
 
 type GoalTemplate = {
@@ -89,11 +96,14 @@ type GoalTemplate = {
 
 const emptyForm: GoalFormData = {
   name: "",
-  emoji: "\uD83C\uDFAF",
+  emoji: "🎯",
   targetAmount: "",
   currentAmount: "",
   monthlyContribution: "",
   targetDate: "",
+  matchCategorySlug: "",
+  matchKeyword: "",
+  matchDateStart: "",
 }
 
 const GOAL_TEMPLATES: readonly GoalTemplate[] = [
@@ -209,9 +219,12 @@ export default function GoalsPage() {
       name: goal.name,
       emoji: goal.emoji,
       targetAmount: goal.targetAmount,
-      currentAmount: goal.currentAmount,
+      currentAmount: String(goal.manualAmount ?? goal.currentAmount),
       monthlyContribution: goal.monthlyContribution,
       targetDate: goal.targetDate ? goal.targetDate.slice(0, 10) : "",
+      matchCategorySlug: goal.matchCategorySlug ?? "",
+      matchKeyword: goal.matchKeyword ?? "",
+      matchDateStart: goal.matchDateStart ? goal.matchDateStart.slice(0, 10) : "",
     })
     setDialogOpen(true)
   }
@@ -226,6 +239,9 @@ export default function GoalsPage() {
         currentAmount: parseFloat(form.currentAmount) || 0,
         monthlyContribution: parseFloat(form.monthlyContribution) || 0,
         targetDate: form.targetDate || null,
+        matchCategorySlug: form.matchCategorySlug || null,
+        matchKeyword: form.matchKeyword || null,
+        matchDateStart: form.matchDateStart || null,
       }
 
       if (editingGoal) {
@@ -499,6 +515,13 @@ export default function GoalsPage() {
                 </div>
 
                 <Separator />
+
+                {(goal.matchCategorySlug || goal.matchKeyword) && (
+                  <div className="flex items-center gap-1.5 rounded-lg bg-sky-500/10 border border-sky-500/20 px-2.5 py-1 text-[10px] text-sky-600 dark:text-sky-400 w-fit">
+                    <Target className="size-3" />
+                    <span>Aportes automáticos ativos</span>
+                  </div>
+                )}
 
                 {/* Details */}
                 <div className="space-y-2 text-sm">
@@ -792,6 +815,48 @@ function GoalDialog({
                 value={form.targetDate}
                 onChange={(e) => update("targetDate", e.target.value)}
                 className="h-11"
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-4 space-y-3">
+            <h4 className="text-sm font-semibold text-sky-600 dark:text-sky-400 flex items-center gap-1.5">
+              <Target className="size-4" />
+              Regras de Aporte Automático (Opcional)
+            </h4>
+            <p className="text-xs text-muted-foreground">
+              Vincule transações reais para atualizar o progresso da meta automaticamente.
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label htmlFor="goal-match-category" className="text-xs">Por categoria (slug)</Label>
+                <Input
+                  id="goal-match-category"
+                  placeholder="Ex: investimentos"
+                  value={form.matchCategorySlug}
+                  onChange={(e) => update("matchCategorySlug", e.target.value)}
+                  className="h-9 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="goal-match-keyword" className="text-xs">Por descrição (palavra-chave)</Label>
+                <Input
+                  id="goal-match-keyword"
+                  placeholder="Ex: Tesouro"
+                  value={form.matchKeyword}
+                  onChange={(e) => update("matchKeyword", e.target.value)}
+                  className="h-9 text-xs"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="goal-match-date" className="text-xs">Ignorar transações antes de</Label>
+              <Input
+                id="goal-match-date"
+                type="date"
+                value={form.matchDateStart}
+                onChange={(e) => update("matchDateStart", e.target.value)}
+                className="h-9 text-xs"
               />
             </div>
           </div>

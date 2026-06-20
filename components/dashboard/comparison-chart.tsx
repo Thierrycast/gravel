@@ -288,7 +288,7 @@ export function Pills<T extends string>({
   size?: "sm" | "xs";
 }) {
   const textClass = size === "xs" ? "text-[10px]" : "text-[11px]";
-  const padClass  = size === "xs" ? "px-2 py-0.5" : "px-2.5 py-1";
+  const padClass  = size === "xs" ? "px-2 py-1 min-h-[24px] min-w-[24px]" : "px-2.5 py-1.5 min-h-[28px] min-w-[28px]";
   return (
     <div className="flex shrink-0 rounded-md border border-border/60 bg-muted/40 p-0.5 gap-px">
       {options.map((opt) => (
@@ -297,7 +297,7 @@ export function Pills<T extends string>({
           type="button"
           onClick={() => onChange(opt.value)}
           aria-pressed={value === opt.value}
-          className={`rounded-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${textClass} ${padClass} ${
+          className={`inline-flex items-center justify-center rounded-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${textClass} ${padClass} ${
             value === opt.value
               ? "bg-background text-foreground shadow-sm dark:bg-card dark:shadow-none dark:ring-1 dark:ring-border/60"
               : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
@@ -354,7 +354,7 @@ export function ComparisonChart({
         <div className="h-3.5 w-px bg-border/60 shrink-0" />
 
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-muted-foreground/70 whitespace-nowrap">Linhas</span>
+          <span className="text-[10px] text-muted-foreground whitespace-nowrap">Linhas</span>
           <Pills
             size="xs"
             options={[
@@ -387,7 +387,7 @@ export function ComparisonChart({
                 {p.label}
               </span>
               {i === 0 && (
-                <span className="text-muted-foreground/40">(atual)</span>
+                <span className="text-muted-foreground">(atual)</span>
               )}
             </span>
           ))}

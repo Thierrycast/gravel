@@ -7,6 +7,7 @@ import {
 } from "@/lib/domain/analytics/shared"
 import { getOverviewMetrics, getSpendingByCategoryMetrics } from "@/lib/domain/analytics"
 import { parseSalaryPatternsConfig } from "@/lib/domain/salary"
+import { checkBudgetAnomalies } from "@/lib/domain/notifications"
 
 type ReviewStatus = "open" | "resolved" | "ignored"
 type Severity = "critical" | "high" | "medium" | "low"
@@ -19,6 +20,8 @@ type ReviewKind =
   | "connection-stale"
   | "bill-due"
   | "goal-risk"
+  | "budget-deviation"
+  | "cash-risk"
 
 export type ReviewAction = {
   label: string
@@ -413,6 +416,21 @@ export async function getInboxPayload() {
       secondaryAction: { label: "Marcar revisada", method: "resolve" },
       status: "open",
     })
+  }
+
+  try {
+    const budgetAnomalies = await checkBudgetAnomalies()
+    for (const anomaly of budgetAnomalies) {
+      items.push({
+        ...anomaly,
+        kind: anomaly.kind as any,
+        status: "open",
+        primaryAction: { label: "Revisar", href: anomaly.href },
+        secondaryAction: { label: "Ignorar", method: "ignore" },
+      })
+    }
+  } catch (err) {
+    console.error("Erro ao carregar anomalias proativas na Inbox:", err)
   }
 
   const deduped = Array.from(new Map(items.map((item) => [item.id, item])).values())

@@ -822,13 +822,89 @@ export async function getDashboardTransactions(searchParams: URLSearchParams) {
   }
 }
 
-export async function getDomainGoals() {
+export async function enrichGoalWithAutoTransactions<T extends {
+  id: string;
+  createdAt: Date;
+  currentAmount: Prisma.Decimal | number;
+  matchCategorySlug: string | null;
+  matchKeyword: string | null;
+  matchDateStart: Date | null;
+}>(goal: T): Promise<T & { manualAmount: number }> {
+  const manualAmount = Number(goal.currentAmount);
+  if (!goal.matchCategorySlug && !goal.matchKeyword) {
+    return {
+      ...goal,
+      manualAmount,
+    };
+  }
+
+  const startDate = goal.matchDateStart ?? goal.createdAt;
+
+  const filters: any[] = [
+    { ignored: false },
+    { occurredAt: { gte: startDate } }
+  ];
+
+  const orConditions: any[] = [];
+
+  if (goal.matchCategorySlug) {
+    const category = await prisma.domainCategory.findUnique({
+      where: { slug: goal.matchCategorySlug }
+    });
+    if (category) {
+      orConditions.push({ domainCategoryId: category.id });
+    }
+  }
+
+  if (goal.matchKeyword) {
+    orConditions.push({
+      OR: [
+        { description: { contains: goal.matchKeyword } },
+        { normalizedDescription: { contains: goal.matchKeyword } },
+        { merchantName: { contains: goal.matchKeyword } }
+      ]
+    });
+  }
+
+  if (orConditions.length > 0) {
+    filters.push({ OR: orConditions });
+  }
+
+  const transactions = await prisma.domainTransaction.findMany({
+    where: {
+      AND: filters
+    },
+    select: {
+      amount: true
+    }
+  });
+
+  const transactionsSum = transactions.reduce((acc, tx) => {
+    return acc - Number(tx.amount);
+  }, 0);
+
+  const finalAmount = manualAmount + transactionsSum;
+
+  return {
+    ...goal,
+    currentAmount: new Prisma.Decimal(Math.max(0, finalAmount)) as any,
+    manualAmount,
+  };
+}
+
+export async function getDomainGoals(activeOnly = false) {
   const goals = await prisma.goal.findMany({
+    where: activeOnly ? { active: true } : {},
     orderBy: [{ targetDate: "asc" }, { createdAt: "desc" }],
   });
+
+  const enriched = await Promise.all(
+    goals.map((goal) => enrichGoalWithAutoTransactions(goal))
+  );
+
   return {
-    summary: { total: goals.length },
-    results: goals,
+    summary: { total: enriched.length },
+    results: enriched,
   };
 }
 

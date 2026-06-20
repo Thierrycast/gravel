@@ -214,7 +214,7 @@ export function AppSidebar() {
           <div className="md:hidden">
             <CurrencySelector />
           </div>
-          <div className="px-1 py-1 text-[10px] font-mono text-muted-foreground/60 tracking-[0.2em] flex items-center justify-between group-data-[collapsible=icon]:hidden">
+          <div className="px-1 py-1 text-[10px] font-mono text-muted-foreground tracking-[0.2em] flex items-center justify-between group-data-[collapsible=icon]:hidden">
             <span>SYS::READY</span>
             <span className="animate-pulse">●</span>
           </div>
@@ -222,7 +222,7 @@ export function AppSidebar() {
             href="https://github.com/Thierrycast"
             target="_blank"
             rel="noopener noreferrer"
-            className="group-data-[collapsible=icon]:hidden px-1 text-[10px] text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors leading-relaxed"
+            className="group-data-[collapsible=icon]:hidden px-1 text-[10px] text-muted-foreground hover:text-primary transition-colors leading-relaxed"
           >
             Desenvolvido por Thierry Castro
           </a>

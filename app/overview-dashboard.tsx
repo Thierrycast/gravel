@@ -704,7 +704,7 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
                       style={{ width: `${cat.sharePercent}%`, backgroundColor: color }}
                     />
                   </div>
-                  <p className="text-[10px] text-muted-foreground/60 text-right">
+                  <p className="text-[10px] text-muted-foreground text-right font-medium">
                     {cat.sharePercent.toFixed(1)}%
                   </p>
                 </div>
@@ -880,7 +880,7 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
                         <span aria-hidden>{cat.emoji}</span> {cat.name}
                       </span>
                       <span className="ml-auto shrink-0 tabular-nums font-medium">{format(cat.value)}</span>
-                      <span className="shrink-0 tabular-nums text-muted-foreground/70 w-12 text-right">{cat.share.toFixed(1)}%</span>
+                      <span className="shrink-0 tabular-nums text-muted-foreground w-12 text-right">{cat.share.toFixed(1)}%</span>
                     </div>
                   ))}
                 </div>

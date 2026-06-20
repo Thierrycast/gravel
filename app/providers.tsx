@@ -36,7 +36,31 @@ export function AppQueryProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    if (process.env.NODE_ENV !== "production") return
+    if (process.env.NODE_ENV !== "production") {
+      if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+        navigator.serviceWorker.getRegistrations().then(async (registrations) => {
+          if (registrations.length > 0) {
+            let clearedAny = false
+            for (const registration of registrations) {
+              try {
+                const success = await registration.unregister()
+                if (success) {
+                  console.log("[pwa] Antigo SW desregistrado em desenvolvimento local:", registration.scope)
+                  clearedAny = true
+                }
+              } catch (err) {
+                console.warn("[pwa] Falha ao desregistrar SW em desenvolvimento local:", err)
+              }
+            }
+            if (clearedAny && !sessionStorage.getItem("sw-cleared")) {
+              sessionStorage.setItem("sw-cleared", "true")
+              window.location.reload()
+            }
+          }
+        })
+      }
+      return
+    }
     if (typeof window === "undefined") return
     if (!("serviceWorker" in navigator)) return
     const onLoad = () => {

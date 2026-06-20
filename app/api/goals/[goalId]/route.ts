@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { jsonOk, jsonError } from "@/lib/core/http"
+import { enrichGoalWithAutoTransactions } from "@/lib/domain/queries"
 
 export const dynamic = "force-dynamic"
 
@@ -16,7 +17,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       return jsonError(new Error("Meta nao encontrada"), 404)
     }
 
-    return jsonOk({ results: goal })
+    const enriched = await enrichGoalWithAutoTransactions(goal)
+
+    return jsonOk({ results: enriched })
   } catch (error) {
     return jsonError(error)
   }
@@ -27,8 +30,18 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const { goalId } = await params
     const body = await request.json()
 
-    const { name, emoji, targetAmount, currentAmount, monthlyContribution, targetDate, active } =
-      body
+    const {
+      name,
+      emoji,
+      targetAmount,
+      currentAmount,
+      monthlyContribution,
+      targetDate,
+      active,
+      matchCategorySlug,
+      matchKeyword,
+      matchDateStart,
+    } = body
 
     const data: Record<string, unknown> = {}
     if (name !== undefined) data.name = name
@@ -38,13 +51,18 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (monthlyContribution !== undefined) data.monthlyContribution = monthlyContribution
     if (targetDate !== undefined) data.targetDate = targetDate ? new Date(targetDate) : null
     if (active !== undefined) data.active = active
+    if (matchCategorySlug !== undefined) data.matchCategorySlug = matchCategorySlug || null
+    if (matchKeyword !== undefined) data.matchKeyword = matchKeyword || null
+    if (matchDateStart !== undefined) data.matchDateStart = matchDateStart ? new Date(matchDateStart) : null
 
     const goal = await prisma.goal.update({
       where: { id: goalId },
       data,
     })
 
-    return jsonOk({ results: goal })
+    const enriched = await enrichGoalWithAutoTransactions(goal)
+
+    return jsonOk({ results: enriched })
   } catch (error) {
     return jsonError(error)
   }
