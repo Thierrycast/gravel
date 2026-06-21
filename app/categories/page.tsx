@@ -795,7 +795,7 @@ function CategoriesPageContent() {
           activeTab === "categorias" ? (
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-4 border-r pr-6 border-border/60">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-2">
                   <Switch
                     id="show-salary"
                     checked={showSalary}
@@ -811,7 +811,7 @@ function CategoriesPageContent() {
                     Salários
                   </Label>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-2">
                   <Switch
                     id="show-future"
                     checked={showFuture}
@@ -827,7 +827,7 @@ function CategoriesPageContent() {
                     Parcelas
                   </Label>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-2">
                   <Switch
                     id="detailed"
                     checked={detailed}

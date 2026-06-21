@@ -334,6 +334,7 @@
   html,
   body {
     height: 100%;
+    height: -webkit-fill-available;
     width: 100%;
     max-width: 100%;
     overflow-x: hidden;
@@ -369,6 +370,12 @@
   .page-container {
     padding-bottom: max(5.25rem, calc(4rem + env(safe-area-inset-bottom, 0px) + 1.25rem)) !important;
   }
+
+  /* Override 100dvh on parent wrapper in standalone mode to avoid iOS PWA viewport height bugs */
+  [data-slot="sidebar-wrapper"] {
+    height: 100% !important;
+    height: -webkit-fill-available !important;
+  }
 }
 
 /* Comparison chart area fills — screen blending prevents areas from covering
@@ -396,3 +403,18 @@
 ::view-transition-new(app-header) {
   animation: none;
 }
+
+@utility surface {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+@utility section-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+

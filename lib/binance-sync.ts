@@ -298,6 +298,9 @@ async function syncTrades(inputSymbols?: string[]) {
           })
         )
 
+        if (currentInserted > 0) {
+          existingIds.add(tradeIdStr)
+        }
         inserted += currentInserted
         perSymbol[symbol] += currentInserted
       }
@@ -363,6 +366,7 @@ async function syncPrices() {
     : []
 
   let inserted = 0
+  const processedKeys = new Set<string>()
 
   for (const current of livePrices) {
     const currentSymbol = current.symbol ?? ""
@@ -370,6 +374,9 @@ async function syncPrices() {
     if (!mapped) continue
 
     const payloadHash = hashPayload(current)
+    const key = `${mapped.asset}:${currentSymbol}:${payloadHash}`
+    if (processedKeys.has(key)) continue
+
     const exists = await prisma.binanceAssetPriceSnapshot.findUnique({
       where: {
         asset_symbol_payloadHash: {
@@ -379,9 +386,12 @@ async function syncPrices() {
         },
       },
     })
-    if (exists) continue
+    if (exists) {
+      processedKeys.add(key)
+      continue
+    }
 
-    inserted += await createIfNew(() =>
+    const currentInserted = await createIfNew(() =>
       prisma.binanceAssetPriceSnapshot.create({
         data: {
           asset: mapped.asset,
@@ -393,10 +403,17 @@ async function syncPrices() {
         },
       })
     )
+    if (currentInserted > 0) {
+      processedKeys.add(key)
+    }
+    inserted += currentInserted
   }
 
   for (const synthetic of syntheticPrices) {
     const payloadHash = hashPayload(synthetic)
+    const key = `${synthetic.asset}:${synthetic.symbol}:${payloadHash}`
+    if (processedKeys.has(key)) continue
+
     const exists = await prisma.binanceAssetPriceSnapshot.findUnique({
       where: {
         asset_symbol_payloadHash: {
@@ -406,9 +423,12 @@ async function syncPrices() {
         },
       },
     })
-    if (exists) continue
+    if (exists) {
+      processedKeys.add(key)
+      continue
+    }
 
-    inserted += await createIfNew(() =>
+    const currentInserted = await createIfNew(() =>
       prisma.binanceAssetPriceSnapshot.create({
         data: {
           asset: synthetic.asset,
@@ -420,6 +440,10 @@ async function syncPrices() {
         },
       })
     )
+    if (currentInserted > 0) {
+      processedKeys.add(key)
+    }
+    inserted += currentInserted
   }
 
   return {

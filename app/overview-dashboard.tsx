@@ -415,7 +415,7 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center gap-2">
                     <Switch id="show-salary" checked={showSalary} onCheckedChange={setShowSalary} aria-label="Mostrar salários" />
                     <Label htmlFor="show-salary" className="text-xs font-medium cursor-pointer">
                       Salários
@@ -430,7 +430,7 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center gap-2">
                     <Switch id="show-future" checked={showFuture} onCheckedChange={setShowFuture} aria-label="Mostrar parcelas" />
                     <Label htmlFor="show-future" className="text-xs font-medium cursor-pointer">
                       Parcelas
