@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Repeat, CreditCard, LayoutList } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
@@ -52,11 +52,6 @@ export default function RecurringPage() {
   const month = new Date().getMonth() + 1;
   const [selectedRule, setSelectedRule] = useState<SelectedRule | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const { data, loading } = useApi<MonthlyRecurringData>("/api/recurring", {
     year: String(year),
@@ -113,7 +108,7 @@ export default function RecurringPage() {
       .map(([name, stats]) => ({ name, ...stats }));
   }, [data]);
 
-  if (!mounted || loading) {
+  if (loading) {
     return (
       <div className="flex flex-col gap-6">
         <Skeleton className="h-8 w-64" />

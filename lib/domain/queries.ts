@@ -829,23 +829,24 @@ export async function enrichGoalWithAutoTransactions<T extends {
   matchCategorySlug: string | null;
   matchKeyword: string | null;
   matchDateStart: Date | null;
-}>(goal: T): Promise<T & { manualAmount: number }> {
+}>(goal: T): Promise<Omit<T, "currentAmount"> & { currentAmount: Prisma.Decimal; manualAmount: number }> {
   const manualAmount = Number(goal.currentAmount);
   if (!goal.matchCategorySlug && !goal.matchKeyword) {
     return {
       ...goal,
+      currentAmount: new Prisma.Decimal(manualAmount),
       manualAmount,
     };
   }
 
   const startDate = goal.matchDateStart ?? goal.createdAt;
 
-  const filters: any[] = [
+  const filters: Prisma.DomainTransactionWhereInput[] = [
     { ignored: false },
     { occurredAt: { gte: startDate } }
   ];
 
-  const orConditions: any[] = [];
+  const orConditions: Prisma.DomainTransactionWhereInput[] = [];
 
   if (goal.matchCategorySlug) {
     const category = await prisma.domainCategory.findUnique({
@@ -887,7 +888,7 @@ export async function enrichGoalWithAutoTransactions<T extends {
 
   return {
     ...goal,
-    currentAmount: new Prisma.Decimal(Math.max(0, finalAmount)) as any,
+    currentAmount: new Prisma.Decimal(Math.max(0, finalAmount)),
     manualAmount,
   };
 }

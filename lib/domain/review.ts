@@ -423,7 +423,7 @@ export async function getInboxPayload() {
     for (const anomaly of budgetAnomalies) {
       items.push({
         ...anomaly,
-        kind: anomaly.kind as any,
+        kind: anomaly.kind as ReviewKind,
         status: "open",
         primaryAction: { label: "Revisar", href: anomaly.href },
         secondaryAction: { label: "Ignorar", method: "ignore" },

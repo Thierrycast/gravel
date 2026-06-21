@@ -92,6 +92,7 @@ INTERNAL_API_KEY=
 - 🧪 [Pluggy Trial e Sandbox](docs/pluggy-trial-guide.md) — Como testar sem plano pago.
 - 🪙 [Integração Binance](docs/binance.md) — Detalhes da sincronização de criptomoedas.
 - 🖥️ [CLI](docs/cli.md) — Guia da linha de comando do Gravel.
+- 🤖 [MCP Server](docs/mcp.md) — Guia do servidor Model Context Protocol do Gravel.
 
 ---
 
@@ -130,7 +131,7 @@ A maneira mais rápida de rodar a aplicação em produção:
 docker compose up --build -d
 ```
 
-O `docker-compose.yml` criará um volume nomeado (`gravel_data`) para proteger o arquivo SQLite, definirá healthchecks HTTP e setará o banco em `/app/data/prod.db`.
+O `docker-compose.yml` criará um volume nomeado (`gravel_data`) para proteger o arquivo SQLite, definirá healthchecks HTTP e setará o banco em `/app/data/prod.db`. A aplicação continua escutando na porta `3000` dentro do container, mas a porta publicada no host fica fora da faixa de desenvolvimento por padrão: `8421` (configurável via `APP_PORT`).
 
 ### Docker Puro
 
@@ -139,13 +140,17 @@ docker build -t gravel .
 
 docker volume create gravel_data
 
-docker run -p 3000:3000 \
+docker run -p 8421:3000 \
   -e DATABASE_URL="file:/app/data/prod.db" \
   -e PLUGGY_CLIENT_ID="..." \
   -e PLUGGY_CLIENT_SECRET="..." \
+  -e PORT="3000" \
+  -e HOSTNAME="0.0.0.0" \
   -v gravel_data:/app/data \
   gravel
 ```
+
+Se precisar trocar a porta externa, altere apenas o lado esquerdo do mapeamento (`HOST:CONTAINER`). Evite `3000` e `3001` no host para não colidir com ambientes de desenvolvimento locais.
 
 > **Dica de Permissões:** Caso opte por um bind mount local (`-v ./data:/app/data`), certifique-se de que o diretório pertence ao usuário de ID `1001` (aplicando um `chmod`), uma vez que o container roda usando um usuário não-root por segurança.
 
