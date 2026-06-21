@@ -322,7 +322,7 @@ export function SyncButton({ showTime = false, className }: SyncButtonProps) {
         onClick={triggerSync}
         disabled={status === "syncing"}
         className={cn(
-          "font-mono text-xs gap-1.5 border-border",
+          "font-mono",
           status === "done" && "border-emerald-500/50 text-emerald-400",
           status === "error" && "border-destructive/50 text-destructive",
           isStale && "border-amber-500/50 bg-amber-500/10 text-amber-500",

@@ -89,7 +89,7 @@ export default async function RootLayout({
                 <div className="relative flex flex-1 flex-col overflow-hidden">
                   <PullToRefresh />
                   <main
-                    className="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden [WebkitOverflowScrolling:touch]"
+                    className="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden"
                   >
                     <header className="sticky top-0 z-50 flex h-[calc(3.5rem+env(safe-area-inset-top))] shrink-0 items-center justify-between gap-2 border-b border-border/70 bg-background/80 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-background/65 px-3 md:px-6 xl:px-12 2xl:px-16 pt-[env(safe-area-inset-top)] [view-transition-name:app-header]">
                       <div className="flex items-center gap-3">

@@ -330,7 +330,7 @@ export default function ReportsPage() {
         actions={
           <div className="flex w-full max-w-full flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <div className="flex flex-wrap items-center gap-3 border-border/60 sm:gap-4 sm:border-r sm:pr-6">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-2">
                 <Switch
                   id="show-future"
                   checked={showFuture}
@@ -346,7 +346,7 @@ export default function ReportsPage() {
                   Parcelas
                 </Label>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-2">
                 <Switch
                   id="detailed"
                   checked={detailed}

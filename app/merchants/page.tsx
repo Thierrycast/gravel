@@ -225,7 +225,7 @@ function MerchantsContent() {
         actions={
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-4 border-r pr-6 border-border/60">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-2">
                 <Switch
                   id="show-salary"
                   checked={showSalary}
@@ -241,7 +241,7 @@ function MerchantsContent() {
                   Salários
                 </Label>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-2">
                 <Switch
                   id="show-future"
                   checked={showFuture}

@@ -49,6 +49,12 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}))
     const isFull = body.full !== false // default to true
+    const force = body.force === true
+
+    if (force) {
+      await prisma.opsSyncLock.deleteMany()
+      console.log("[sync/trigger] Todos os locks de sincronização foram forçados a serem liberados.")
+    }
 
     if (isFull) {
       // Fire-and-forget: start the full sync without blocking the response
