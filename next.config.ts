@@ -16,9 +16,12 @@ const securityHeaders = [
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
 ];
 
+const buildCpus = Number(process.env.NEXT_BUILD_CPUS ?? "")
+
 const nextConfig: NextConfig = {
   output: "standalone",
   devIndicators: false,
+  experimental: Number.isFinite(buildCpus) && buildCpus > 0 ? { cpus: buildCpus } : undefined,
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "img.logo.dev" },

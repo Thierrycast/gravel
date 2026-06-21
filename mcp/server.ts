@@ -5,6 +5,15 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
+import {
+  DomainCategoryKind,
+  DomainTransactionDirection,
+  SourceProvider,
+  Prisma,
+} from "@prisma/client";
+import crypto from "node:crypto";
+import { prisma } from "../lib/prisma.js";
+import { normalizeText } from "../lib/domain/utils.js";
 
 import { serializeDecimal } from "../cli/core/serialize.js";
 import {
@@ -151,19 +160,24 @@ const TOOLS: Tool[] = [
   },
   {
     name: "search_transactions",
-    description: "Busca transações por período, categoria, direção, conta ou texto",
+    description: "Busca transações por período, categoria, direção, conta, comerciantes, valores e texto",
     inputSchema: {
       type: "object",
       properties: {
         q: { type: "string", description: "Termo de busca" },
-        period: { type: "string" },
-        from: { type: "string", description: "YYYY-MM-DD" },
-        to: { type: "string", description: "YYYY-MM-DD" },
-        direction: { type: "string", enum: ["INFLOW", "OUTFLOW"] },
-        accountId: { type: "string" },
-        categoryId: { type: "string" },
-        page: { type: "number", default: 1 },
-        pageSize: { type: "number", default: 50 },
+        period: { type: "string", description: "Atalho de período (mtd|30d|90d|180d|12m|ytd|all)" },
+        from: { type: "string", description: "Data inicial (YYYY-MM-DD)" },
+        to: { type: "string", description: "Data final (YYYY-MM-DD)" },
+        direction: { type: "string", enum: ["INFLOW", "OUTFLOW", "TRANSFER"], description: "Direção da transação" },
+        accountId: { type: "string", description: "Filtrar por ID da conta" },
+        categoryId: { type: "string", description: "Filtrar por ID da categoria" },
+        merchantId: { type: "string", description: "Filtrar por ID do comerciante" },
+        minAmount: { type: "number", description: "Valor mínimo" },
+        maxAmount: { type: "number", description: "Valor máximo" },
+        sortBy: { type: "string", description: "Ordenar por campo (ex: occurredAt, amount)" },
+        sortOrder: { type: "string", enum: ["asc", "desc"], default: "desc", description: "Ordem da ordenação" },
+        page: { type: "number", default: 1, description: "Número da página" },
+        pageSize: { type: "number", default: 50, description: "Itens por página" },
       },
     },
   },
@@ -285,6 +299,252 @@ const TOOLS: Tool[] = [
       type: "object",
       properties: {
         month: { type: "string", description: "YYYY-MM" },
+      },
+    },
+  },
+  {
+    name: "create_transaction",
+    description: "Cria uma transação manual (MANUAL inflow/outflow)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        description: { type: "string", description: "Descrição da transação" },
+        amount: { type: "number", description: "Valor positivo" },
+        direction: { type: "string", enum: ["INFLOW", "OUTFLOW"], description: "Direção da transação" },
+        occurredAt: { type: "string", description: "Data/Hora ISO (opcional, padrão agora)" },
+        domainAccountId: { type: "string", description: "ID da conta associada (opcional)" },
+        domainCategoryId: { type: "string", description: "ID da categoria associada (opcional)" },
+      },
+      required: ["description", "amount", "direction"],
+    },
+  },
+  {
+    name: "update_transaction",
+    description: "Atualiza campos de uma transação existente",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "ID da transação" },
+        description: { type: "string", description: "Nova descrição" },
+        amount: { type: "number", description: "Novo valor" },
+        direction: { type: "string", enum: ["INFLOW", "OUTFLOW", "TRANSFER"], description: "Nova direção" },
+        occurredAt: { type: "string", description: "Nova data/hora ISO" },
+        domainCategoryId: { type: "string", description: "Novo ID da categoria" },
+        domainMerchantId: { type: "string", description: "Novo ID do comerciante" },
+        merchantName: { type: "string", description: "Nome do comerciante para vincular/criar" },
+        ignored: { type: "boolean", description: "Marcar como ignorada ou ativa" },
+        markInternalTransfer: { type: "boolean", description: "Marcar como transferência interna" },
+        markAsSalary: { type: "boolean", description: "Marcar como salário" },
+        markAsInvestment: { type: "boolean", description: "Marcar como investimento" },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "delete_transaction",
+    description: "Exclui uma transação manual pelo ID",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "ID da transação" },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "update_account",
+    description: "Atualiza apelido, nome ou saldo de uma conta manual",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "ID da conta" },
+        name: { type: "string", description: "Novo nome" },
+        nickname: { type: "string", description: "Novo apelido" },
+        balance: { type: "number", description: "Novo saldo manual" },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "pay_bill",
+    description: "Marca uma fatura de cartão de crédito como paga",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "ID da fatura" },
+        status: { type: "string", enum: ["PAID", "OPEN", "OVERDUE"], default: "PAID", description: "Status de pagamento" },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "create_goal",
+    description: "Cria uma nova meta financeira",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Nome da meta" },
+        targetAmount: { type: "number", description: "Valor alvo" },
+        emoji: { type: "string", description: "Emoji representativo" },
+        currentAmount: { type: "number", description: "Valor já economizado" },
+        monthlyContribution: { type: "number", description: "Contribuição mensal pretendida" },
+        targetDate: { type: "string", description: "Data limite YYYY-MM-DD (opcional)" },
+        matchCategorySlug: { type: "string", description: "Slug da categoria para aportes automáticos (opcional)" },
+        matchKeyword: { type: "string", description: "Palavra-chave para aportes automáticos (opcional)" },
+        matchDateStart: { type: "string", description: "Data de início dos aportes automáticos YYYY-MM-DD (opcional)" },
+      },
+      required: ["name", "targetAmount"],
+    },
+  },
+  {
+    name: "update_goal",
+    description: "Atualiza campos de uma meta financeira",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "ID da meta" },
+        name: { type: "string", description: "Novo nome" },
+        targetAmount: { type: "number", description: "Novo valor alvo" },
+        emoji: { type: "string", description: "Novo emoji" },
+        currentAmount: { type: "number", description: "Novo valor economizado" },
+        monthlyContribution: { type: "number", description: "Nova contribuição mensal" },
+        targetDate: { type: "string", description: "Nova data limite YYYY-MM-DD" },
+        active: { type: "boolean", description: "Marcar como ativa ou inativa" },
+        matchCategorySlug: { type: "string", description: "Novo slug de categoria de match" },
+        matchKeyword: { type: "string", description: "Nova palavra-chave de match" },
+        matchDateStart: { type: "string", description: "Nova data de início de match YYYY-MM-DD" },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "create_scenario",
+    description: "Cria um cenário de simulação/planejamento futuro",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Título da simulação" },
+        amount: { type: "number", description: "Valor (positivo para receitas, negativo para despesas)" },
+        date: { type: "string", description: "Data de referência YYYY-MM-DD" },
+        isRecurring: { type: "boolean", description: "Se é recorrente/mensal" },
+        frequency: { type: "string", enum: ["ONCE", "MONTHLY", "YEARLY"], default: "ONCE", description: "Frequência de recorrência" },
+        categoryId: { type: "string", description: "ID da categoria associada" },
+      },
+      required: ["title", "amount", "date"],
+    },
+  },
+  {
+    name: "delete_scenario",
+    description: "Exclui um cenário de planejamento",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "ID do cenário" },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "create_lend",
+    description: "Cria um empréstimo (valores devidos a ou por amigos)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        friendName: { type: "string", description: "Nome do amigo" },
+        friendPhone: { type: "string", description: "Telefone do amigo (opcional)" },
+        amount: { type: "number", description: "Valor" },
+        dueDate: { type: "string", description: "Data de vencimento YYYY-MM-DD" },
+        description: { type: "string", description: "Observações/descrição" },
+        categoryId: { type: "string", description: "ID da categoria" },
+        domainBillId: { type: "string", description: "ID da fatura associada" },
+        domainTransactionId: { type: "string", description: "ID da transação de origem (saída)" },
+      },
+      required: ["friendName", "amount", "dueDate"],
+    },
+  },
+  {
+    name: "update_lend",
+    description: "Atualiza um registro de empréstimo",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "ID do empréstimo" },
+        status: { type: "string", enum: ["PENDING", "PAID"], description: "Status de quitação" },
+        amount: { type: "number", description: "Novo valor" },
+        dueDate: { type: "string", description: "Nova data de vencimento YYYY-MM-DD" },
+        friendName: { type: "string", description: "Novo nome do amigo" },
+        friendPhone: { type: "string", description: "Novo telefone" },
+        description: { type: "string", description: "Nova descrição" },
+        categoryId: { type: "string", description: "Novo ID da categoria" },
+        domainBillId: { type: "string", description: "Novo ID da fatura" },
+        domainTransactionId: { type: "string", description: "Novo ID da transação de origem" },
+        inflowTransactionId: { type: "string", description: "ID da transação de quitação (entrada)" },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "delete_lend",
+    description: "Exclui um registro de empréstimo",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "ID do empréstimo" },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "create_automation_rule",
+    description: "Cria uma regra de categorização automática",
+    inputSchema: {
+      type: "object",
+      properties: {
+        matchType: { type: "string", enum: ["EXACT", "CONTAINS", "PREFIX", "REGEX"], description: "Tipo de correspondência" },
+        matchField: { type: "string", description: "Campo a comparar (geralmente description)" },
+        matchValue: { type: "string", description: "Valor esperado" },
+        domainCategoryId: { type: "string", description: "ID da categoria a atribuir" },
+        priority: { type: "number", default: 100, description: "Prioridade da regra" },
+        active: { type: "boolean", default: true, description: "Se a regra está ativa" },
+        provider: { type: "string", description: "Filtro por provider específico" },
+      },
+      required: ["matchType", "matchField", "matchValue", "domainCategoryId"],
+    },
+  },
+  {
+    name: "delete_automation_rule",
+    description: "Exclui uma regra de categorização automática",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "ID da regra" },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "trigger_sync",
+    description: "Dispara sincronização manual (Pluggy, Binance ou Projeção)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        provider: { type: "string", enum: ["pluggy", "binance", "all"], default: "all", description: "Provedor" },
+        force: { type: "boolean", default: false, description: "Forçar liberação de locks existentes" },
+      },
+    },
+  },
+  {
+    name: "update_settings",
+    description: "Atualiza parâmetros de configurações do usuário",
+    inputSchema: {
+      type: "object",
+      properties: {
+        monthlySalary: { type: "number", description: "Salário base do usuário" },
+        showFutureSalary: { type: "boolean", description: "Exibir salário futuro projetado" },
+        showFutureAccounts: { type: "boolean", description: "Exibir contas futuras projetadas" },
+        syncIntervalHours: { type: "number", description: "Intervalo de auto-sync em horas" },
+        syncLookbackDays: { type: "number", description: "Dias de lookback do sync" },
+        salaryPatterns: { type: "array", items: { type: "string" }, description: "Padrões textuais de identificação de salário" },
       },
     },
   },
@@ -485,6 +745,513 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         result = await getMonthlyClosePayload(month);
         break;
       }
+      case "create_transaction": {
+        const desc = String(args?.description ?? "").trim();
+        const amt = Number(args?.amount ?? 0);
+        const dir = String(args?.direction ?? "").toUpperCase();
+        const occurredAt = args?.occurredAt ? new Date(String(args.occurredAt)) : new Date();
+        const domainAccountId = args?.domainAccountId ? String(args.domainAccountId) : null;
+        const domainCategoryId = args?.domainCategoryId ? String(args.domainCategoryId) : null;
+
+        if (!desc) throw new Error("Descrição é obrigatória");
+        if (isNaN(amt) || amt <= 0) throw new Error("Valor deve ser um número positivo");
+        if (dir !== "INFLOW" && dir !== "OUTFLOW") throw new Error("Direção deve ser INFLOW ou OUTFLOW");
+        if (isNaN(occurredAt.getTime())) throw new Error("Data inválida");
+
+        result = await prisma.domainTransaction.create({
+          data: {
+            occurredAt,
+            description: desc,
+            normalizedDescription: desc.toLowerCase(),
+            amount: new Prisma.Decimal(amt),
+            currencyCode: "BRL",
+            direction: dir as "INFLOW" | "OUTFLOW",
+            sourceProvider: "MANUAL",
+            sourceExternalId: `manual-${crypto.randomUUID()}`,
+            domainAccountId,
+            domainCategoryId,
+          },
+        });
+        break;
+      }
+      case "update_transaction": {
+        const transactionId = String(args?.id ?? "");
+        if (!transactionId) throw new Error("ID da transação é obrigatório");
+
+        const existing = await prisma.domainTransaction.findUnique({
+          where: { id: transactionId },
+        });
+        if (!existing) throw new Error("Transação não encontrada");
+
+        const allowedFields = [
+          "domainCategoryId",
+          "domainMerchantId",
+          "description",
+          "ignored",
+          "occurredAt",
+          "direction",
+        ] as const;
+        const updateData: Record<string, unknown> = {};
+
+        for (const field of allowedFields) {
+          if (args && field in args && args[field] !== undefined) {
+            updateData[field] = args[field];
+          }
+        }
+
+        if (args?.markInternalTransfer === true) {
+          const transferCategory = await prisma.domainCategory.findFirst({
+            where: {
+              OR: [
+                { kind: DomainCategoryKind.TRANSFER },
+                { slug: "uncategorized-transfer" },
+                { name: { contains: "transfer" } },
+              ],
+            },
+            orderBy: [{ kind: "desc" }, { name: "asc" }],
+          });
+          updateData.direction = DomainTransactionDirection.TRANSFER;
+          if (transferCategory) {
+            updateData.domainCategoryId = transferCategory.id;
+          }
+        }
+
+        if (args?.markAsSalary === true) {
+          if (existing.direction !== DomainTransactionDirection.INFLOW) {
+            throw new Error("Apenas transações de entrada podem ser marcadas como salário");
+          }
+          const salaryCategory = await findOrCreateSalaryCategory();
+          updateData.direction = DomainTransactionDirection.INFLOW;
+          updateData.domainCategoryId = salaryCategory.id;
+        }
+
+        if (args?.markAsInvestment === true) {
+          const investmentCategory = await findOrCreateInvestmentCategory();
+          updateData.direction = DomainTransactionDirection.OUTFLOW;
+          updateData.domainCategoryId = investmentCategory.id;
+        }
+
+        if (typeof args?.merchantName === "string" && args.merchantName.trim()) {
+          const displayName = args.merchantName.trim();
+          const normalizedName = normalizedMerchantName(displayName) ?? displayName.toLowerCase();
+          const merchant = await prisma.domainMerchant.upsert({
+            where: { normalizedName },
+            update: { displayName },
+            create: { displayName, normalizedName },
+          });
+          updateData.domainMerchantId = merchant.id;
+          updateData.merchantName = displayName;
+        }
+
+        const transaction = await prisma.$transaction(async (tx) => {
+          const currentMetadata = parseMetadata(existing.metadataJson);
+          const overrides = { ...(currentMetadata.overrides ?? {}) } as Record<string, unknown>;
+
+          if ("occurredAt" in updateData) {
+            const parsedDate = new Date(String(updateData.occurredAt));
+            if (Number.isNaN(parsedDate.getTime())) {
+              throw new Error("Data inválida");
+            }
+            updateData.occurredAt = parsedDate;
+            overrides.occurredAt = parsedDate.toISOString();
+          }
+          if ("description" in updateData) {
+            const description = String(updateData.description).trim();
+            updateData.description = description;
+            updateData.normalizedDescription = normalizeText(description);
+            overrides.description = description;
+          }
+          if ("domainCategoryId" in updateData) {
+            overrides.categoryId = updateData.domainCategoryId;
+          }
+          if ("domainMerchantId" in updateData) {
+            overrides.merchantId = updateData.domainMerchantId;
+          }
+          if ("merchantName" in updateData) {
+            overrides.merchantName = updateData.merchantName;
+          }
+          if ("direction" in updateData) {
+            const direction = String(updateData.direction).toUpperCase();
+            if (
+              direction !== DomainTransactionDirection.INFLOW &&
+              direction !== DomainTransactionDirection.OUTFLOW &&
+              direction !== DomainTransactionDirection.TRANSFER
+            ) {
+              throw new Error("Direção inválida");
+            }
+            updateData.direction = direction;
+            overrides.direction = direction;
+          }
+
+          if (Object.keys(overrides).length > 0) {
+            updateData.metadataJson = JSON.stringify({
+              ...currentMetadata,
+              overrides,
+            });
+          }
+
+          const updated = await tx.domainTransaction.update({
+            where: { id: transactionId },
+            data: updateData,
+          });
+
+          if ("domainCategoryId" in updateData && updateData.domainCategoryId) {
+            const assignedCategory = await tx.domainCategory.findUnique({
+              where: { id: String(updateData.domainCategoryId) },
+            });
+            if (
+              assignedCategory &&
+              (assignedCategory.slug === "seed-salary" ||
+                assignedCategory.name.toLowerCase() === "salario" ||
+                assignedCategory.name.toLowerCase() === "salário")
+            ) {
+              const userSetting = await tx.userSetting.upsert({
+                where: { id: "default" },
+                update: {},
+                create: { id: "default" },
+              });
+              let config: Record<string, unknown> = {};
+              if (userSetting.dashboardConfigJson) {
+                try {
+                  config = JSON.parse(userSetting.dashboardConfigJson) as Record<string, unknown>;
+                } catch {}
+              }
+              const patterns = Array.isArray(config.salaryPatterns)
+                ? (config.salaryPatterns as string[]).filter(
+                    (pattern) => typeof pattern === "string",
+                  )
+                : [];
+              const term = existing.description ? existing.description.trim() : "";
+              if (term && !patterns.includes(term)) {
+                patterns.push(term);
+                config.salaryPatterns = patterns;
+                await tx.userSetting.update({
+                  where: { id: "default" },
+                  data: {
+                    dashboardConfigJson: JSON.stringify(config),
+                  },
+                });
+              }
+            }
+          }
+
+          if ("ignored" in updateData) {
+            if (updateData.ignored === true) {
+              await tx.ignoredTransaction.upsert({
+                where: { domainTransactionId: transactionId },
+                create: {
+                  domainTransactionId: transactionId,
+                  reason: (args as { ignoreReason?: string })?.ignoreReason ?? null,
+                },
+                update: {
+                  reason: (args as { ignoreReason?: string })?.ignoreReason ?? null,
+                },
+              });
+            } else {
+              await tx.ignoredTransaction.deleteMany({
+                where: { domainTransactionId: transactionId },
+              });
+            }
+          }
+
+          return updated;
+        });
+
+        result = transaction;
+        break;
+      }
+      case "delete_transaction": {
+        const id = String(args?.id ?? "");
+        if (!id) throw new Error("ID da transação é obrigatório");
+        const existing = await prisma.domainTransaction.findUnique({
+          where: { id },
+        });
+        if (!existing) throw new Error("Transação não encontrada");
+        if (existing.sourceProvider !== "MANUAL") {
+          throw new Error("Apenas transações manuais podem ser excluídas");
+        }
+        await prisma.domainTransaction.delete({ where: { id } });
+        result = { success: true };
+        break;
+      }
+      case "update_account": {
+        const id = String(args?.id ?? "");
+        if (!id) throw new Error("ID da conta é obrigatório");
+        const existing = await prisma.domainAccount.findUnique({ where: { id } });
+        if (!existing) throw new Error("Conta não encontrada");
+
+        const data: Record<string, unknown> = {};
+        if (args?.name !== undefined) {
+          data.name = String(args.name);
+          data.normalizedName = normalizeText(String(args.name));
+        }
+        if (args?.nickname !== undefined) {
+          data.nickname = String(args.nickname);
+        }
+        if (args?.balance !== undefined) {
+          if (existing.sourceProvider !== "MANUAL") {
+            throw new Error("Apenas o saldo de contas manuais pode ser editado");
+          }
+          data.balance = new Prisma.Decimal(Number(args.balance));
+        }
+
+        result = await prisma.domainAccount.update({
+          where: { id },
+          data,
+        });
+        break;
+      }
+      case "pay_bill": {
+        const id = String(args?.id ?? "");
+        const status = String(args?.status ?? "PAID").toUpperCase();
+        if (!id) throw new Error("ID da fatura é obrigatório");
+        if (status !== "PAID" && status !== "OPEN" && status !== "OVERDUE") {
+          throw new Error("Status inválido");
+        }
+
+        result = await prisma.domainBill.update({
+          where: { id },
+          data: { status: status as "PAID" | "OPEN" | "OVERDUE" },
+        });
+        break;
+      }
+      case "create_goal": {
+        const name = String(args?.name ?? "").trim();
+        const targetAmount = Number(args?.targetAmount ?? 0);
+        if (!name) throw new Error("Nome é obrigatório");
+        if (isNaN(targetAmount) || targetAmount <= 0) throw new Error("Valor alvo inválido");
+
+        result = await prisma.goal.create({
+          data: {
+            name,
+            targetAmount: new Prisma.Decimal(targetAmount),
+            emoji: args?.emoji ? String(args.emoji) : undefined,
+            currentAmount: args?.currentAmount !== undefined ? new Prisma.Decimal(Number(args.currentAmount)) : undefined,
+            monthlyContribution: args?.monthlyContribution !== undefined ? new Prisma.Decimal(Number(args.monthlyContribution)) : undefined,
+            targetDate: args?.targetDate ? new Date(String(args.targetDate)) : null,
+            matchCategorySlug: args?.matchCategorySlug ? String(args.matchCategorySlug) : null,
+            matchKeyword: args?.matchKeyword ? String(args.matchKeyword) : null,
+            matchDateStart: args?.matchDateStart ? new Date(String(args.matchDateStart)) : null,
+          },
+        });
+        break;
+      }
+      case "update_goal": {
+        const id = String(args?.id ?? "");
+        if (!id) throw new Error("ID da meta é obrigatório");
+
+        const data: Record<string, unknown> = {};
+        if (args?.name !== undefined) data.name = String(args.name);
+        if (args?.emoji !== undefined) data.emoji = String(args.emoji);
+        if (args?.targetAmount !== undefined) data.targetAmount = new Prisma.Decimal(Number(args.targetAmount));
+        if (args?.currentAmount !== undefined) data.currentAmount = new Prisma.Decimal(Number(args.currentAmount));
+        if (args?.monthlyContribution !== undefined) data.monthlyContribution = new Prisma.Decimal(Number(args.monthlyContribution));
+        if (args?.targetDate !== undefined) data.targetDate = args.targetDate ? new Date(String(args.targetDate)) : null;
+        if (args?.active !== undefined) data.active = Boolean(args.active);
+        if (args?.matchCategorySlug !== undefined) data.matchCategorySlug = args.matchCategorySlug ? String(args.matchCategorySlug) : null;
+        if (args?.matchKeyword !== undefined) data.matchKeyword = args.matchKeyword ? String(args.matchKeyword) : null;
+        if (args?.matchDateStart !== undefined) data.matchDateStart = args.matchDateStart ? new Date(String(args.matchDateStart)) : null;
+
+        result = await prisma.goal.update({
+          where: { id },
+          data,
+        });
+        break;
+      }
+      case "create_scenario": {
+        const title = String(args?.title ?? "").trim();
+        const amount = Number(args?.amount ?? 0);
+        const date = args?.date ? new Date(String(args.date)) : null;
+        if (!title) throw new Error("Título é obrigatório");
+        if (isNaN(amount) || amount === 0) throw new Error("Valor inválido");
+        if (!date || isNaN(date.getTime())) throw new Error("Data inválida");
+
+        result = await prisma.domainScenarioEvent.create({
+          data: {
+            title,
+            amount: new Prisma.Decimal(amount),
+            date,
+            isRecurring: Boolean(args?.isRecurring),
+            frequency: String(args?.frequency ?? "ONCE") as "ONCE" | "MONTHLY" | "YEARLY",
+            categoryId: args?.categoryId ? String(args.categoryId) : null,
+          },
+        });
+        break;
+      }
+      case "delete_scenario": {
+        const id = String(args?.id ?? "");
+        if (!id) throw new Error("ID é obrigatório");
+        await prisma.domainScenarioEvent.delete({ where: { id } });
+        result = { success: true };
+        break;
+      }
+      case "create_lend": {
+        const friendName = String(args?.friendName ?? "").trim();
+        const amount = Number(args?.amount ?? 0);
+        const dueDate = args?.dueDate ? new Date(String(args.dueDate)) : null;
+        if (!friendName) throw new Error("Nome do amigo é obrigatório");
+        if (isNaN(amount) || amount <= 0) throw new Error("Valor deve ser maior que zero");
+        if (!dueDate || isNaN(dueDate.getTime())) throw new Error("Data de vencimento inválida");
+
+        result = await prisma.domainLend.create({
+          data: {
+            friendName,
+            friendPhone: args?.friendPhone ? String(args.friendPhone) : null,
+            amount: new Prisma.Decimal(amount),
+            dueDate,
+            description: args?.description ? String(args.description) : null,
+            categoryId: args?.categoryId ? String(args.categoryId) : null,
+            domainBillId: args?.domainBillId ? String(args.domainBillId) : null,
+            domainTransactionId: args?.domainTransactionId ? String(args.domainTransactionId) : null,
+            status: "PENDING",
+          },
+        });
+        break;
+      }
+      case "update_lend": {
+        const id = String(args?.id ?? "");
+        if (!id) throw new Error("ID do empréstimo é obrigatório");
+
+        const data: Record<string, unknown> = {};
+        if (args?.status !== undefined) data.status = String(args.status);
+        if (args?.amount !== undefined) data.amount = new Prisma.Decimal(Number(args.amount));
+        if (args?.dueDate !== undefined) data.dueDate = args.dueDate ? new Date(String(args.dueDate)) : undefined;
+        if (args?.friendName !== undefined) data.friendName = String(args.friendName);
+        if (args?.friendPhone !== undefined) data.friendPhone = args.friendPhone ? String(args.friendPhone) : null;
+        if (args?.description !== undefined) data.description = args.description ? String(args.description) : null;
+        if (args?.categoryId !== undefined) data.categoryId = args.categoryId ? String(args.categoryId) : null;
+        if (args?.domainBillId !== undefined) data.domainBillId = args.domainBillId ? String(args.domainBillId) : null;
+        if (args?.domainTransactionId !== undefined) data.domainTransactionId = args.domainTransactionId ? String(args.domainTransactionId) : null;
+        if (args?.inflowTransactionId !== undefined) data.inflowTransactionId = args.inflowTransactionId ? String(args.inflowTransactionId) : null;
+
+        result = await prisma.domainLend.update({
+          where: { id },
+          data,
+        });
+        break;
+      }
+      case "delete_lend": {
+        const id = String(args?.id ?? "");
+        if (!id) throw new Error("ID é obrigatório");
+        await prisma.domainLend.delete({ where: { id } });
+        result = { success: true };
+        break;
+      }
+      case "create_automation_rule": {
+        const matchType = String(args?.matchType ?? "").toUpperCase();
+        const matchField = String(args?.matchField ?? "");
+        const matchValue = String(args?.matchValue ?? "");
+        const domainCategoryId = String(args?.domainCategoryId ?? "");
+
+        if (!matchType || !matchField || !matchValue || !domainCategoryId) {
+          throw new Error("matchType, matchField, matchValue e domainCategoryId são obrigatórios");
+        }
+
+        result = await prisma.categoryRule.create({
+          data: {
+            matchType: matchType as "EXACT" | "CONTAINS" | "PREFIX" | "REGEX",
+            matchField,
+            matchValue,
+            domainCategoryId,
+            priority: args?.priority !== undefined ? Number(args.priority) : 100,
+            active: args?.active !== false,
+            provider: args?.provider ? (String(args.provider).toUpperCase() as SourceProvider) : null,
+          },
+        });
+        break;
+      }
+      case "delete_automation_rule": {
+        const id = String(args?.id ?? "");
+        if (!id) throw new Error("ID é obrigatório");
+        await prisma.categoryRule.delete({ where: { id } });
+        result = { success: true };
+        break;
+      }
+      case "trigger_sync": {
+        const provider = String(args?.provider ?? "all");
+        const force = Boolean(args?.force);
+
+        if (force) {
+          await prisma.opsSyncLock.deleteMany();
+        }
+
+        if (provider === "all") {
+          const { runFullOperationalSync } = await import("../lib/ingestion/provider-sync.js");
+          runFullOperationalSync({}).catch(err => console.error("[mcp] full sync failed:", err));
+        } else if (provider === "pluggy") {
+          const { runPluggySync } = await import("../lib/ingestion/provider-sync.js");
+          runPluggySync({ scope: "mcp/manual", resource: "full" }).catch(err => console.error("[mcp] pluggy sync failed:", err));
+        } else if (provider === "binance") {
+          const { runBinanceSync } = await import("../lib/ingestion/provider-sync.js");
+          runBinanceSync({ scope: "mcp/manual", resource: "full" }).catch(err => console.error("[mcp] binance sync failed:", err));
+        }
+        result = { triggered: true, provider, force };
+        break;
+      }
+      case "update_settings": {
+        const {
+          monthlySalary,
+          showFutureSalary,
+          showFutureAccounts,
+          syncIntervalHours,
+          syncLookbackDays,
+          salaryPatterns,
+        } = args ?? {};
+
+        let updatedConfigJson: string | undefined = undefined;
+        if (Array.isArray(salaryPatterns)) {
+          const current = await prisma.userSetting.findFirst({
+            where: { id: "default" },
+          });
+          let config: { salaryPatterns?: string[] } = {};
+          if (current?.dashboardConfigJson) {
+            try {
+              config = JSON.parse(current.dashboardConfigJson);
+            } catch {}
+          }
+          config.salaryPatterns = salaryPatterns.map(String);
+          updatedConfigJson = JSON.stringify(config);
+
+          const salaryCat = await prisma.domainCategory.findFirst({
+            where: {
+              OR: [
+                { slug: "seed-salary" },
+                { name: { contains: "salario" } },
+                { name: { contains: "salário" } },
+              ],
+            },
+          });
+          if (salaryCat) {
+            for (const pattern of salaryPatterns) {
+              await prisma.domainTransaction.updateMany({
+                where: {
+                  direction: "INFLOW",
+                  OR: [
+                    { description: { contains: String(pattern) } },
+                    { merchantName: { contains: String(pattern) } },
+                  ],
+                },
+                data: {
+                  domainCategoryId: salaryCat.id,
+                },
+              });
+            }
+          }
+        }
+
+        result = await prisma.userSetting.update({
+          where: { id: "default" },
+          data: {
+            monthlySalary: monthlySalary !== undefined ? new Prisma.Decimal(Number(monthlySalary)) : undefined,
+            showFutureSalary: showFutureSalary !== undefined ? Boolean(showFutureSalary) : undefined,
+            showFutureAccounts: showFutureAccounts !== undefined ? Boolean(showFutureAccounts) : undefined,
+            syncIntervalHours: syncIntervalHours !== undefined ? Number(syncIntervalHours) : undefined,
+            syncLookbackDays: syncLookbackDays !== undefined ? Number(syncLookbackDays) : undefined,
+            dashboardConfigJson: updatedConfigJson,
+          },
+        });
+        break;
+      }
       default:
         throw new Error(`Tool not found: ${name}`);
     }
@@ -513,14 +1280,177 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 
 async function runServer() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("Gravel Finance MCP Server running on stdio");
+  const portEnv = process.env.MCP_PORT || process.env.PORT;
+  const sseMode = process.argv.includes("--sse") || !!portEnv;
+
+  if (sseMode) {
+    const port = Number(portEnv || 3001);
+    const bindHost = process.env.MCP_BIND_HOST || "0.0.0.0";
+    const allowedHosts = parseCsvEnv(process.env.MCP_ALLOWED_HOSTS);
+    const { SSEServerTransport } = await import("@modelcontextprotocol/sdk/server/sse.js");
+    const { createMcpExpressApp } = await import("@modelcontextprotocol/sdk/server/express.js");
+
+    const app = createMcpExpressApp({
+      host: bindHost,
+      ...(allowedHosts.length > 0 ? { allowedHosts } : {}),
+    });
+    const transports = new Map<string, InstanceType<typeof SSEServerTransport>>();
+    type StatusResponse = {
+      headersSent: boolean;
+      status(code: number): {
+        send(body: string): void;
+      };
+    };
+    type TransportRequest = Parameters<InstanceType<typeof SSEServerTransport>["handlePostMessage"]>[0];
+    type TransportResponse = Parameters<InstanceType<typeof SSEServerTransport>["handlePostMessage"]>[1];
+
+    app.get("/sse", async (_req: unknown, res: unknown) => {
+      const response = res as ConstructorParameters<typeof SSEServerTransport>[1] & StatusResponse;
+      console.error(`[mcp] SSE connection request received`);
+      try {
+        const transport = new SSEServerTransport("/messages", response);
+        const sessionId = transport.sessionId;
+        transports.set(sessionId, transport);
+
+        transport.onclose = () => {
+          console.error(`[mcp] SSE transport closed for session ${sessionId}`);
+          transports.delete(sessionId);
+        };
+
+        await server.connect(transport);
+        console.error(`[mcp] Established SSE stream with session ID: ${sessionId}`);
+      } catch (error) {
+        console.error("[mcp] Error establishing SSE stream:", error);
+        if (!response.headersSent) {
+          response.status(500).send("Error establishing SSE stream");
+        }
+      }
+    });
+
+    app.post("/messages", async (req: unknown, res: unknown) => {
+      const request = req as TransportRequest & {
+        query: { sessionId?: string | string[] };
+        body?: unknown;
+      };
+      const response = res as TransportResponse & StatusResponse;
+      const sessionIdValue = request.query.sessionId;
+      const sessionId = Array.isArray(sessionIdValue) ? sessionIdValue[0] : sessionIdValue;
+      if (!sessionId) {
+        response.status(400).send("Missing sessionId parameter");
+        return;
+      }
+      const transport = transports.get(sessionId);
+      if (!transport) {
+        response.status(404).send("Session not found");
+        return;
+      }
+      try {
+        await transport.handlePostMessage(request, response, request.body);
+      } catch (error) {
+        console.error("[mcp] Error handling message:", error);
+        if (!response.headersSent) {
+          response.status(500).send("Error handling message");
+        }
+      }
+    });
+
+    app.listen(port, bindHost, () => {
+      console.error(`Gravel Finance MCP Server running over SSE HTTP on port ${port}`);
+      console.error(`- Bind Host: ${bindHost}`);
+      if (allowedHosts.length > 0) {
+        console.error(`- Allowed Hosts: ${allowedHosts.join(", ")}`);
+      } else {
+        console.error("- Allowed Hosts: <SDK validation disabled for non-loopback bind>");
+      }
+      console.error(`- SSE Connection Endpoint: http://${bindHost}:${port}/sse`);
+      console.error(`- Message Post Endpoint: http://${bindHost}:${port}/messages`);
+    });
+  } else {
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.error("Gravel Finance MCP Server running on stdio");
+  }
 }
 
 async function getAccountAllocationMetrics(searchParams: URLSearchParams) {
   const { getAccountAllocationMetrics: getMetrics } = await import("../lib/domain/analytics/overview.js");
   return getMetrics(searchParams);
+}
+
+function parseMetadata(value?: string | null) {
+  if (!value) return {};
+  try {
+    return JSON.parse(value) as {
+      overrides?: Record<string, unknown>;
+      [key: string]: unknown;
+    };
+  } catch {
+    return {};
+  }
+}
+
+function parseCsvEnv(value?: string) {
+  return (value ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function normalizedMerchantName(name: string) {
+  return normalizeText(name)
+    ?.replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+async function findOrCreateSalaryCategory() {
+  const existing = await prisma.domainCategory.findFirst({
+    where: {
+      OR: [
+        { slug: "seed-salary" },
+        { name: { contains: "salario" } },
+        { name: { contains: "salário" } },
+      ],
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (existing) return existing;
+
+  return prisma.domainCategory.create({
+    data: {
+      slug: "seed-salary",
+      name: "Salário",
+      kind: DomainCategoryKind.INCOME,
+      color: "#10b981",
+      sourceProvider: SourceProvider.MANUAL,
+    },
+  });
+}
+
+async function findOrCreateInvestmentCategory() {
+  const existing = await prisma.domainCategory.findFirst({
+    where: {
+      OR: [
+        { slug: "seed-investments" },
+        { name: { contains: "investimento" } },
+      ],
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (existing) return existing;
+
+  return prisma.domainCategory.create({
+    data: {
+      slug: "seed-investments",
+      name: "Investimentos",
+      kind: DomainCategoryKind.EXPENSE,
+      color: "#f59e0b",
+      sourceProvider: SourceProvider.MANUAL,
+    },
+  });
 }
 
 runServer().catch((error) => {

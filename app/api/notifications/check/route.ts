@@ -13,11 +13,11 @@ export async function GET() {
       count: anomalies.length,
       anomalies: serializeForJson(anomalies),
     })
-  } catch (error: any) {
+  } catch (error) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message || "Erro interno ao checar anomalias de orcamento",
+        error: error instanceof Error ? error.message : "Erro interno ao checar anomalias de orcamento",
       },
       { status: 500 }
     )

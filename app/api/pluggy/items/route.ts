@@ -11,6 +11,17 @@ import {
 
 export const dynamic = "force-dynamic"
 
+type PluggyAccountLike = { name?: string | null }
+
+function extractAccountNames(payload: unknown) {
+  if (!payload || typeof payload !== "object") return []
+  const results = (payload as { results?: unknown[] }).results
+  if (!Array.isArray(results)) return []
+  return results
+    .map((account) => ((account as PluggyAccountLike).name ?? "").trim())
+    .filter(Boolean)
+}
+
 export async function GET() {
   const items = await listStoredPluggyItems()
 
@@ -26,7 +37,7 @@ export async function GET() {
 
         if (!connectorName || ["Pluggy", "MeuPluggy", "PLUGGY"].includes(connectorName)) {
            const accountsPayload = await fetchAccounts({ itemId: item.pluggyItemId })
-           const derived = deriveInstitutionFromNames((accountsPayload?.results || []).map((a: any) => a.name))
+           const derived = deriveInstitutionFromNames(extractAccountNames(accountsPayload))
            if (derived) {
              connectorName = derived
              // Look up real ID and logo in our dictionary
@@ -89,7 +100,7 @@ export async function POST(request: Request) {
   if (!finalConnectorName || ["Pluggy", "MeuPluggy", "PLUGGY"].includes(finalConnectorName)) {
     try {
       const accountsPayload = await fetchAccounts({ itemId: body.itemId })
-      const accountNames = (accountsPayload?.results || []).map((a: any) => a.name)
+      const accountNames = extractAccountNames(accountsPayload)
       const derived = deriveInstitutionFromNames(accountNames)
       if (derived) {
         finalConnectorName = derived

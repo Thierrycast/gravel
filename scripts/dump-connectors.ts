@@ -1,11 +1,20 @@
 import { fetchConnectors } from "../lib/integrations/pluggy";
 import { promises as fs } from "fs";
 
+type ConnectorEntry = {
+  id: number
+  name: string
+  imageUrl?: string | null
+}
+
 async function main() {
   try {
     console.log("Buscando dicionário de conectores...");
     const data = await fetchConnectors({ sandbox: false });
-    const mapping = (data.results || []).map((c: any) => ({
+    const results = Array.isArray((data as { results?: unknown[] }).results)
+      ? ((data as { results?: ConnectorEntry[] }).results ?? [])
+      : []
+    const mapping = results.map((c) => ({
       id: c.id,
       name: c.name,
       imageUrl: c.imageUrl

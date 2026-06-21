@@ -1,7 +1,6 @@
 import * as fs from "fs"
 import * as path from "path"
 import { prisma } from "@/lib/prisma"
-import { getOverviewMetrics } from "@/lib/domain/analytics"
 import { getProjectionPayload } from "@/lib/domain/derived"
 
 const LOG_FILE_PATH = path.join(process.cwd(), ".agents", "logs", "notifications.log")
@@ -22,7 +21,7 @@ export async function triggerNotificationDelivery(
   title: string,
   message: string,
   severity: "info" | "warning" | "critical",
-  metadata?: any
+  metadata?: unknown
 ) {
   ensureLogDir()
   const timestamp = new Date().toISOString()

@@ -1,7 +1,7 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   AlertTriangle,
   CheckCircle2,
@@ -35,11 +35,6 @@ type PluggySuccessPayload = {
 type PluggyErrorPayload = {
   message?: string
   code?: string
-}
-
-type PluggyConnectHandle = {
-  show: () => void
-  hide: () => void
 }
 
 type StoredItem = {
@@ -152,8 +147,6 @@ function connectorInitials(name: string | null) {
 }
 
 export function PluggyConnectClient() {
-  const widgetRef = useRef<PluggyConnectHandle | null>(null)
-
   const [token, setToken] = useState<string | null>(null)
   const [tokenState, setTokenState] = useState<LoadState>("loading")
   const [tokenError, setTokenError] = useState<string | null>(null)
@@ -244,12 +237,16 @@ export function PluggyConnectClient() {
     return counts
   }, [items])
 
-  async function sendToInterceptor(data: any, type: string) {
+  async function sendToInterceptor(data: unknown, type: string) {
     try {
+      const payload =
+        data && typeof data === "object"
+          ? data
+          : { value: data }
       await fetch("/api/dev/intercept", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, type, interceptedAt: new Date().toISOString() }),
+        body: JSON.stringify({ ...payload, type, interceptedAt: new Date().toISOString() }),
       });
     } catch (e) {
       console.warn("[PluggyConnect] Interceptor delivery failed:", e);
