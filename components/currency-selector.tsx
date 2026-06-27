@@ -12,6 +12,7 @@ export function CurrencySelector() {
         <button
           key={c}
           onClick={() => setCurrency(c)}
+          aria-label={`Selecionar moeda ${c}`}
           className={cn(
             "flex h-8 w-10 items-center justify-center rounded-[4px] transition-all duration-200",
             currency === c
