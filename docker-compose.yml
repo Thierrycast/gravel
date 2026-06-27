@@ -8,10 +8,8 @@ services:
     container_name: gravel
     init: true
     restart: unless-stopped
-    env_file:
-      - .env
     ports:
-      - "${APP_PORT:-8421}:3000"
+      - "8421:3000"
     volumes:
       - gravel_data:/app/data
     environment:
@@ -19,14 +17,60 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - HOSTNAME=0.0.0.0
-      - TZ=${TZ:-America/Sao_Paulo}
+      - TZ=America/Sao_Paulo
+      - PLUGGY_CLIENT_ID=30c57a86-9336-46fa-a3fa-6149454c772d
+      - PLUGGY_CLIENT_SECRET=b6ea0f55-a1b2-4c74-95bc-fb77fd982038
+      - PLUGGY_API_BASE=https://api.pluggy.ai
+      - PLUGGY_API_KEY_HEADER=X-API-KEY
+      - PLUGGY_AUTH_PATH=/auth
+      - PLUGGY_CONNECT_TOKEN_PATH=/connect_token
+      - PLUGGY_API_KEY_TTL_SECONDS=7200
+      - BINANCE_API_KEY=oNC59JFl9z7XadGTB09mdqIyM5iZUmYlB0mnJKrZgVVpZTh1MoQ8YrCA6cdvpkEE
+      - BINANCE_API_SECRET=T7QZvX1hU4EXUuPigjT5QBhQcjhggBpNBybZpuXzUEm8so1nYUFE8xatkSv0utYG
+      - BINANCE_API_BASE=https://api.binance.com
+      - BINANCE_RECV_WINDOW=5000
+      - INTERNAL_API_KEY=gravel_int_9f3kL2pQ7mX4vN8tR1cW6z
+      - LOGO_DEV_PUBLISHABLE_KEY=pk_eQHWaectR-WtzKLzWzMVBQ
+      - LOGO_DEV_SECRET_KEY=sk_KWvruUI3QcyoySiBagCyMg
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health/ready"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 20s
+    x-casaos:
+      ports:
+        - container: "3000"
+          description:
+            en_us: Web UI Port
+      volumes:
+        - container: /app/data
+          description:
+            en_us: Application Data
 
 volumes:
   gravel_data:
     driver: local
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+    - arm
+  main: gravel
+  author: Thierrycast
+  category: Finance
+  description:
+    en_us: Personal financial dashboard with multi-currency support and privacy mode. Tracking every digital 'cascalho' with precision.
+    pt_br: Dashboard financeiro pessoal com suporte a múltiplas moedas e modo privado.
+  developer: Thierrycast
+  icon: https://raw.githubusercontent.com/Thierrycast/gravel/main/public/icon.png
+  tagline:
+    en_us: Financial tracking with precision.
+    pt_br: Rastreamento financeiro com precisão.
+  thumbnail: https://raw.githubusercontent.com/Thierrycast/gravel/main/public/icon.png
+  title:
+    en_us: Gravel
+    pt_br: Gravel
+  index: /
+  port_map: "8421"
