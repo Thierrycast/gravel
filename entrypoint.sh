@@ -25,5 +25,9 @@ chown -R nextjs:nodejs /app/data 2>/dev/null || true
 echo "[gravel] Applying database schema..."
 su-exec nextjs prisma db push --skip-generate
 
+# Start MCP Server in the background via SSE
+echo "[gravel] Starting MCP Server (SSE) on port 3001..."
+MCP_BIND_HOST=0.0.0.0 PORT=3001 su-exec nextjs node mcp.js --sse &
+
 echo "[gravel] Starting Gravel Finance on :${PORT:-3000}..."
 exec su-exec nextjs node server.js
