@@ -10,6 +10,7 @@ services:
     restart: unless-stopped
     ports:
       - "8421:3000"
+      - "8422:3001"
     volumes:
       - gravel_data:/app/data
     environment:

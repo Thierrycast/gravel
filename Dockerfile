@@ -23,11 +23,18 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Install esbuild temporarily to bundle MCP and CLI for standalone runtime
+RUN npm install -g esbuild
+
 # Final production build
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATABASE_URL=file:/tmp/gravel-build.db
 ENV NEXT_BUILD_CPUS=1
 RUN corepack enable pnpm && pnpm build
+
+# Bundle MCP and CLI to pure JS into the standalone directory
+RUN esbuild mcp/server.ts --bundle --platform=node --target=node20 --external:@prisma/client --external:next --external:bcrypt --outfile=.next/standalone/mcp.js && \
+    esbuild cli/index.ts --bundle --platform=node --target=node20 --external:@prisma/client --external:next --external:bcrypt --outfile=.next/standalone/cli.js
 
 # ---------------------------------------------------------------------------
 # Stage 3 — Production Runtime
