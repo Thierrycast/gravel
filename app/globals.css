@@ -359,15 +359,10 @@
    In PWA mode on notched iPhones: returns ~34px for the home indicator zone.
    The bottom: 0 override ensures fixed positioning lands on the true screen edge. */
 @media (display-mode: standalone) {
-  .bottom-nav-pwa {
-    bottom: 0 !important;
-    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
-  }
-
-  /* Give page content extra breathing room from nav in PWA.
-     env(safe-area-inset-bottom) covers the home indicator area. */
+  /* Nav inferior fica em bottom: 0 sem padding de safe-area (decisão do
+     usuário) — só garante folga do conteúdo em relação à barra. */
   .page-container {
-    padding-bottom: max(5.25rem, calc(4rem + env(safe-area-inset-bottom, 0px) + 1.25rem)) !important;
+    padding-bottom: 5.25rem !important;
   }
 
   /* Widget Pluggy Connect (zoid injeta um iframe fullscreen): empurra o

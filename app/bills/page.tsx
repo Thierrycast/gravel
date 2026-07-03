@@ -156,7 +156,9 @@ function CardSection({
   payingBillId: string | null;
 }) {
   const [showPast, setShowPast] = useState(false);
-  const upcomingTotal = card.upcoming.reduce((sum, s) => sum + s.amount, 0);
+  // Futuras zeradas são ruído (parcelamentos ainda sem lançamentos).
+  const upcomingWithValue = card.upcoming.filter((s) => s.amount > 0);
+  const upcomingTotal = upcomingWithValue.reduce((sum, s) => sum + s.amount, 0);
   const overdue = card.past.filter((s) => s.status === "OVERDUE");
 
   return (
@@ -213,27 +215,23 @@ function CardSection({
         </div>
       ) : (
         <>
-          {/* Current statement */}
-          <div className="border-t p-4 sm:p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                  Fatura atual
-                </p>
-                <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight">
-                  {formatAmount(card.current?.amount ?? 0)}
-                </p>
-                {card.current && (
+          {/* Current statement — compacto quando não há valor em aberto */}
+          {card.current && card.current.amount > 0 ? (
+            <div className="border-t p-4 sm:p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                    Fatura atual
+                  </p>
+                  <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight">
+                    {formatAmount(card.current.amount)}
+                  </p>
                   <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Calendar className="size-3" />
-                    {formatDate(card.current.periodStart)} –{" "}
-                    {formatDate(card.current.periodEnd)} · vence{" "}
-                    {formatDate(card.current.dueDate)} (
+                    vence {formatDate(card.current.dueDate)} (
                     {daysUntilLabel(card.current.dueDate)})
                   </p>
-                )}
-              </div>
-              {card.current && (
+                </div>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={card.current.status} />
                   <Button asChild variant="outline" size="sm" className="h-7 text-xs">
@@ -242,9 +240,15 @@ function CardSection({
                     </Link>
                   </Button>
                 </div>
-              )}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="border-t px-4 py-3 sm:px-5">
+              <p className="text-xs text-muted-foreground">
+                Sem fatura em aberto no ciclo atual.
+              </p>
+            </div>
+          )}
 
           {/* Overdue alert */}
           {overdue.length > 0 && (
@@ -258,20 +262,20 @@ function CardSection({
             </div>
           )}
 
-          {/* Upcoming statements */}
-          {card.upcoming.length > 0 && (
+          {/* Upcoming statements — só as com valor */}
+          {upcomingWithValue.length > 0 && (
             <div className="border-t">
               <div className="flex items-center justify-between px-4 pt-4 sm:px-5">
                 <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
                   Próximas faturas
                 </p>
                 <p className="text-xs tabular-nums text-muted-foreground">
-                  {formatAmount(upcomingTotal)} em {card.upcoming.length}{" "}
-                  {card.upcoming.length === 1 ? "fatura" : "faturas"}
+                  {formatAmount(upcomingTotal)} em {upcomingWithValue.length}{" "}
+                  {upcomingWithValue.length === 1 ? "fatura" : "faturas"}
                 </p>
               </div>
               <div className="divide-y">
-                {card.upcoming.slice(0, 6).map((statement) => (
+                {upcomingWithValue.slice(0, 3).map((statement) => (
                   <StatementRow
                     key={statement.id}
                     statement={statement}
@@ -279,9 +283,9 @@ function CardSection({
                   />
                 ))}
               </div>
-              {card.upcoming.length > 6 && (
+              {upcomingWithValue.length > 3 && (
                 <p className="px-4 pb-3 text-xs text-muted-foreground sm:px-5">
-                  + {card.upcoming.length - 6} faturas futuras (parcelamentos
+                  + {upcomingWithValue.length - 3} faturas futuras (parcelamentos
                   longos)
                 </p>
               )}
@@ -402,48 +406,35 @@ export default function BillsPage() {
         </div>
       ) : (
         cards.length > 0 && (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-xl border bg-card p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                Faturas atuais
-              </p>
-              <p className="mt-1 text-lg font-bold tabular-nums">
-                {format(totals.current)}
-              </p>
-            </div>
-            <div className="rounded-xl border bg-card p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                Próximas faturas
-              </p>
-              <p className="mt-1 text-lg font-bold tabular-nums">
-                {format(totals.upcoming)}
-              </p>
-            </div>
-            <div className="rounded-xl border bg-card p-4">
-              <p
-                className={cn(
-                  "text-xs font-semibold uppercase tracking-[0.15em]",
-                  totals.overdue > 0 ? "text-red-400" : "text-muted-foreground",
-                )}
-              >
-                Vencidas
-              </p>
-              <p
-                className={cn(
-                  "mt-1 text-lg font-bold tabular-nums",
-                  totals.overdue > 0 && "text-red-400",
-                )}
-              >
-                {format(totals.overdue)}
-              </p>
-            </div>
-            <div className="rounded-xl border bg-card p-4">
+          // Resumo compacto num card só — a versão anterior (4 cards) era
+          // pesada demais no mobile.
+          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-xl border bg-card p-4">
+            <div>
               <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
                 Total em aberto
               </p>
-              <p className="mt-1 text-lg font-bold tabular-nums text-pink-400">
+              <p className="mt-0.5 text-2xl font-bold tabular-nums text-pink-400">
                 {format(totals.open)}
               </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
+              <span>
+                Atuais:{" "}
+                <span className="font-semibold tabular-nums text-foreground">
+                  {format(totals.current)}
+                </span>
+              </span>
+              <span>
+                Próximas:{" "}
+                <span className="font-semibold tabular-nums text-foreground">
+                  {format(totals.upcoming)}
+                </span>
+              </span>
+              {totals.overdue > 0 && (
+                <span className="font-semibold text-red-400">
+                  Vencidas: {format(totals.overdue)}
+                </span>
+              )}
             </div>
           </div>
         )

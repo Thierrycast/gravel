@@ -162,7 +162,7 @@ export async function refreshRecurringDerived(options?: {
   const minOccurrences = options?.minOccurrences ?? 3;
   const lookbackFrom = new Date(Date.now() - lookbackDays * MS_IN_DAY);
 
-  const [transactions, categories, existingRules, userSettings] =
+  const [transactions, categories, existingRules, userSettings, accounts] =
     await Promise.all([
       prisma.domainTransaction.findMany({
         where: {
@@ -174,8 +174,16 @@ export async function refreshRecurringDerived(options?: {
       prisma.domainCategory.findMany(),
       prisma.domainRecurringRule.findMany(),
       getUserSettings(),
+      prisma.domainAccount.findMany({ select: { id: true, kind: true } }),
     ]);
   const salaryPatterns = userSettings.salaryPatterns ?? [];
+  // Entradas em cartão de crédito são pagamento de fatura/estorno, nunca
+  // renda recorrente ("Pagamento Recebido" estava virando receita).
+  const cardAccountIds = new Set(
+    accounts
+      .filter((account) => account.kind?.toUpperCase().includes("CARD"))
+      .map((account) => account.id),
+  );
 
   const categoryMap = new Map<string, (typeof categories)[number]>(
     categories.map((category) => [category.id, category]),
@@ -184,6 +192,12 @@ export async function refreshRecurringDerived(options?: {
 
   for (const transaction of transactions) {
     if (transaction.installmentGroupId || transaction.installmentTotal)
+      continue;
+    if (
+      transaction.direction === DomainTransactionDirection.INFLOW &&
+      transaction.domainAccountId &&
+      cardAccountIds.has(transaction.domainAccountId)
+    )
       continue;
 
     const category = transaction.domainCategoryId

@@ -34,11 +34,9 @@ export function BottomNav() {
     <nav
       aria-label="Navegação principal"
       // view-transition-name: nav persists across page transitions — no flicker.
-      // padding-bottom via inline style is the most reliable way to handle
-      // env(safe-area-inset-bottom) cross-browser, as Tailwind arbitrary values
-      // for env() can sometimes not compile correctly.
-      className="fixed bottom-0 left-0 right-0 z-50 select-none md:hidden [view-transition-name:bottom-nav] border-t border-border/60 bg-background/80 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-background/65 bottom-nav-pwa"
-      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+      // Sem padding de safe-area de propósito (decisão do usuário): a barra
+      // fica rente ao fundo da tela (bottom: 0), sem faixa extra embaixo.
+      className="fixed bottom-0 left-0 right-0 z-50 select-none md:hidden [view-transition-name:bottom-nav] border-t border-border/60 bg-background/80 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-background/65"
     >
       <div className="flex h-16 items-stretch">
         {tabs.map(({ href, icon: Icon, label }) => {
