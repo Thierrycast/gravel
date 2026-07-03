@@ -20,9 +20,16 @@ export type InsightAction = {
   hrefLabel: string;
 };
 
+export type BehaviorProfile = {
+  signals: string[];
+  topCategories: Array<{ category: string; spending: number }>;
+  updatedAt?: string | null;
+};
+
 export type InsightsResponse = {
   nudges?: Nudge[];
   actions?: InsightAction[];
+  behavior?: BehaviorProfile | null;
   forensics?: {
     benford?: {
       actual: Array<number | null>;

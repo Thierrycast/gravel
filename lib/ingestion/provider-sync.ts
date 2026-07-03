@@ -29,6 +29,7 @@ export async function runPluggySync(input: {
   itemId?: string | null
   resources?: PluggySyncResource[]
   pageSize?: number
+  refresh?: boolean
 }) {
   const lockKey = `pluggy:${input.resource}:${input.itemId ?? "all"}`
   const owner = await acquireSyncLock(lockKey)
@@ -44,6 +45,7 @@ export async function runPluggySync(input: {
       itemId: input.itemId,
       resources: input.resources,
       pageSize: input.pageSize,
+      refresh: input.refresh,
     })
 
     await projectPluggyReadModels()
@@ -171,6 +173,7 @@ export async function runFullOperationalSync(input?: {
   pluggy?: {
     itemId?: string | null
     pageSize?: number
+    refresh?: boolean
   }
   binance?: {
     symbols?: string[]
@@ -196,6 +199,7 @@ export async function runFullOperationalSync(input?: {
         resource: "full",
         itemId: input?.pluggy?.itemId,
         pageSize: input?.pluggy?.pageSize,
+        refresh: input?.pluggy?.refresh,
       }),
       runBinanceSync({
         scope: "admin/full/binance",

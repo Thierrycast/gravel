@@ -100,6 +100,26 @@ mesmo quando a categoria indica transferência entre contas próprias. Alterar
 padrões de salário (via settings ou "marcar como salário" numa transação)
 força a re-detecção de recorrências.
 
+## Sincronização e enriquecimento Pluggy
+
+- `POST /api/pluggy/items/{itemId}/refresh` — dispara `PATCH /items/{id}` e
+  acompanha até estado terminal. Body `{ wait: false }` retorna na hora
+  (fire-and-forget); `wait: true` (default) devolve `{ outcome, executionStatus,
+  status, message, reprojected }` com outcome ∈ SUCCESS | PARTIAL_SUCCESS | ERROR
+  | NEEDS_ACTION | MFA_REQUIRED | IN_PROGRESS | RATE_LIMITED.
+- `GET /api/pluggy/items` — inclui `executionStatus`, `syncError`, `lastSyncedAt`,
+  `lastUpdatedAt`, `consentExpiresAt`, `nextAutoSyncAt` por item.
+- `POST /api/domain/accounts/{accountId}/balance` — saldo em tempo real
+  (`GET /accounts/{id}/balance`). Sempre 200; em falha, `ok:false` + `message` +
+  `effectiveBalance` (saldo salvo). `source` = realtime | cached.
+- `POST /api/admin/enrichment/pluggy/items` — roda recurring-payments +
+  behavior-analysis (todos os itens ou `{ itemId }`).
+- `GET /api/domain/recurring/detected` — recorrências detectadas pela Pluggy,
+  separadas por direção com regularityScore e ocorrências.
+  `PATCH` com `{ id, userStatus }` confirma/oculta/reabre.
+- `POST /api/sync/trigger` — aceita `{ refresh: true|false }` (default true) para
+  disparar PATCH do item antes de reler.
+
 ## Inbox
 
 `GET /api/inbox`

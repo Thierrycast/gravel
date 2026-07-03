@@ -80,6 +80,12 @@ model DomainAccount {
   // current statement precisely; when null the UI shows a setup warning.
   billingClosingDay Int?
   billingDueDay     Int?
+  // Saldo em tempo real (GET /accounts/{id}/balance) — buscado direto no
+  // conector sem sync completo. Guardamos o horário do conector para a UI
+  // indicar a frescura e fazer fallback ao `balance` do último sync.
+  realtimeBalance       Decimal?
+  realtimeBalanceAt     DateTime?
+  realtimeBalanceStatus String?
   metadataJson     String?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
@@ -119,6 +125,10 @@ model DomainTransaction {
   domainMerchantId      String?
   domainCategoryId      String?
   providerCategoryId    String?
+  // Origem da categoria efetiva: MANUAL (editada pelo usuário), RULE (regra
+  // interna), PLUGGY (enriquecimento/provedor) ou INFERENCE (heurística).
+  // Usada para não sobrescrever edições manuais no re-enriquecimento.
+  categorySource        String?
   installmentGroupId    String?
   installmentNumber     Int?
   installmentTotal      Int?
@@ -185,6 +195,46 @@ model TransactionEnrichment {
   updatedAt           DateTime @updatedAt
 
   @@index([status, lastEnrichedAt])
+}
+
+// Recorrências identificadas pela Pluggy (POST /recurring-payments por item).
+// Valor negativo = despesa, positivo = receita; regularityScore 0-1.
+model PluggyRecurringPayment {
+  id              String   @id @default(cuid())
+  itemExternalId  String
+  externalId      String?  @unique
+  description     String
+  averageAmount   Decimal
+  currencyCode    String?
+  occurrences     Int      @default(0)
+  regularityScore Decimal?
+  categoryName    String?
+  direction       String   // INCOME | EXPENSE (derivado do sinal do valor)
+  firstDate       DateTime?
+  lastDate        DateTime?
+  destinationName String?
+  // IDs de transações reais que compõem esta recorrência (JSON de strings).
+  transactionIdsJson String?
+  payloadJson     String?
+  // Confirmação/ocultação manual pelo usuário.
+  userStatus      String   @default("SUGGESTED") // SUGGESTED | CONFIRMED | HIDDEN
+  fetchedAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([itemExternalId])
+  @@index([direction, userStatus])
+}
+
+// Perfil comportamental por item (POST /behavior-analysis). Snapshot mais
+// recente; guardamos o payload inteiro para não recalcular na UI.
+model PluggyBehaviorAnalysis {
+  id             String   @id @default(cuid())
+  itemExternalId String   @unique
+  signalsJson    String?  // hasCar, homeowner, frequentTraveler, ...
+  categoriesJson String?  // transportation, travel, dining, ...
+  payloadJson    String?
+  fetchedAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model TransactionInstallmentGroup {
@@ -587,6 +637,21 @@ model PluggyItem {
   connectorName String?
   imageUrl      String?
   status        String?
+  // Estado de sincronização do item na instituição (Pluggy).
+  // executionStatus: SUCCESS | PARTIAL_SUCCESS | ERROR | null (em andamento).
+  executionStatus    String?
+  // statusDetail: detalhe por produto quando parcial (JSON da Pluggy).
+  statusDetailJson   String?
+  // Motivo humano quando precisa de ação (MFA, consentimento expirado…).
+  syncError          String?
+  // Campos espelhados do item Pluggy para UX (última atualização na
+  // instituição, expiração de consentimento, próximo auto-sync).
+  lastUpdatedAt      DateTime?
+  consentExpiresAt   DateTime?
+  nextAutoSyncAt     DateTime?
+  // Momento em que disparamos o PATCH e em que o sync concluiu.
+  lastSyncTriggeredAt DateTime?
+  lastSyncedAt        DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }

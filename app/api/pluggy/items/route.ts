@@ -62,6 +62,12 @@ export async function GET() {
           connectorId: connectorId ?? item.connectorId,
           connectorName: connectorName ?? item.connectorName,
           status: liveItem?.status ?? item.status,
+          // executionStatus vivo (SUCCESS/PARTIAL_SUCCESS/ERROR/null=em curso)
+          // e horário da última atualização do item na instituição.
+          executionStatus: liveItem?.executionStatus ?? item.executionStatus,
+          lastUpdatedAt: liveItem?.lastUpdatedAt ?? liveItem?.updatedAt ?? null,
+          syncError: item.syncError,
+          lastSyncedAt: item.lastSyncedAt,
           imageUrl: imageUrl ?? item.imageUrl,
         }
       } catch (err) {

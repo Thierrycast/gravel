@@ -8,7 +8,7 @@ import {
   YAxis,
   CartesianGrid,
 } from "recharts"
-import { Pencil, Plus, Trash2 } from "lucide-react"
+import { Pencil, Plus, Trash2, Check, EyeOff, Wand2 } from "lucide-react"
 import { useApi } from "@/hooks/use-api"
 import { formatDate, daysUntilLabel } from "@/lib/format"
 import { useCurrency } from "@/lib/currency-context"
@@ -39,6 +39,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart"
 import { PageError } from "@/components/page-error"
+import { EmptyState } from "@/components/ui/empty-state"
 
 interface RecurringIncomeRule {
   id: string
@@ -70,6 +71,33 @@ interface CategoryOption {
   id: string
   name: string
   kind: string
+}
+
+interface DetectedRecurringRule {
+  id: string
+  description: string
+  averageAmount: number
+  direction: "INCOME" | "EXPENSE"
+  occurrences: number
+  regularityScore: number | null
+  categoryName?: string | null
+  firstDate: string
+  lastDate: string
+  userStatus: "SUGGESTED" | "CONFIRMED" | "HIDDEN"
+  transactionIds: string[]
+}
+
+interface DetectedRecurringData {
+  summary: {
+    incomeCount: number
+    expenseCount: number
+    monthlyIncome: number
+    monthlyExpense: number
+  }
+  results: {
+    income: DetectedRecurringRule[]
+    expense: DetectedRecurringRule[]
+  }
 }
 
 const FREQUENCY_LABEL: Record<string, string> = {
@@ -136,12 +164,17 @@ export default function RecurringIncomePage() {
     "/api/domain/categories",
     { pageSize: "200" },
   )
+  const { data: detectedData, refetch: refetchDetected } =
+    useApi<DetectedRecurringData>("/api/domain/recurring/detected")
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingRule, setEditingRule] = useState<RecurringIncomeRule | null>(null)
   const [form, setForm] = useState<RuleForm>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [actioningDetectedId, setActioningDetectedId] = useState<string | null>(null)
+
+  const detectedIncome = detectedData?.results?.income ?? []
 
   const incomeCategories = useMemo(
     () =>
@@ -272,6 +305,25 @@ export default function RecurringIncomePage() {
     }
   }
 
+  async function handleActionDetected(ruleId: string, userStatus: "CONFIRMED" | "HIDDEN") {
+    setActioningDetectedId(ruleId)
+    try {
+      const res = await fetch("/api/domain/recurring/detected", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: ruleId, userStatus }),
+      })
+      if (!res.ok) throw new Error("Erro ao atualizar status")
+      toast.success(userStatus === "CONFIRMED" ? "Recorrência confirmada" : "Recorrência ocultada")
+      refetchDetected()
+      if (userStatus === "CONFIRMED") refetch()
+    } catch {
+      toast.error("Falha ao atualizar recorrência sugerida")
+    } finally {
+      setActioningDetectedId(null)
+    }
+  }
+
   if (error) {
     return <PageError message="Erro ao carregar receitas recorrentes" refetch={refetch} />
   }
@@ -357,6 +409,103 @@ export default function RecurringIncomePage() {
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Detected Income */}
+      <div>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+            Detectadas pela Pluggy
+          </h3>
+        </div>
+        
+        {detectedIncome.length === 0 ? (
+          <EmptyState
+            icon={Wand2}
+            title="Nenhuma recorrência detectada"
+            description="Nenhuma recorrência detectada pela Pluggy ainda. Sincronize suas contas para gerar."
+          />
+        ) : (
+          <div className="space-y-2">
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-600 dark:text-amber-400 mb-3">
+              Estas são sugestões automáticas baseadas no seu histórico e não substituem suas regras manuais.
+            </div>
+            {detectedIncome.map((rule) => {
+              const score = rule.regularityScore ?? 0;
+              let confidenceLabel = "Baixa";
+              let confidenceColor = "bg-rose-500/10 text-rose-500 hover:bg-rose-500/20";
+              if (score >= 0.9) {
+                confidenceLabel = "Alta";
+                confidenceColor = "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20";
+              } else if (score >= 0.7) {
+                confidenceLabel = "Média";
+                confidenceColor = "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20";
+              }
+
+              return (
+                <div
+                  key={rule.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border bg-card p-4 hover:bg-muted/30 transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="size-8 rounded-full bg-indigo-500/10 flex items-center justify-center text-lg shrink-0 text-indigo-500">
+                      <Wand2 className="size-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium truncate">{rule.description}</p>
+                        <Badge variant="secondary" className={confidenceColor}>
+                          Confiança {confidenceLabel}
+                        </Badge>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                        <span className="text-xs text-muted-foreground">
+                          {rule.occurrences} ocorrências
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          · Período: {formatDate(rule.firstDate)} a {formatDate(rule.lastDate)}
+                        </span>
+                        {rule.categoryName && (
+                          <span className="hidden text-xs text-muted-foreground sm:inline">
+                            · {rule.categoryName}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-right mr-3">
+                      <p className="text-sm font-bold tabular-nums text-emerald-400">
+                        {format(Math.abs(rule.averageAmount))}
+                      </p>
+                      <p className="text-[10px] uppercase text-muted-foreground">Média</p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1"
+                      disabled={actioningDetectedId === rule.id}
+                      onClick={() => handleActionDetected(rule.id, "CONFIRMED")}
+                    >
+                      <Check className="size-3.5" />
+                      <span className="hidden sm:inline">Confirmar</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 gap-1 text-muted-foreground hover:text-destructive"
+                      disabled={actioningDetectedId === rule.id}
+                      onClick={() => handleActionDetected(rule.id, "HIDDEN")}
+                    >
+                      <EyeOff className="size-3.5" />
+                      <span className="hidden sm:inline">Ocultar</span>
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Income list */}

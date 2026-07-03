@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { PageHeader } from "@/components/page-header"
 import { cn } from "@/lib/utils"
-import { formatDateTime } from "@/lib/format"
+// formatDateTime removido: horário relativo é calculado inline
 import { LogoImage } from "@/components/logo-image"
 
 type PluggySuccessPayload = {
@@ -45,6 +45,25 @@ type StoredItem = {
   imageUrl?: string | null
   status: string | null
   updatedAt?: string | null
+  executionStatus?: "SUCCESS" | "PARTIAL_SUCCESS" | "ERROR" | "NEEDS_ACTION" | "MFA_REQUIRED" | "IN_PROGRESS" | "RATE_LIMITED" | null
+  syncError?: string | null
+  lastSyncedAt?: string | null
+  lastUpdatedAt?: string | null
+  consentExpiresAt?: string | null
+  nextAutoSyncAt?: string | null
+}
+
+function getRelativeTime(dateString: string | null): string {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / 60000);
+  if (diffInMinutes < 1) return "agora";
+  if (diffInMinutes < 60) return `há ${diffInMinutes} min`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `há ${diffInHours} h`;
+  const diffInDays = Math.floor(diffInHours / 24);
+  return `há ${diffInDays} d`;
 }
 
 type LoadState = "loading" | "ready" | "error"
@@ -62,65 +81,94 @@ interface StatusMeta {
   needsAction: boolean
 }
 
-function describeStatus(status: string | null): StatusMeta {
-  switch (status) {
-    case "UPDATED":
-      return {
-        label: "Atualizado",
-        tone: "positive",
-        description: "Os dados desta conexão estão sincronizados.",
-        Icon: CheckCircle2,
-        needsAction: false,
-      }
-    case "UPDATING":
-      return {
-        label: "Atualizando",
-        tone: "info",
-        description: "O Pluggy está buscando novas informações no banco.",
-        Icon: Loader2,
-        needsAction: false,
-      }
-    case "OUTDATED":
-      return {
-        label: "Desatualizado",
-        tone: "warning",
-        description: "Sincronização recomendada para receber novos dados.",
-        Icon: RefreshCw,
-        needsAction: true,
-      }
-    case "WAITING_USER_INPUT":
-    case "WAITING_USER_ACTION":
-      return {
-        label: "Aguardando você",
-        tone: "warning",
-        description: "O banco solicitou uma ação sua para continuar.",
-        Icon: AlertTriangle,
-        needsAction: true,
-      }
-    case "LOGIN_ERROR":
-      return {
-        label: "Falha no acesso",
-        tone: "negative",
-        description: "As credenciais expiraram ou foram alteradas.",
-        Icon: WifiOff,
-        needsAction: true,
-      }
-    case "ERROR":
-      return {
-        label: "Erro",
-        tone: "negative",
-        description: "Ocorreu um erro ao consultar o banco.",
-        Icon: AlertTriangle,
-        needsAction: true,
-      }
-    default:
-      return {
-        label: status ?? "Sem status",
-        tone: "neutral",
-        description: "Sem informações recentes sobre esta conexão.",
-        Icon: Plug,
-        needsAction: false,
-      }
+function describeStatus(item: StoredItem, isLocalSyncing?: boolean): StatusMeta {
+  if (isLocalSyncing || item.executionStatus === "IN_PROGRESS" || item.status === "UPDATING") {
+    return {
+      label: "Sincronizando",
+      tone: "info",
+      description: "O Pluggy está buscando novas informações no banco.",
+      Icon: Loader2,
+      needsAction: false,
+    }
+  }
+
+  if (item.consentExpiresAt && new Date(item.consentExpiresAt).getTime() < Date.now()) {
+    return {
+      label: "Consentimento expirado",
+      tone: "warning",
+      description: "O prazo de acesso expirou. Reconecte para continuar.",
+      Icon: AlertTriangle,
+      needsAction: true,
+    }
+  }
+
+  if (item.status === "WAITING_USER_INPUT" || item.executionStatus === "MFA_REQUIRED") {
+    return {
+      label: "Aguardando MFA",
+      tone: "warning",
+      description: "O banco exige autenticação adicional.",
+      Icon: AlertTriangle,
+      needsAction: true,
+    }
+  }
+
+  const hasCredError = item.syncError && (item.syncError.toLowerCase().includes("cred") || item.syncError.toLowerCase().includes("consent"));
+  if (item.status === "LOGIN_ERROR" || item.executionStatus === "NEEDS_ACTION" || hasCredError) {
+    return {
+      label: "Reconectar",
+      tone: "negative",
+      description: item.syncError || "As credenciais expiraram ou mudaram.",
+      Icon: WifiOff,
+      needsAction: true,
+    }
+  }
+
+  if (item.executionStatus === "RATE_LIMITED") {
+    return {
+      label: "Limite de frequência",
+      tone: "warning",
+      description: "Muitas requisições. Tente novamente mais tarde.",
+      Icon: AlertTriangle,
+      needsAction: false,
+    }
+  }
+
+  if (item.executionStatus === "PARTIAL_SUCCESS") {
+    return {
+      label: "Parcialmente atualizado",
+      tone: "warning",
+      description: "Alguns dados foram atualizados, mas outros falharam.",
+      Icon: AlertTriangle,
+      needsAction: false,
+    }
+  }
+
+  if (item.executionStatus === "ERROR" || item.status === "ERROR") {
+    return {
+      label: "Erro ao atualizar",
+      tone: "negative",
+      description: item.syncError || "Ocorreu um erro ao consultar o banco.",
+      Icon: AlertTriangle,
+      needsAction: true,
+    }
+  }
+
+  if (item.executionStatus === "SUCCESS" || item.status === "UPDATED") {
+    return {
+      label: "Atualizado",
+      tone: "positive",
+      description: "Os dados desta conexão estão sincronizados.",
+      Icon: CheckCircle2,
+      needsAction: false,
+    }
+  }
+
+  return {
+    label: item.status ?? "Sem status",
+    tone: "neutral",
+    description: "Sem informações recentes sobre esta conexão.",
+    Icon: Plug,
+    needsAction: false,
   }
 }
 
@@ -158,6 +206,7 @@ export function PluggyConnectClient() {
   const [isOpening, setIsOpening] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [pendingItemId, setPendingItemId] = useState<string | null>(null)
+  const [syncingItemIds, setSyncingItemIds] = useState<Set<string>>(new Set())
   const [feedback, setFeedback] = useState<{
     tone: "positive" | "negative" | "info"
     message: string
@@ -229,13 +278,14 @@ export function PluggyConnectClient() {
   const itemsByStatus = useMemo(() => {
     const counts = { updated: 0, attention: 0, syncing: 0, total: items.length }
     for (const item of items) {
-      const meta = describeStatus(item.status)
+      const isSyncing = syncingItemIds.has(item.pluggyItemId)
+      const meta = describeStatus(item, isSyncing)
       if (meta.tone === "positive") counts.updated += 1
       else if (meta.tone === "info") counts.syncing += 1
       else if (meta.needsAction) counts.attention += 1
     }
     return counts
-  }, [items])
+  }, [items, syncingItemIds])
 
   async function sendToInterceptor(data: unknown, type: string) {
     try {
@@ -361,6 +411,54 @@ export function PluggyConnectClient() {
       })
     } finally {
       setPendingItemId(null)
+    }
+  }
+
+  async function handleSyncNow(pluggyItemId: string) {
+    setSyncingItemIds((prev) => new Set(prev).add(pluggyItemId));
+    try {
+      await fetch(`/api/pluggy/items/${pluggyItemId}/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wait: false }),
+      });
+      
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        try {
+          const res = await fetch("/api/pluggy/items", { cache: "no-store" });
+          if (res.ok) {
+            const freshItems = (await res.json()) as StoredItem[];
+            setItems(Array.isArray(freshItems) ? freshItems : []);
+            
+            const freshItem = freshItems.find(i => i.pluggyItemId === pluggyItemId);
+            const isTerminal = freshItem && (
+              freshItem.executionStatus === "SUCCESS" || 
+              freshItem.executionStatus === "PARTIAL_SUCCESS" || 
+              freshItem.executionStatus === "ERROR" ||
+              freshItem.syncError != null
+            );
+            
+            if (isTerminal || attempts >= 24) {
+              clearInterval(poll);
+              setSyncingItemIds((prev) => {
+                const next = new Set(prev);
+                next.delete(pluggyItemId);
+                return next;
+              });
+            }
+          }
+        } catch {
+          // ignore error
+        }
+      }, 4000);
+    } catch {
+      setSyncingItemIds((prev) => {
+        const next = new Set(prev);
+        next.delete(pluggyItemId);
+        return next;
+      });
     }
   }
 
@@ -532,9 +630,12 @@ export function PluggyConnectClient() {
         ) : (
           <ul className="divide-y divide-border/60">
             {items.map((item) => {
-              const meta = describeStatus(item.status)
+              const isSyncing = syncingItemIds.has(item.pluggyItemId)
+              const meta = describeStatus(item, isSyncing)
               const StatusIcon = meta.Icon
               const isPending = pendingItemId === item.pluggyItemId
+              const lastSync = item.lastSyncedAt || item.updatedAt || item.lastUpdatedAt;
+              
               return (
                 <li
                   key={item.id}
@@ -573,7 +674,7 @@ export function PluggyConnectClient() {
                       </p>
                       <p className="font-mono text-xs text-muted-foreground/70">
                         {item.pluggyItemId}
-                        {item.updatedAt ? ` · ${formatDateTime(item.updatedAt)}` : null}
+                        {lastSync ? ` · última sincronização: ${getRelativeTime(lastSync)}` : null}
                       </p>
                     </div>
                   </div>
@@ -584,13 +685,28 @@ export function PluggyConnectClient() {
                         size="sm"
                         variant="outline"
                         onClick={() => handleOpenWidget(item.pluggyItemId)}
-                        disabled={tokenState !== "ready" || isOpening}
+                        disabled={tokenState !== "ready" || isOpening || isSyncing}
                         className="cursor-pointer"
                       >
                         <RefreshCw className="size-3.5" />
                         Reconectar
                       </Button>
-                    ) : null}
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleSyncNow(item.pluggyItemId)}
+                        disabled={isSyncing || tokenState !== "ready"}
+                        className="cursor-pointer"
+                      >
+                        {isSyncing ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="size-3.5" />
+                        )}
+                        Sincronizar agora
+                      </Button>
+                    )}
                     <Button
                       size="icon-sm"
                       variant="ghost"
