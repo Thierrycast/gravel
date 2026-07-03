@@ -1440,7 +1440,16 @@ function TransactionsContent() {
                   </Button>
                 </div>
                 {selectedTransaction.direction === "INFLOW" &&
-                !selectedTransaction.isSalary ? (
+                !selectedTransaction.isSalary &&
+                // Pagamento de fatura de cartão nunca é salário — esconder o
+                // botão evita padrões genéricos ("Pagamento recebido") que
+                // transformariam todo pagamento de cartão em renda.
+                !/pagamento\s+(de\s+)?(cart[aã]o|fatura)|fatura\s+de\s+cart[aã]o/i.test(
+                  selectedTransaction.categoryName ?? "",
+                ) &&
+                !/^pagamento\s*(recebido|de\s*fatura)/i.test(
+                  selectedTransaction.description ?? "",
+                ) ? (
                   <Button
                     variant="outline"
                     className="w-full justify-start gap-2 border-emerald-500/30 bg-emerald-500/5 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400"

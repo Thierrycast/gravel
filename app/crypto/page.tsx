@@ -242,8 +242,8 @@ function HistoryChart() {
 
   return (
     <Card className="flex flex-col h-full">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <div className="space-y-1">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 pb-2">
+        <div className="min-w-0 space-y-1">
           <CardTitle>Evolução da carteira</CardTitle>
           <CardDescription>
             {loading ? "Carregando..." : summary ? (
@@ -260,7 +260,7 @@ function HistoryChart() {
           </CardDescription>
         </div>
         <Select value={days} onValueChange={setDays}>
-          <SelectTrigger className="h-8 w-[110px] text-xs">
+          <SelectTrigger className="h-8 w-[110px] shrink-0 text-xs">
             <SelectValue placeholder="Período" />
           </SelectTrigger>
           <SelectContent>
@@ -282,7 +282,8 @@ function HistoryChart() {
             className="h-[250px]"
           />
         ) : (
-          <ChartContainer config={{ value: { label: "Valor", color: "hsl(var(--primary))" } }} className="h-[250px] w-full mt-4">
+          // Variáveis do tema já são cores completas (oklch) — sem hsl().
+          <ChartContainer config={{ value: { label: "Valor", color: "var(--chart-1)" } }} className="h-[250px] w-full mt-4">
             <AreaChart data={results} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="fillValue" x1="0" y1="0" x2="0" y2="1">
@@ -359,7 +360,7 @@ function AllocationDonut({ results }: { results: CryptoAsset[] }) {
 
   const chartConfig = Object.fromEntries(
     data.map((item, index) => {
-      const color = item.name === "Outros" ? "hsl(var(--muted-foreground))" : `hsl(var(--chart-${(index % 5) + 1}))`
+      const color = item.name === "Outros" ? "var(--muted-foreground)" : `var(--chart-${(index % 5) + 1})`
       return [item.name, { label: item.name, color }]
     })
   ) as ChartConfig
@@ -371,7 +372,9 @@ function AllocationDonut({ results }: { results: CryptoAsset[] }) {
         <CardDescription>Distribuição da carteira atual</CardDescription>
       </CardHeader>
       <CardContent className="flex-1 pb-4">
-        <ChartContainer config={chartConfig} className="mx-auto aspect-square max-h-[200px] mt-2">
+        {/* Altura fixa (sem aspect-*): no mobile o aspecto quadrado sobre a
+            largura total fazia o donut estourar o card. Raios em px. */}
+        <ChartContainer config={chartConfig} className="mx-auto h-[200px] w-full mt-2">
           <PieChart>
             <ChartTooltip
               content={<ChartTooltipContent hideLabel formatter={(value: unknown, name: unknown) => `${String(name)}: ${format(Number(value))}`} />}
@@ -380,7 +383,8 @@ function AllocationDonut({ results }: { results: CryptoAsset[] }) {
               data={data}
               dataKey="value"
               nameKey="name"
-              innerRadius={60}
+              innerRadius={55}
+              outerRadius={85}
               strokeWidth={5}
             >
               {data.map((entry) => (
@@ -580,10 +584,10 @@ export default function CryptoPage() {
       <InsightsLine results={results} />
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-2">
           <HistoryChart />
         </div>
-        <div>
+        <div className="min-w-0">
           <AllocationDonut results={results} />
         </div>
       </div>

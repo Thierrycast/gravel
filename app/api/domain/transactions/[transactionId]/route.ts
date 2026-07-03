@@ -276,7 +276,14 @@ export async function PUT(
               )
             : [];
           const term = existing.description ? existing.description.trim() : "";
-          if (term && !patterns.includes(term)) {
+          // Pagamento de fatura nunca vira padrão de salário — um padrão
+          // genérico como "Pagamento recebido" transformaria toda entrada de
+          // cartão em renda.
+          const looksLikeCardPayment =
+            /pagamento\s*(recebido|de\s*fatura|efetuado)|pagto\.?\s*(de)?\s*fatura/i.test(
+              term,
+            );
+          if (term && !looksLikeCardPayment && !patterns.includes(term)) {
             patterns.push(term);
             config.salaryPatterns = patterns;
             await tx.userSetting.update({

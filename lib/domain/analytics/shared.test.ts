@@ -44,6 +44,20 @@ describe("classifyCashFlowTransaction", () => {
     ).toBe("income");
   });
 
+  it("never turns card bill payments into income, even with a matching salary pattern", () => {
+    expect(
+      classifyCashFlowTransaction(
+        DomainTransactionDirection.INFLOW,
+        "Pagamento de cartao de credito",
+        "EXPENSE",
+        "Pagamento recebido",
+        {
+          salaryPatterns: ["pagamento recebido"],
+        },
+      ),
+    ).toBe("excluded");
+  });
+
   it("does not let salary patterns affect outflows", () => {
     expect(
       classifyCashFlowTransaction(

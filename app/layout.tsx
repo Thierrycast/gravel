@@ -109,7 +109,7 @@ export default async function RootLayout({
                       </div>
                       <MobileToolbox />
                     </header>
-                    <div className="page-container px-4 md:px-6 xl:px-12 2xl:px-16 xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto w-full py-5 pb-[calc(4rem+env(safe-area-inset-bottom)+1.25rem)] md:pb-8 md:py-6 lg:py-8">
+                    <div className="page-container px-4 md:px-6 xl:px-12 2xl:px-16 xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto w-full py-5 pb-[5.25rem] md:pb-8 md:py-6 lg:py-8">
                       <SyncFailureBanner />
                       <Suspense fallback={<div className="flex min-h-[40vh] w-full items-center justify-center p-8"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
                         {children}

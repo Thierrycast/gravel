@@ -279,30 +279,31 @@ export function classifyCashFlowTransaction(
 ): CashFlowClassification {
   if (direction === DomainTransactionDirection.TRANSFER) return "excluded";
 
-  // Entradas marcadas como salário pelo usuário têm precedência sobre as
-  // exclusões de transferência: salário costuma chegar como "Transferência
-  // Recebida" com categoria "mesma titularidade" e seria descartado.
-  if (
-    direction === DomainTransactionDirection.INFLOW &&
-    options?.salaryPatterns?.length &&
-    matchesSalaryPatternValues(
-      [description, options.merchantName],
-      options.salaryPatterns,
-    )
-  ) {
-    return "income";
-  }
-
   if (isInvestmentTransfer(categoryName, categoryKind, description)) {
     return "investment";
   }
 
   if (direction === DomainTransactionDirection.INFLOW) {
     const category = normalizePolicyText(categoryName);
-    if (isInternalAccountTransfer(categoryName)) return "excluded";
+    // Pagamento de fatura nunca é renda — nem quando um padrão de salário
+    // genérico ("Pagamento recebido") casa a descrição. Este check vem antes
+    // da precedência de salário de propósito.
     if (NON_INCOME_CATEGORY_TERMS.some((term) => category.includes(term))) {
       return "excluded";
     }
+    // Entradas marcadas como salário têm precedência sobre a exclusão de
+    // transferência: salário costuma chegar como "Transferência Recebida"
+    // com categoria "mesma titularidade" e seria descartado.
+    if (
+      options?.salaryPatterns?.length &&
+      matchesSalaryPatternValues(
+        [description, options.merchantName],
+        options.salaryPatterns,
+      )
+    ) {
+      return "income";
+    }
+    if (isInternalAccountTransfer(categoryName)) return "excluded";
     return "income";
   }
 
