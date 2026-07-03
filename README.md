@@ -166,6 +166,10 @@ Se precisar trocar a porta externa, altere apenas o lado esquerdo do mapeamento 
 
 ## ✨ Destaques Recentes
 
+- 💳 **Ciclo de fatura por cartão**: motor único (`lib/domain/billing.ts`) calcula fatura atual, próximas e passadas por dia de fechamento/vencimento, com reconciliação de pagamentos — consumido por `/accounts`, `/bills`, `/projection` e `/reports`.
+- 🔁 **Recorrências manuais**: CRUD completo em `/recurring/income`, com equivalente mensal por periodicidade e supressão de redetecção ao excluir regras detectadas.
+- 📈 **Projeção revisada**: componentes separados (recorrências, faturas, parcelas, variável), ajuste do mês corrente e alertas de saldo negativo, faturas vencidas e capacidade de poupança vs metas.
+- 📊 **Relatórios consolidados**: receitas vs despesas 12m, saúde financeira (score 0–100), gastos por conta, faturas por mês, maiores gastos e variação por categoria.
 - 🧾 **Composição dos KPIs**: cards principais explicam fórmula, inclusões, exclusões, fonte e drill-down exato.
 - 📥 **Inbox Financeira**: central acionável para categorias incertas, faturas próximas, salário não confirmado, conexões atrasadas e metas em risco.
 - ✅ **Fechamento do Mês**: checklist operacional para revisar receitas, transferências, faturas, categorias, recorrências e metas.

@@ -33,6 +33,7 @@ import { PeriodSwitcher } from "@/components/period-switcher";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -126,22 +127,6 @@ function TableSkeleton() {
           <Skeleton className="ml-auto h-4 w-24" />
         </div>
       ))}
-    </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="flex flex-col items-center gap-3 px-4 py-16 text-center">
-      <div className="flex size-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-        <Receipt className="size-5" />
-      </div>
-      <div className="space-y-1">
-        <p className="text-sm font-medium">Nenhuma transação encontrada</p>
-        <p className="text-sm text-muted-foreground">
-          Ajuste os filtros ou remova algum chip para ampliar a busca.
-        </p>
-      </div>
     </div>
   );
 }
@@ -909,7 +894,12 @@ function TransactionsContent() {
         {transactions.loading ? (
           <TableSkeleton />
         ) : total === 0 ? (
-          <EmptyState />
+          <EmptyState
+            variant="compact"
+            icon={Receipt}
+            title="Nenhuma transação encontrada"
+            description="Ajuste os filtros ou remova algum chip para ampliar a busca."
+          />
         ) : (
           <>
             <div className="hidden sm:block overflow-x-auto">

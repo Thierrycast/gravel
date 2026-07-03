@@ -13,6 +13,9 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "public/sw.js",
+    // Artefatos locais gerados (bundle do MCP e script de auditoria).
+    "mcp.js",
+    "run-lighthouse.js",
   ]),
   {
     files: ["scripts/*.js"],

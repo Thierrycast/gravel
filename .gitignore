@@ -17,6 +17,14 @@
 /.next/
 /out/
 
+# serwist (service worker gerado no build)
+/public/sw.js
+/public/sw.js.map
+/public/swe-worker*.js
+
+# bundle local do MCP (gerado com esbuild)
+/mcp.js
+
 # production
 /build
 

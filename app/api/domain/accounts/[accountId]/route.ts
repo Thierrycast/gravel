@@ -53,19 +53,33 @@ export async function PUT(
     const { accountId } = await params;
     const body = await request.json();
 
-    const allowedFields = ["nickname"] as const;
     const updateData: Record<string, unknown> = {};
 
-    for (const field of allowedFields) {
-      if (field in body) {
-        updateData[field] = body[field];
+    if ("nickname" in body) {
+      updateData.nickname = body.nickname;
+    }
+
+    for (const field of ["billingClosingDay", "billingDueDay"] as const) {
+      if (!(field in body)) continue;
+      const raw = body[field];
+      if (raw === null) {
+        updateData[field] = null;
+        continue;
       }
+      const day = Number(raw);
+      if (!Number.isInteger(day) || day < 1 || day > 31) {
+        return jsonError(
+          new Error(`${field} deve ser um dia do mês entre 1 e 31`),
+          400,
+        );
+      }
+      updateData[field] = day;
     }
 
     if (Object.keys(updateData).length === 0) {
       return jsonError(
         new Error(
-          "Nenhum campo válido para atualização. Campos permitidos: nickname",
+          "Nenhum campo válido para atualização. Campos permitidos: nickname, billingClosingDay, billingDueDay",
         ),
         400,
       );

@@ -34,6 +34,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -191,6 +201,7 @@ function TagsTab() {
   const [tagName, setTagName] = useState("");
   const [tagColor, setTagColor] = useState("#6366f1");
   const [saving, setSaving] = useState(false);
+  const [tagToDelete, setTagToDelete] = useState<string | null>(null);
 
   function openCreate() {
     setEditingTag(null);
@@ -230,8 +241,10 @@ function TagsTab() {
     }
   }
 
-  async function deleteTag(id: string) {
-    await fetch(`/api/tags/${id}`, { method: "DELETE" });
+  async function confirmDeleteTag() {
+    if (!tagToDelete) return;
+    await fetch(`/api/tags/${tagToDelete}`, { method: "DELETE" });
+    setTagToDelete(null);
     refetch();
   }
 
@@ -281,7 +294,7 @@ function TagsTab() {
                       Editar
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={() => deleteTag(tag.id)}
+                      onClick={() => setTagToDelete(tag.id)}
                       className="text-destructive"
                     >
                       <Trash2 className="mr-2 size-4" />
@@ -342,6 +355,23 @@ function TagsTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!tagToDelete} onOpenChange={(open) => !open && setTagToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir tag?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteTag} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

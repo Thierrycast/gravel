@@ -23,6 +23,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Table,
   TableHeader,
@@ -320,17 +321,16 @@ function MerchantsContent() {
               <TableSkeleton />
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center py-12 text-center">
-              <Store className="size-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium mb-1">
-                Nenhum comerciante encontrado
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {searchQuery
+            <EmptyState
+              variant="compact"
+              icon={Store}
+              title="Nenhum comerciante encontrado"
+              description={
+                searchQuery
                   ? "Tente ajustar a busca."
-                  : "Nenhum comerciante registrado ainda."}
-              </p>
-            </div>
+                  : "Nenhum comerciante registrado ainda."
+              }
+            />
           ) : (
             <Table>
               <TableHeader>

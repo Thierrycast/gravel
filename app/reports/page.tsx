@@ -30,6 +30,7 @@ import { usePeriod } from "@/hooks/use-period";
 import { PeriodSwitcher } from "@/components/period-switcher";
 import { PageHeader } from "@/components/page-header";
 import { PageError } from "@/components/page-error";
+import { ReportsInsightsSection } from "./insights-section";
 
 interface OverviewResponse {
   summary: {
@@ -672,6 +673,8 @@ export default function ReportsPage() {
           />
         </CardContent>
       </Card>
+
+      <ReportsInsightsSection />
     </div>
   );
 }

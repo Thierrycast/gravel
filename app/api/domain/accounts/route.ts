@@ -103,6 +103,8 @@ export async function GET(request: Request) {
         totalSpent: spentItem?._sum.amount?.abs() ?? 0,
         firstTransactionAt: activityItem?._min.occurredAt ?? null,
         lastTransactionAt: activityItem?._max.occurredAt ?? null,
+        billingClosingDay: account.billingClosingDay ?? null,
+        billingDueDay: account.billingDueDay ?? null,
       };
     });
 

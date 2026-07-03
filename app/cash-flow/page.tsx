@@ -33,6 +33,8 @@ import { useCurrency } from "@/lib/currency-context";
 import { formatPercent } from "@/lib/format";
 import { usePeriod } from "@/hooks/use-period";
 import { PeriodSwitcher } from "@/components/period-switcher";
+import { PageHeader } from "@/components/page-header";
+import { PageError } from "@/components/page-error";
 
 
 interface CashFlowItem {
@@ -154,7 +156,7 @@ export default function CashFlowPage() {
   const period = usePeriod("180d");
   const router = useRouter();
 
-  const { data: cashFlow, loading: cashFlowLoading } = useApi<CashFlowResponse>(
+  const { data: cashFlow, loading: cashFlowLoading, error: cashFlowError, refetch: refetchCashFlow } = useApi<CashFlowResponse>(
     "/api/domain/metrics/cash-flow",
     {
       groupBy: "month",
@@ -162,12 +164,13 @@ export default function CashFlowPage() {
     },
   );
 
-  const { data: overview, loading: overviewLoading } = useApi<OverviewResponse>(
+  const { data: overview, loading: overviewLoading, error: overviewError, refetch: refetchOverview } = useApi<OverviewResponse>(
     "/api/domain/metrics/overview",
     period.params,
   );
 
   const loading = cashFlowLoading || overviewLoading;
+  const error = cashFlowError || overviewError;
 
   const chartData = useMemo(() => {
     if (!cashFlow?.results) return [];
@@ -196,19 +199,28 @@ export default function CashFlowPage() {
     );
   }, [cashFlow]);
 
+  if (error) {
+    return (
+      <PageError
+        message="Erro ao carregar o fluxo de caixa."
+        refetch={() => {
+          refetchCashFlow();
+          refetchOverview();
+        }}
+      />
+    );
+  }
+
   if (loading) return <LoadingSkeleton />;
 
   return (
     <TooltipProvider>
       <div className="flex flex-col gap-6">
         {/* Header row */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-lg font-semibold tracking-tight">
-            Fluxo de Caixa
-          </h1>
-
-          <PeriodSwitcher state={period} />
-        </div>
+        <PageHeader
+          title="Fluxo de Caixa"
+          actions={<PeriodSwitcher state={period} />}
+        />
 
         {/* Hero: Resultado Liquido */}
         <div className="rounded-xl border bg-card p-6">

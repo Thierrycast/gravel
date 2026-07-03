@@ -1,6 +1,6 @@
 import { defaultCache } from "@serwist/next/worker";
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
-import { Serwist, NetworkFirst, CacheFirst } from "serwist";
+import { CacheFirst, ExpirationPlugin, NetworkFirst, Serwist } from "serwist";
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
@@ -17,18 +17,32 @@ const serwist = new Serwist({
   navigationPreload: true,
   runtimeCaching: [
     {
-      matcher: ({ url }) => url.pathname.startsWith('/api/domain/'),
+      // Todas as APIs de leitura (o matcher só se aplica a GET). NetworkFirst:
+      // o cache só é servido quando a rede falha ou estoura o timeout — dados
+      // financeiros nunca vêm do cache com a rede saudável. O timeout alto
+      // evita servir dado velho silenciosamente em conexões apenas lentas.
+      matcher: ({ url }) => url.pathname.startsWith("/api/"),
       handler: new NetworkFirst({
-        cacheName: 'domain-api-cache',
-        networkTimeoutSeconds: 3,
-        plugins: [],
+        cacheName: "api-cache",
+        networkTimeoutSeconds: 10,
+        plugins: [
+          new ExpirationPlugin({
+            maxEntries: 64,
+            maxAgeSeconds: 24 * 60 * 60,
+          }),
+        ],
       }),
     },
     {
-      matcher: ({ url }) => url.hostname === 'img.logo.dev',
+      matcher: ({ url }) => url.hostname === "img.logo.dev",
       handler: new CacheFirst({
-        cacheName: 'external-logos',
-        plugins: [],
+        cacheName: "external-logos",
+        plugins: [
+          new ExpirationPlugin({
+            maxEntries: 200,
+            maxAgeSeconds: 30 * 24 * 60 * 60,
+          }),
+        ],
       }),
     },
     ...defaultCache,
