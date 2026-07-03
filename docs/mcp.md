@@ -132,8 +132,10 @@ Você tem acesso ao servidor MCP `gravel-finance`. Use-o sempre que o usuário s
 *   **`get_spending_by_category`**: Gastos ordenados com percentual de relevância de cada categoria.
 *   **`get_spending_by_merchant`**: Top estabelecimentos por volume de saídas de caixa.
 *   **`get_spending_trends`**: Evolução temporal de despesas categorizadas.
-*   **`analyze_financial_health`**: Indicadores automáticos de score financeiro e runway (meses de sobrevivência com o saldo atual).
-*   **`project_future_cashflow`**: Projeção matemática do saldo com base nas recorrências conhecidas e faturas futuras.
+*   **analyze_financial_health**: Indicadores automáticos de score financeiro e runway (meses de sobrevivência com o saldo atual).
+*   **compare_periods**: Comparação detalhada entre dois períodos financeiros.
+*   **project_future_cashflow**: Projeção matemática do saldo com base nas recorrências conhecidas e faturas futuras.
+*   **get_insights**: Insights automáticos, alertas e análise forense (Lei de Benford e assinaturas ocultas).
 
 ### 🔍 Consultas e Listas
 *   **`search_transactions`**: Busca transações de forma paginada com suporte a termos de pesquisa, filtros de data, direção, conta, comerciantes e valores mínimos/máximos.
@@ -143,9 +145,14 @@ Você tem acesso ao servidor MCP `gravel-finance`. Use-o sempre que o usuário s
 *   **`get_crypto_portfolio`**: Posição e P&L consolidado de ativos de criptomoedas.
 *   **`get_recurring_expenses`**: Parcelamentos e assinaturas recorrentes com datas.
 *   **`get_goals`**: Exibe metas ativas e percentual de progresso.
-*   **`get_scenarios`**: Cenários e eventos de simulação futuros.
-*   **`get_financial_inbox`**: Retorna pendências de conciliação.
-*   **`get_monthly_close`**: Retorna o checklist de fechamento.
+*   **get_scenarios**: Cenários e eventos de simulação futuros.
+*   **get_financial_inbox**: Retorna pendências de conciliação.
+*   **get_monthly_close**: Retorna o checklist de fechamento.
+
+### 📝 Ações de Fluxo e Revisão Financeira
+*   **set_financial_inbox_item_status**: Marca um item da Inbox como aberto, resolvido ou ignorado.
+*   **set_monthly_close_step**: Marca uma etapa do checklist de fechamento mensal como concluída ou aberta.
+*   **complete_monthly_close**: Persiste o resumo final do fechamento mensal.
 
 ### ✍️ Ações de Escrita e Mutação (CRUD)
 *   **`create_transaction`** / **`update_transaction`** / **`delete_transaction`**: Cria, edita e remove transações locais manuais.
