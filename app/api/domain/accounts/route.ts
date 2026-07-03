@@ -105,6 +105,8 @@ export async function GET(request: Request) {
         lastTransactionAt: activityItem?._max.occurredAt ?? null,
         billingClosingDay: account.billingClosingDay ?? null,
         billingDueDay: account.billingDueDay ?? null,
+        realtimeBalanceAt: account.realtimeBalanceAt ?? null,
+        realtimeBalanceStatus: account.realtimeBalanceStatus ?? null,
       };
     });
 

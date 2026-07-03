@@ -92,6 +92,30 @@ const SEVERITY_STYLE: Record<
   },
 };
 
+const BEHAVIOR_SIGNAL_LABELS: Record<string, string> = {
+  hasCar: "Tem carro",
+  homeowner: "Casa própria",
+  frequentTraveler: "Viaja com frequência",
+  highDiningExpenditure: "Gasta muito com restaurantes",
+  investmentActivity: "Investe ativamente",
+  educationExpenses: "Gastos com educação",
+  healthcareNeeds: "Gastos com saúde",
+  loanCommitments: "Tem empréstimos",
+  insurancePolicies: "Tem seguros",
+};
+
+const BEHAVIOR_CATEGORY_LABELS: Record<string, string> = {
+  transportation: "Transporte",
+  travel: "Viagens",
+  investment: "Investimentos",
+  healthcare: "Saúde",
+  loanPayments: "Empréstimos",
+  dining: "Restaurantes",
+  education: "Educação",
+  insurance: "Seguros",
+  housing: "Moradia",
+};
+
 function healthTone(score: number) {
   if (score >= 70) return "text-emerald-400";
   if (score >= 40) return "text-amber-400";
@@ -128,6 +152,7 @@ export default function InsightsPage() {
   const infos = nudges.filter((n) => n.type !== "WARNING");
   const actions = insights?.actions ?? [];
   const health = reports?.results?.health;
+  const behavior = insights?.behavior ?? null;
 
   const benfordData = insights?.forensics?.benford?.actual.map(
     (v: number | null, i: number) => ({
@@ -307,6 +332,57 @@ export default function InsightsPage() {
           </div>
         )}
       </div>
+
+      {/* Perfil financeiro (Pluggy behavior-analysis) */}
+      {behavior &&
+        (behavior.signals.length > 0 || behavior.topCategories.length > 0) && (
+          <div>
+            <div className="mb-3 flex items-center gap-2">
+              <HeartPulse className="size-4 text-primary" />
+              <h2 className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                Perfil financeiro
+              </h2>
+            </div>
+            <Card>
+              <CardContent className="flex flex-col gap-4 pt-5">
+                {behavior.signals.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {behavior.signals.map((signal) => (
+                      <span
+                        key={signal}
+                        className="rounded-full border bg-muted/40 px-2.5 py-1 text-xs font-medium"
+                      >
+                        {BEHAVIOR_SIGNAL_LABELS[signal] ?? signal}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {behavior.topCategories.length > 0 && (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {behavior.topCategories.map((item) => (
+                      <div
+                        key={item.category}
+                        className="flex items-center justify-between rounded-lg border bg-muted/20 px-3 py-2 text-sm"
+                      >
+                        <span className="text-muted-foreground">
+                          {BEHAVIOR_CATEGORY_LABELS[item.category] ??
+                            item.category}
+                        </span>
+                        <span className="font-mono font-semibold tabular-nums">
+                          {format(item.spending)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Sinais e gastos por área identificados automaticamente pela
+                  Pluggy a partir do seu histórico.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
       {/* Assinaturas ocultas */}
       <div>

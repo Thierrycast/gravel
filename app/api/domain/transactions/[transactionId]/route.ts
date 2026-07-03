@@ -134,6 +134,12 @@ export async function PUT(
       }
     }
 
+    // Categoria escolhida pelo usuário é MANUAL — o enriquecimento da Pluggy
+    // não pode sobrescrevê-la depois.
+    if ("domainCategoryId" in body && body.domainCategoryId) {
+      updateData.categorySource = "MANUAL";
+    }
+
     if (body.markInternalTransfer === true) {
       const transferCategory = await prisma.domainCategory.findFirst({
         where: {

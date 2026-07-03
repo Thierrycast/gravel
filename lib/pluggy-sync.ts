@@ -31,6 +31,9 @@ type SyncOptions = {
   itemId?: string | null
   resources?: SyncResource[]
   pageSize?: number
+  // Quando true, dispara PATCH /items/{id} e aguarda a sincronização na
+  // instituição antes de reler os dados (refresh de verdade, não só GET).
+  refresh?: boolean
 }
 
 type SyncCounters = Record<SyncResource, number>
@@ -687,6 +690,17 @@ export async function syncPluggyData(options: SyncOptions = {}) {
     }
 
     for (const itemId of itemIds) {
+      // Refresh de verdade: pede à instituição uma nova sincronização e
+      // aguarda terminar antes de reler. Sem isso o sync só lia dados antigos.
+      if (options.refresh) {
+        const { triggerAndPollItem } = await import("@/lib/pluggy-item-refresh")
+        await triggerAndPollItem(itemId).catch((error) => {
+          console.warn(
+            `[Pluggy] refresh do item ${itemId} falhou: ${error instanceof Error ? error.message : error}`,
+          )
+        })
+      }
+
       const itemResult = await syncItem(itemId)
       counters.items += itemResult.inserted
 

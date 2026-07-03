@@ -89,13 +89,51 @@ export function extractPluggyEnrichmentFields(payload: unknown) {
   };
 }
 
+/**
+ * Valida cada transação antes de enviar ao /categorize. A API rejeita o lote
+ * inteiro com "Transaction {...} is invalid" quando um item tem id/date/amount
+ * fora do formato — então filtramos localmente e devolvemos os inválidos.
+ */
+export function validateCategorizePayload(transactions: CategorizeTransaction[]) {
+  const valid: CategorizeTransaction[] = [];
+  const invalid: Array<{ id: string; reason: string }> = [];
+  for (const tx of transactions) {
+    if (!tx.id || typeof tx.id !== "string") {
+      invalid.push({ id: String(tx.id ?? "?"), reason: "id ausente" });
+      continue;
+    }
+    if (typeof tx.amount !== "number" || !Number.isFinite(tx.amount)) {
+      invalid.push({ id: tx.id, reason: "amount inválido" });
+      continue;
+    }
+    // A Pluggy espera ISO 8601. Rejeita datas não parseáveis.
+    if (!tx.date || Number.isNaN(new Date(tx.date).getTime())) {
+      invalid.push({ id: tx.id, reason: "date inválida" });
+      continue;
+    }
+    if (!tx.description || typeof tx.description !== "string") {
+      invalid.push({ id: tx.id, reason: "description ausente" });
+      continue;
+    }
+    valid.push(tx);
+  }
+  return { valid, invalid };
+}
+
 export async function categorizePluggyTransactions(input: {
   transactions: CategorizeTransaction[];
   accountType?: "CHECKING" | "CREDIT_CARD";
   isBusiness?: boolean;
 }) {
-  if (input.transactions.length === 0) return [];
-  if (input.transactions.length > MAX_BATCH_SIZE) {
+  const { valid, invalid } = validateCategorizePayload(input.transactions);
+  if (invalid.length > 0) {
+    console.warn(
+      `[enrichment] ${invalid.length} transações inválidas ignoradas no categorize:`,
+      invalid.slice(0, 5),
+    );
+  }
+  if (valid.length === 0) return [];
+  if (valid.length > MAX_BATCH_SIZE) {
     throw new Error(
       `Pluggy enrichment aceita no maximo ${MAX_BATCH_SIZE} transacoes por request`,
     );
@@ -109,7 +147,7 @@ export async function categorizePluggyTransactions(input: {
       [getHeaderName()]: apiKey,
     },
     body: JSON.stringify({
-      transactions: input.transactions,
+      transactions: valid,
       clientUserId: getClientUserId(),
       accountType: input.accountType,
       ...(input.isBusiness !== undefined

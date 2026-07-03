@@ -4,6 +4,58 @@ import { checkBenfordsLaw, detectHiddenSubscriptions } from "@/lib/domain/forens
 import { getCardStatements } from "@/lib/domain/billing"
 import { getProjectionPayload } from "@/lib/domain/derived"
 import { serializeForJson } from "@/lib/core/http"
+import { prisma } from "@/lib/prisma"
+
+type BehaviorMetric = { spending?: number; transactionCount?: number }
+
+/**
+ * Perfil comportamental (Pluggy behavior-analysis) já persistido. Agregamos os
+ * itens num único resumo: sinais true e as 4 categorias de maior gasto.
+ */
+async function getBehaviorProfile() {
+  const rows = await prisma.pluggyBehaviorAnalysis.findMany()
+  if (rows.length === 0) return null
+
+  const signals = new Set<string>()
+  const categoryTotals = new Map<string, number>()
+  for (const row of rows) {
+    if (row.signalsJson) {
+      try {
+        const parsed = JSON.parse(row.signalsJson) as Record<string, boolean>
+        for (const [key, value] of Object.entries(parsed)) {
+          if (value) signals.add(key)
+        }
+      } catch {}
+    }
+    if (row.categoriesJson) {
+      try {
+        const parsed = JSON.parse(row.categoriesJson) as Record<
+          string,
+          BehaviorMetric
+        >
+        for (const [key, metric] of Object.entries(parsed)) {
+          const spending = Number(metric?.spending ?? 0)
+          if (spending > 0) {
+            categoryTotals.set(key, (categoryTotals.get(key) ?? 0) + spending)
+          }
+        }
+      } catch {}
+    }
+  }
+
+  const topCategories = [...categoryTotals.entries()]
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 4)
+    .map(([category, spending]) => ({ category, spending }))
+
+  return {
+    signals: [...signals],
+    topCategories,
+    updatedAt: rows
+      .map((r) => r.fetchedAt)
+      .sort((a, b) => b.getTime() - a.getTime())[0],
+  }
+}
 
 export const dynamic = "force-dynamic"
 
@@ -106,16 +158,18 @@ async function buildActions(): Promise<InsightAction[]> {
 }
 
 export async function GET() {
-  const [nudges, benford, hiddenSubs, actions] = await Promise.all([
+  const [nudges, benford, hiddenSubs, actions, behavior] = await Promise.all([
     getBehavioralNudges(),
     checkBenfordsLaw(),
     detectHiddenSubscriptions(),
     buildActions(),
+    getBehaviorProfile(),
   ])
 
   return NextResponse.json(serializeForJson({
     nudges,
     actions,
+    behavior,
     forensics: {
       benford,
       hiddenSubs

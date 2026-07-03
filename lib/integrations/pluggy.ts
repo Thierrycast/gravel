@@ -176,6 +176,41 @@ async function _pluggyRequest(path: string, options: PluggyRequestOptions = {}) 
   return handlePluggyResponse(response)
 }
 
+/**
+ * Erro tipado do Pluggy. Preserva o status HTTP, o `code` da API (ex.:
+ * BALANCE_CONSENT_ERROR) e o `Retry-After` para o chamador tratar cada caso
+ * (MFA, consentimento, rate limit) sem depender de regex na mensagem.
+ */
+export class PluggyApiError extends Error {
+  readonly statusCode: number
+  readonly code: string | null
+  readonly retryAfterSeconds: number | null
+  readonly body: unknown
+
+  constructor(params: {
+    statusCode: number
+    message: string
+    code?: string | null
+    retryAfterSeconds?: number | null
+    body?: unknown
+  }) {
+    super(params.message)
+    this.name = "PluggyApiError"
+    this.statusCode = params.statusCode
+    this.code = params.code ?? null
+    this.retryAfterSeconds = params.retryAfterSeconds ?? null
+    this.body = params.body
+  }
+
+  get isRateLimit() {
+    return this.statusCode === 429
+  }
+
+  get isTransient() {
+    return this.statusCode >= 500 && this.statusCode < 600
+  }
+}
+
 async function handlePluggyResponse(response: Response) {
   if (response.ok) {
     if (response.status === 204) return null
@@ -190,25 +225,34 @@ async function handlePluggyResponse(response: Response) {
 
   const error = await response.json().catch(() => ({}))
   const message = typeof error?.message === "string" ? error.message : ""
+  const code = typeof error?.code === "string" ? error.code : null
+  const retryAfterHeader = response.headers.get("Retry-After")
+  const retryAfterSeconds = retryAfterHeader
+    ? Number.parseInt(retryAfterHeader, 10)
+    : null
 
-  switch (response.status) {
-    case 400:
-      throw new Error(message || "Requisicao invalida ao Pluggy")
-    case 401:
-      throw new Error("Api key invalida ou expirada")
-    case 403:
-      throw new Error("Acesso negado pelo Pluggy")
-    case 404:
-      throw new Error(message || "Recurso nao encontrado no Pluggy")
-    case 429: {
-      const retryAfter = response.headers.get("Retry-After")
-      throw new Error(
-        `Rate limit do Pluggy. Tente novamente em ${retryAfter ?? "alguns"}s`
-      )
-    }
-    default:
-      throw new Error(`Erro Pluggy: ${response.status} ${message}`.trim())
+  const fallbackByStatus: Record<number, string> = {
+    400: "Requisição inválida ao Pluggy",
+    401: "Api key inválida ou expirada",
+    403: "Acesso negado pelo Pluggy",
+    404: "Recurso não encontrado no Pluggy",
+    409: "Conflito ao sincronizar (item já em atualização)",
+    429: `Rate limit do Pluggy${retryAfterSeconds ? `. Tente novamente em ${retryAfterSeconds}s` : ""}`,
   }
+
+  throw new PluggyApiError({
+    statusCode: response.status,
+    message:
+      message ||
+      fallbackByStatus[response.status] ||
+      `Erro Pluggy: ${response.status}`,
+    code,
+    retryAfterSeconds:
+      Number.isFinite(retryAfterSeconds) && retryAfterSeconds
+        ? retryAfterSeconds
+        : null,
+    body: error,
+  })
 }
 
 async function pluggyRequest(path: string, options: PluggyRequestOptions = {}) {
@@ -223,17 +267,26 @@ async function pluggyRequest(path: string, options: PluggyRequestOptions = {}) {
       if (attempt >= maxRetries) throw error;
 
       const message = error instanceof Error ? error.message : "";
-      const isRateLimit = message.includes("Rate limit do Pluggy");
-      const isServerError = message.includes("502") || message.includes("503") || message.includes("504") || message.includes("fetch failed") || message.includes("ECONNRESET");
+      const isRateLimit =
+        error instanceof PluggyApiError
+          ? error.isRateLimit
+          : message.includes("Rate limit do Pluggy");
+      const isServerError =
+        error instanceof PluggyApiError
+          ? error.isTransient
+          : message.includes("fetch failed") || message.includes("ECONNRESET");
 
+      // 400/401/403/404/409 são definitivos (credencial, consentimento, MFA,
+      // conflito de frequência) — não adianta repetir; devolve na hora.
       if (isRateLimit || isServerError) {
         let delayMs = Math.pow(2, attempt) * 1000;
-        if (isRateLimit) {
-          const match = message.match(/em (\d+)s/);
-          if (match && match[1]) delayMs = Number.parseInt(match[1], 10) * 1000;
+        if (error instanceof PluggyApiError && error.retryAfterSeconds) {
+          delayMs = error.retryAfterSeconds * 1000;
         }
-        console.warn(`[Pluggy Sync] Transient error on ${path} (attempt ${attempt}/${maxRetries}). Retrying in ${delayMs}ms... Error: ${message}`);
-        await new Promise(resolve => setTimeout(resolve, delayMs));
+        console.warn(
+          `[Pluggy] Transient error on ${path} (attempt ${attempt}/${maxRetries}). Retrying in ${delayMs}ms. ${message}`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
         continue;
       }
 
@@ -244,6 +297,22 @@ async function pluggyRequest(path: string, options: PluggyRequestOptions = {}) {
 
 export async function fetchItem(itemId: string) {
   return pluggyRequest(`/items/${itemId}`)
+}
+
+/**
+ * PATCH /items/{id} — dispara uma nova sincronização do item na instituição.
+ * Com body vazio a Pluggy reusa as credenciais já armazenadas. Passar
+ * `parameters` (ex.: resposta de MFA) ou `clientUserId` quando necessário.
+ * Retorna o item com o novo `status`/`executionStatus` (ex.: UPDATING).
+ */
+export async function refreshPluggyItem(
+  itemId: string,
+  body?: { parameters?: Record<string, unknown>; clientUserId?: string },
+) {
+  return pluggyRequest(`/items/${itemId}`, {
+    method: "PATCH",
+    body: body && Object.keys(body).length > 0 ? body : {},
+  })
 }
 
 export async function deleteItem(itemId: string) {

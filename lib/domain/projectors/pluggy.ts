@@ -644,8 +644,16 @@ export async function projectPluggyTransactions() {
             normalizeText(enrichment.pluggyCategory) ?? "",
           ) ?? categoryId;
       }
+      // Origem da categoria efetiva, para a UI e para não sobrescrever edição
+      // manual: MANUAL (override do usuário) > PLUGGY (provedor/enriquecimento).
+      let categorySource: string | null = record.categoryId
+        ? "PLUGGY"
+        : !record.categoryId && enrichment?.pluggyCategory && categoryId
+          ? "PLUGGY"
+          : null;
       if ("categoryId" in overrides) {
         categoryId = overrides.categoryId ?? null;
+        categorySource = categoryId ? "MANUAL" : null;
       }
 
       const metadataPayload = {
@@ -691,6 +699,7 @@ export async function projectPluggyTransactions() {
           ignored: ignoredIds.has(existingTxId),
         };
         if (categoryId) updateData.domainCategoryId = categoryId;
+        updateData.categorySource = categorySource;
         updates.push({ id: existingTxId, data: updateData });
       } else {
         const newId = randomUUID();
@@ -711,6 +720,7 @@ export async function projectPluggyTransactions() {
           installmentTotal: installment?.total ?? null,
           domainCategoryId: categoryId ?? null,
           providerCategoryId: record.categoryId ?? null,
+          categorySource,
           merchantName: effectiveMerchantName,
           merchantCnpj: effectiveMerchantCnpj,
           ignored: false,

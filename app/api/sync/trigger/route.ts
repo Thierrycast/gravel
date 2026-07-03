@@ -50,6 +50,9 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}))
     const isFull = body.full !== false // default to true
     const force = body.force === true
+    // Refresh do item (PATCH /items) por padrão numa ação manual — o usuário
+    // clicou em "sincronizar" para ter dado fresco, não só reler o cache.
+    const refresh = body.refresh !== false
 
     if (force) {
       await prisma.opsSyncLock.deleteMany()
@@ -59,7 +62,7 @@ export async function POST(req: Request) {
     if (isFull) {
       // Fire-and-forget: start the full sync without blocking the response
       runFullOperationalSync({
-        
+        pluggy: { refresh },
       }).catch((err) => {
         console.error("[sync/trigger] full sync failed:", err)
       })
@@ -68,6 +71,7 @@ export async function POST(req: Request) {
       runPluggySync({
         scope: "ui/manual-trigger",
         resource: "full",
+        refresh,
       }).catch((err) => {
         console.error("[sync/trigger] pluggy sync failed:", err)
       })

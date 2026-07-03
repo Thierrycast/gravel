@@ -10,7 +10,10 @@ import {
   Wallet,
   AlertTriangle,
   CreditCard,
+  RefreshCw,
+  Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { useApi } from "@/hooks/use-api";
 import { usePeriod } from "@/hooks/use-period";
 import { formatDate, formatDateFull, formatPercent } from "@/lib/format";
@@ -118,6 +121,24 @@ function AccountCardSkeleton() {
   );
 }
 
+function getRelativeTime(dateString: string | null): string {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / 60000);
+  if (diffInMinutes < 1) return "agora";
+  if (diffInMinutes < 60) return `há ${diffInMinutes} min`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `há ${diffInHours} h`;
+  const diffInDays = Math.floor(diffInHours / 24);
+  return `há ${diffInDays} d`;
+}
+
+type AccountWithRealtime = Account & {
+  realtimeBalanceAt?: string | null;
+  realtimeBalanceStatus?: string | null;
+};
+
 export default function AccountsPage() {
   const { format } = useCurrency();
   const period = usePeriod("mtd");
@@ -146,6 +167,14 @@ export default function AccountsPage() {
   const [closingDayInput, setClosingDayInput] = useState("");
   const [dueDayInput, setDueDayInput] = useState("");
   const [savingBilling, setSavingBilling] = useState(false);
+
+  const [updatingBalanceId, setUpdatingBalanceId] = useState<string | null>(null);
+  const [balanceOverrides, setBalanceOverrides] = useState<
+    Record<
+      string,
+      { balance: number; message: string; status: "OK" | "CACHED" | "ERROR"; updatedAt: string }
+    >
+  >({});
 
   const loading = accountsLoading || allocationLoading;
 
@@ -234,6 +263,45 @@ export default function AccountsPage() {
     setSelectedAccount(account);
     setCashInput("");
     setSheetOpen(true);
+  }
+
+  async function handleUpdateBalance(e: React.MouseEvent, accountId: string) {
+    e.stopPropagation();
+    setUpdatingBalanceId(accountId);
+    try {
+      const res = await fetch(`/api/domain/accounts/${accountId}/balance`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      const { ok, balance, message, source } = data.results;
+      if (ok) {
+        setBalanceOverrides((prev) => ({
+          ...prev,
+          [accountId]: {
+            balance,
+            status: source === "cached" ? "CACHED" : "OK",
+            message: "",
+            updatedAt: new Date().toISOString(),
+          },
+        }));
+        toast.success("Saldo atualizado");
+      } else {
+        setBalanceOverrides((prev) => ({
+          ...prev,
+          [accountId]: {
+            balance,
+            status: "ERROR",
+            message: message || "Erro ao atualizar",
+            updatedAt: new Date().toISOString(),
+          },
+        }));
+        toast.error(message || "Falha ao atualizar saldo");
+      }
+    } catch {
+      toast.error("Erro ao atualizar saldo");
+    } finally {
+      setUpdatingBalanceId(null);
+    }
   }
 
   async function handleBillingSave() {
@@ -404,9 +472,31 @@ export default function AccountsPage() {
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {group.accounts.map((account) => {
+                  {group.accounts.map((acc) => {
+                    const account = acc as AccountWithRealtime;
                     const allocation = allocationMap.get(account.id);
                     const credit = isCreditAccount(account);
+                    
+                    const override = balanceOverrides[account.id];
+                    const displayBalance = override ? override.balance : account.balance;
+                    const statusStr = override ? override.status : account.realtimeBalanceStatus;
+                    const atStr = override ? override.updatedAt : account.realtimeBalanceAt;
+                    
+                    let balanceStatusText = "";
+                    if (override && override.status === "OK") {
+                      balanceStatusText = "atualizado agora";
+                    } else if (override && override.status === "CACHED") {
+                      balanceStatusText = "saldo salvo anteriormente";
+                    } else if (override && override.status === "ERROR") {
+                      balanceStatusText = "indisponível";
+                    } else if (statusStr === "OK" && atStr) {
+                      balanceStatusText = `saldo de ${getRelativeTime(atStr)}`;
+                    } else if (atStr) {
+                      balanceStatusText = `saldo de ${getRelativeTime(atStr)}`;
+                    } else if (statusStr && statusStr !== "OK") {
+                      balanceStatusText = "indisponível";
+                    }
+
                     return (
                       <Card
                         key={account.id}
@@ -544,13 +634,37 @@ export default function AccountsPage() {
                             })()
                           ) : (
                             <div>
-                              <div className="mb-1 grid gap-1 text-sm sm:flex sm:items-center sm:justify-between sm:gap-2">
-                                <span className="text-muted-foreground">
-                                  Saldo
-                                </span>
-                                <span className="break-words font-semibold text-foreground sm:text-right">
-                                  {format(account.balance)}
-                                </span>
+                              <div className="mb-1 flex items-start justify-between text-sm">
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-muted-foreground">
+                                    Saldo
+                                  </span>
+                                  {(account.kind === "BANK" || account.kind === "CASH") && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      className="h-5 w-5"
+                                      onClick={(e) => handleUpdateBalance(e, account.id)}
+                                      disabled={updatingBalanceId === account.id}
+                                    >
+                                      {updatingBalanceId === account.id ? (
+                                        <Loader2 className="size-3 animate-spin" />
+                                      ) : (
+                                        <RefreshCw className="size-3 text-muted-foreground" />
+                                      )}
+                                    </Button>
+                                  )}
+                                </div>
+                                <div className="flex flex-col items-end">
+                                  <span className="break-words font-semibold text-foreground text-right">
+                                    {format(displayBalance)}
+                                  </span>
+                                  {balanceStatusText && (
+                                    <span className="text-[10px] text-muted-foreground">
+                                      {balanceStatusText}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                               {allocation && (
                                 <>
