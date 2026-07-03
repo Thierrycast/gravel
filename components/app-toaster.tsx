@@ -20,6 +20,13 @@ export function AppToaster() {
       // inset on notched/Dynamic Island iPhones.
       position="top-right"
       offset={{ top: "calc(3.75rem + env(safe-area-inset-top))", right: "1rem" }}
+      // No mobile o sonner usa mobileOffset (não offset) — sem ele o toast
+      // usa 16px fixos e fica escondido atrás da Dynamic Island no PWA iOS.
+      mobileOffset={{
+        top: "calc(3.75rem + env(safe-area-inset-top))",
+        left: "1rem",
+        right: "1rem",
+      }}
       gap={8}
       toastOptions={{
         classNames: {

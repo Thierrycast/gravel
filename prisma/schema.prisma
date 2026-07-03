@@ -375,8 +375,51 @@ model DomainLend {
   domainBillId     String?
   domainTransactionId String?
   inflowTransactionId String?
+  // Pessoa cadastrada (registro reutilizável); friendName/friendPhone são
+  // mantidos para empréstimos antigos e preenchidos a partir da pessoa.
+  personId         String?
+  person           DomainPerson? @relation(fields: [personId], references: [id])
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+}
+
+// Cadastro persistente de pessoas para empréstimos e divisões de conta.
+model DomainPerson {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lends     DomainLend[]
+  shares    DomainSplitShare[]
+
+  @@unique([name])
+}
+
+// Conta dividida entre N pessoas, opcionalmente atrelada a uma transação.
+model DomainSplitBill {
+  id                  String   @id @default(cuid())
+  title               String
+  totalAmount         Decimal
+  date                DateTime @default(now())
+  domainTransactionId String?
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  shares              DomainSplitShare[]
+}
+
+model DomainSplitShare {
+  id                  String    @id @default(cuid())
+  splitBillId         String
+  splitBill           DomainSplitBill @relation(fields: [splitBillId], references: [id], onDelete: Cascade)
+  personId            String
+  person              DomainPerson    @relation(fields: [personId], references: [id])
+  amount              Decimal
+  status              String    @default("PENDING") // PENDING, PAID
+  paidAt              DateTime?
+  inflowTransactionId String?
 }
 
 model DomainScenarioEvent {

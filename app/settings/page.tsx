@@ -321,7 +321,7 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col gap-6">
+      <div className="flex w-full max-w-3xl flex-col gap-6">
         <Skeleton className="h-9 w-64" />
         <Skeleton className="h-10 w-full" />
         <div className="grid gap-6">
@@ -334,7 +334,9 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    // max-w-3xl: formulários de configurações ficam ilegíveis/deformados
+    // ocupando a largura total do app em telas grandes.
+    <div className="flex w-full max-w-3xl flex-col gap-6">
       <PageHeader
         title="Configurações"
         description="Gerencie as preferências do seu painel financeiro."

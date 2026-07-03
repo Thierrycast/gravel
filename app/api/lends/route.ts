@@ -114,10 +114,38 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const body = await request.json()
+
+  // Aceita personId (cadastro de pessoas) ou friendName legado. Com
+  // personId, o nome/telefone vêm do cadastro; com friendName, cria/reusa a
+  // pessoa correspondente para manter o registro único.
+  let personId: string | null = typeof body.personId === "string" ? body.personId : null
+  let friendName: string | undefined = body.friendName
+  let friendPhone: string | null | undefined = body.friendPhone
+
+  if (personId) {
+    const person = await prisma.domainPerson.findUnique({ where: { id: personId } })
+    if (!person) {
+      return NextResponse.json({ error: "Pessoa não encontrada" }, { status: 404 })
+    }
+    friendName = person.name
+    friendPhone = person.phone
+  } else if (typeof friendName === "string" && friendName.trim()) {
+    const person = await prisma.domainPerson.upsert({
+      where: { name: friendName.trim() },
+      update: friendPhone ? { phone: friendPhone } : {},
+      create: { name: friendName.trim(), phone: friendPhone ?? null },
+    })
+    personId = person.id
+    friendName = person.name
+  } else {
+    return NextResponse.json({ error: "Informe a pessoa" }, { status: 400 })
+  }
+
   const lend = await prisma.domainLend.create({
     data: {
-      friendName: body.friendName,
-      friendPhone: body.friendPhone,
+      friendName: friendName as string,
+      friendPhone,
+      personId,
       amount: body.amount,
       dueDate: new Date(body.dueDate),
       description: body.description,

@@ -100,6 +100,40 @@ Checklist da revisão de ponta a ponta solicitada. Itens são marcados conforme 
 - [x] Smoke test: 200 em 17 rotas principais
 - [x] Resumo final entregue na conversa
 
+---
+
+# Rodada 2 — Feedback do uso em produção (2026-07-03)
+
+## 16. Salário como renda
+- [x] `classifyCashFlowTransaction` ganhou precedência para padrões de salário: entrada que casa padrão marcado pelo usuário é renda mesmo categorizada como "Transferência mesma titularidade" (causa raiz: salário chegava como transferência e era excluído de tudo)
+- [x] Detecção de recorrências reconhece o grupo de salário por padrão (não só por categoria), reduz à maior entrada de cada mês (ignora transferências próprias menores que casam o padrão), força intervalo mensal e usa mediana
+- [x] Re-detecção periódica: `ensureRecurringDerivedFresh` (throttle 15min) nos GETs de recorrências — antes só rodava com banco zerado; marcar salário (via transação ou settings) força re-detecção imediata
+- [x] Callsites atualizados: overview, cash-flow, projeção, inbox/review, relatórios consolidados
+
+## 17. PWA iOS
+- [x] Toasts abaixo da Dynamic Island: sonner usa `mobileOffset` (não `offset`) em telas pequenas — adicionado com safe-area-inset-top
+- [x] Viewport: removido hack `-webkit-fill-available` (html/body e override do wrapper) que conflitava com `100dvh` e causava faixa em branco/scroll quebrado no standalone
+- [x] `px-safe`/`pb-safe`/`pt-safe` definidos como utilities do Tailwind v4 — o sheet.tsx usava essas classes mas elas não geravam CSS nenhum
+- [x] Widget Pluggy Connect: iframe deslocado para baixo da Dynamic Island no standalone (botão fechar ficava em área não clicável)
+
+## 18. Larguras
+- [x] /recurring: `min-w-0` nas colunas do grid (conteúdo alargava a lista além dos cards de resumo)
+- [x] /settings: conteúdo limitado a `max-w-3xl` (formulários deformavam na largura total)
+
+## 19. Pessoas 2.0
+- [x] Cadastro persistente de pessoas (`DomainPerson`: nome, telefone com link WhatsApp, notas) com backfill automático dos empréstimos antigos
+- [x] Divisão de contas (`DomainSplitBill`/`DomainSplitShare`): N pessoas com valor específico, opcionalmente atrelada a transação, "dividir igualmente", parte do usuário = resto, marcar parte como recebida
+- [x] Métricas por pessoa (a receber, já recebido, itens abertos) e resumo geral
+- [x] Empréstimos passam a referenciar pessoa cadastrada (`personId`), com criação inline
+
+## 20. Cripto
+- [x] Nova API `/api/crypto/history` (evolução diária da carteira em BRL reconstruída dos snapshots Binance com forward-fill)
+- [x] UI: evolução da carteira (30/90/180d), alocação (donut), P&L por ativo, insights de concentração/melhor/pior ativo
+
+## 21. Insights repensada
+- [x] Nova API de ações recomendadas (cruza motor de faturas + projeção): fatura vencida (crítico), fatura vencendo em ≤7 dias, saldo projetado negativo, aportes de metas acima da sobra, cartões sem ciclo configurado — tudo com link direto
+- [x] Página reorganizada: hero de saúde financeira (score do relatório consolidado) → ações recomendadas → comportamento → assinaturas ocultas → Benford (colapsável); PageHeader/container padrão
+
 ## Pontos de atenção futuros
 - CLI e MCP ainda usam `getBillsSummaryMetrics` (heurística antiga de bills) — funcional, mas migrar para o motor de ciclo traria os mesmos números da UI.
 - "Implementações sugeridas" não iniciadas: DomainBudget + tools MCP de orçamento, webhooks/SSE de eventos, upload/parsing de boletos, `simulate_purchase_impact` e `get_goal_history` no MCP.

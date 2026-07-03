@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { serializeForJson } from "@/lib/core/http"
+import { ensureRecurringDerivedFresh } from "@/lib/domain/derived"
 import { getUserSettings } from "@/lib/domain/queries"
 
 type DashboardConfig = {
@@ -216,5 +217,12 @@ export async function PATCH(request: Request) {
       vaultInactivityMin: vaultInactivityMin !== undefined ? vaultInactivityMin : undefined,
     },
   })
+
+  // Padrões de salário afetam a classificação de renda: re-detecta as
+  // recorrências imediatamente para o salário aparecer em receitas/projeção.
+  if (salaryPatterns !== undefined) {
+    await ensureRecurringDerivedFresh({ force: true })
+  }
+
   return NextResponse.json(serializeForJson(settings))
 }

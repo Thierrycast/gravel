@@ -30,6 +30,34 @@ describe("classifyCashFlowTransaction", () => {
     ).toBe("excluded");
   });
 
+  it("treats a salary-pattern inflow as income even when categorized as own-account transfer", () => {
+    expect(
+      classifyCashFlowTransaction(
+        DomainTransactionDirection.INFLOW,
+        "Transferencia mesma titularidade - PIX",
+        "TRANSFER",
+        "Transferência Recebida|ANA PAULA DE SOUZA LIMA",
+        {
+          salaryPatterns: ["transferencia recebida|ana paula de souza lima"],
+        },
+      ),
+    ).toBe("income");
+  });
+
+  it("does not let salary patterns affect outflows", () => {
+    expect(
+      classifyCashFlowTransaction(
+        DomainTransactionDirection.OUTFLOW,
+        "Transferencia mesma titularidade - PIX",
+        "TRANSFER",
+        "Transferência Enviada|ANA PAULA DE SOUZA LIMA",
+        {
+          salaryPatterns: ["ana paula de souza lima"],
+        },
+      ),
+    ).toBe("excluded");
+  });
+
   it("excludes credit card settlements that arrive as inflows", () => {
     expect(
       classifyCashFlowTransaction(

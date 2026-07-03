@@ -14,6 +14,7 @@ import {
   ruleSuppressionKeys,
 } from "@/lib/domain/recurring";
 import { getUserSettings } from "@/lib/domain/queries";
+import { matchesSalaryPatternValues } from "@/lib/domain/salary";
 import { prisma } from "@/lib/prisma";
 
 const ZERO = new Prisma.Decimal(0);
@@ -135,6 +136,24 @@ function isLoanActive(status?: string | null) {
   );
 }
 
+// Timestamp (por processo) da última detecção de recorrências. A detecção é
+// idempotente (recria só as regras "detected"), mas custa uma varredura de 365
+// dias de transações — o throttle evita rodá-la a cada GET.
+let lastRecurringRefreshAt = 0;
+
+export async function ensureRecurringDerivedFresh(options?: {
+  maxAgeMs?: number;
+  force?: boolean;
+}) {
+  const maxAgeMs = options?.maxAgeMs ?? 15 * 60 * 1000;
+  if (!options?.force && Date.now() - lastRecurringRefreshAt < maxAgeMs) {
+    return false;
+  }
+  await refreshRecurringDerived();
+  lastRecurringRefreshAt = Date.now();
+  return true;
+}
+
 export async function refreshRecurringDerived(options?: {
   lookbackDays?: number;
   minOccurrences?: number;
@@ -143,17 +162,20 @@ export async function refreshRecurringDerived(options?: {
   const minOccurrences = options?.minOccurrences ?? 3;
   const lookbackFrom = new Date(Date.now() - lookbackDays * MS_IN_DAY);
 
-  const [transactions, categories, existingRules] = await Promise.all([
-    prisma.domainTransaction.findMany({
-      where: {
-        ignored: false,
-        occurredAt: { gte: lookbackFrom },
-      },
-      orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
-    }),
-    prisma.domainCategory.findMany(),
-    prisma.domainRecurringRule.findMany(),
-  ]);
+  const [transactions, categories, existingRules, userSettings] =
+    await Promise.all([
+      prisma.domainTransaction.findMany({
+        where: {
+          ignored: false,
+          occurredAt: { gte: lookbackFrom },
+        },
+        orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
+      }),
+      prisma.domainCategory.findMany(),
+      prisma.domainRecurringRule.findMany(),
+      getUserSettings(),
+    ]);
+  const salaryPatterns = userSettings.salaryPatterns ?? [];
 
   const categoryMap = new Map<string, (typeof categories)[number]>(
     categories.map((category) => [category.id, category]),
@@ -173,6 +195,7 @@ export async function refreshRecurringDerived(options?: {
       category?.name,
       category?.kind,
       transaction.description ?? transaction.normalizedDescription,
+      { salaryPatterns, merchantName: transaction.merchantName },
     );
     if (classification === "excluded" || classification === "investment") {
       continue;
@@ -189,7 +212,20 @@ export async function refreshRecurringDerived(options?: {
 
     if (!candidateKey) continue;
 
-    const isSalary = category ? isSalaryCategory(category) : false;
+    // Padrões de salário do usuário também formam o grupo de salário (que
+    // detecta com 1 ocorrência) — cobre salário categorizado como
+    // transferência pelo provedor.
+    const isSalary =
+      (category ? isSalaryCategory(category) : false) ||
+      (transaction.direction === DomainTransactionDirection.INFLOW &&
+        matchesSalaryPatternValues(
+          [
+            transaction.description,
+            transaction.normalizedDescription,
+            transaction.merchantName,
+          ],
+          salaryPatterns,
+        ));
     const groupingKey = isSalary ? "salary_group" : (transaction.domainMerchantId ?? candidateKey);
 
     const key = [
@@ -226,9 +262,31 @@ export async function refreshRecurringDerived(options?: {
 
     if (group.length < requiredOccurrences) continue;
 
-    const sorted = [...group].sort(
+    let sorted = [...group].sort(
       (left, right) => left.occurredAt.getTime() - right.occurredAt.getTime(),
     );
+
+    // Grupo de salário: o padrão do usuário pode casar também transferências
+    // próprias menores no mesmo mês. Mantém só a maior entrada de cada mês
+    // (o salário), evitando que intervalos/valores irregulares descartem a
+    // detecção.
+    if (isSalaryGroup && sorted.length > 1) {
+      const largestByMonth = new Map<string, (typeof sorted)[number]>();
+      for (const transaction of sorted) {
+        const monthOfTx = `${transaction.occurredAt.getUTCFullYear()}-${transaction.occurredAt.getUTCMonth()}`;
+        const current = largestByMonth.get(monthOfTx);
+        if (
+          !current ||
+          transaction.amount.abs().greaterThan(current.amount.abs())
+        ) {
+          largestByMonth.set(monthOfTx, transaction);
+        }
+      }
+      sorted = [...largestByMonth.values()].sort(
+        (left, right) => left.occurredAt.getTime() - right.occurredAt.getTime(),
+      );
+    }
+
     const intervals = sorted.slice(1).map((current, index) => {
       const previous = sorted[index];
       return (
@@ -244,7 +302,9 @@ export async function refreshRecurringDerived(options?: {
     let detectedInterval: string | null = null;
     const { INTERVAL_THRESHOLDS } = RECURRING_DETECTION;
     
-    if (isSalaryGroup && group.length === 1) {
+    if (isSalaryGroup) {
+      // Salário no Brasil é mensal; após reduzir à maior entrada por mês,
+      // não depende dos thresholds de intervalo.
       detectedInterval = "MONTHLY";
     } else {
       if (avgIntervalDays >= INTERVAL_THRESHOLDS.WEEKLY.min && avgIntervalDays <= INTERVAL_THRESHOLDS.WEEKLY.max)
@@ -264,13 +324,28 @@ export async function refreshRecurringDerived(options?: {
     const amounts = sorted.map((transaction) =>
       Math.abs(safeNumber(transaction.amount)),
     );
-    const avgAmountNumber =
-      amounts.reduce((total, current) => total + current, 0) / amounts.length;
+    // Mediana para salário: meses sem salário (só uma transferência pequena
+    // casando o padrão) não puxam a média para baixo.
+    const sortedAmounts = [...amounts].sort((a, b) => a - b);
+    const medianAmount = sortedAmounts[Math.floor(sortedAmounts.length / 2)];
+    const avgAmountNumber = isSalaryGroup
+      ? medianAmount
+      : amounts.reduce((total, current) => total + current, 0) /
+        amounts.length;
     const maxDeviation = Math.max(
       ...amounts.map((amount) => Math.abs(amount - avgAmountNumber)),
     );
 
-    if (maxDeviation > Math.max(RECURRING_DETECTION.AMOUNT_DEVIATION_FIXED, avgAmountNumber * RECURRING_DETECTION.AMOUNT_DEVIATION_PCT)) continue;
+    // Salário pode variar (bônus, reajuste); não descarta por desvio.
+    if (
+      !isSalaryGroup &&
+      maxDeviation >
+        Math.max(
+          RECURRING_DETECTION.AMOUNT_DEVIATION_FIXED,
+          avgAmountNumber * RECURRING_DETECTION.AMOUNT_DEVIATION_PCT,
+        )
+    )
+      continue;
 
     const lastTransaction = sorted.at(-1);
     if (!lastTransaction) continue;
@@ -863,6 +938,10 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
       cat?.name,
       cat?.kind,
       tx.description ?? tx.normalizedDescription,
+      {
+        salaryPatterns: settings.salaryPatterns,
+        merchantName: tx.merchantName,
+      },
     );
     return classification === "income";
   });

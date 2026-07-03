@@ -9,6 +9,7 @@ import {
   parseDateParam,
   parseNumberParam,
 } from "@/lib/core/filters";
+import { matchesSalaryPatternValues } from "@/lib/domain/salary";
 
 export const ZERO = new Prisma.Decimal(0);
 export const DAY_MS = 24 * 60 * 60 * 1000;
@@ -271,8 +272,27 @@ export function classifyCashFlowTransaction(
   categoryName?: string | null,
   categoryKind?: string | null,
   description?: string | null,
+  options?: {
+    salaryPatterns?: string[];
+    merchantName?: string | null;
+  },
 ): CashFlowClassification {
   if (direction === DomainTransactionDirection.TRANSFER) return "excluded";
+
+  // Entradas marcadas como salário pelo usuário têm precedência sobre as
+  // exclusões de transferência: salário costuma chegar como "Transferência
+  // Recebida" com categoria "mesma titularidade" e seria descartado.
+  if (
+    direction === DomainTransactionDirection.INFLOW &&
+    options?.salaryPatterns?.length &&
+    matchesSalaryPatternValues(
+      [description, options.merchantName],
+      options.salaryPatterns,
+    )
+  ) {
+    return "income";
+  }
+
   if (isInvestmentTransfer(categoryName, categoryKind, description)) {
     return "investment";
   }

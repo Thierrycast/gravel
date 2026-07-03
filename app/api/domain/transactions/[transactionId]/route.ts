@@ -2,6 +2,7 @@ import { DomainCategoryKind, DomainTransactionDirection, SourceProvider } from "
 
 import { prisma } from "@/lib/prisma";
 import { jsonOk, jsonError } from "@/lib/core/http";
+import { ensureRecurringDerivedFresh } from "@/lib/domain/derived";
 import { normalizeText } from "@/lib/domain/utils";
 
 export const dynamic = "force-dynamic";
@@ -114,6 +115,8 @@ export async function PUT(
     if (!existing) {
       return jsonError(new Error("Transação não encontrada"), 404);
     }
+
+    let salaryPatternAdded = false;
 
     const allowedFields = [
       "domainCategoryId",
@@ -282,6 +285,7 @@ export async function PUT(
                 dashboardConfigJson: JSON.stringify(config),
               },
             });
+            salaryPatternAdded = true;
           }
         }
       }
@@ -307,6 +311,12 @@ export async function PUT(
 
       return updated;
     });
+
+    if (salaryPatternAdded) {
+      // Novo padrão de salário: re-detecta recorrências para a renda aparecer
+      // em receitas recorrentes e na projeção sem esperar o throttle.
+      await ensureRecurringDerivedFresh({ force: true });
+    }
 
     return jsonOk({
       results: transaction,

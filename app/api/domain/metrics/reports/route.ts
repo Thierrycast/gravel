@@ -2,6 +2,7 @@ import { jsonError, jsonOk } from "@/lib/core/http";
 import { classifyCashFlowTransaction } from "@/lib/domain/analytics";
 import { getCardStatements } from "@/lib/domain/billing";
 import { getRecurringPayload } from "@/lib/domain/derived";
+import { getUserSettings } from "@/lib/domain/queries";
 import { monthlyEquivalentAmount } from "@/lib/domain/recurring";
 import { prisma } from "@/lib/prisma";
 
@@ -30,29 +31,36 @@ export async function GET() {
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (MONTHS_WINDOW - 1), 1),
     );
 
-    const [transactions, categories, accounts, cardStatements, recurringRules] =
-      await Promise.all([
-        prisma.domainTransaction.findMany({
-          where: {
-            ignored: false,
-            occurredAt: { gte: windowStart, lte: now },
-          },
-          select: {
-            occurredAt: true,
-            amount: true,
-            direction: true,
-            description: true,
-            merchantName: true,
-            domainCategoryId: true,
-            domainAccountId: true,
-            installmentTotal: true,
-          },
-        }),
-        prisma.domainCategory.findMany(),
-        prisma.domainAccount.findMany(),
-        getCardStatements({ now }),
-        getRecurringPayload(),
-      ]);
+    const [
+      transactions,
+      categories,
+      accounts,
+      cardStatements,
+      recurringRules,
+      settings,
+    ] = await Promise.all([
+      prisma.domainTransaction.findMany({
+        where: {
+          ignored: false,
+          occurredAt: { gte: windowStart, lte: now },
+        },
+        select: {
+          occurredAt: true,
+          amount: true,
+          direction: true,
+          description: true,
+          merchantName: true,
+          domainCategoryId: true,
+          domainAccountId: true,
+          installmentTotal: true,
+        },
+      }),
+      prisma.domainCategory.findMany(),
+      prisma.domainAccount.findMany(),
+      getCardStatements({ now }),
+      getRecurringPayload(),
+      getUserSettings(),
+    ]);
 
     const categoryById = new Map(categories.map((c) => [c.id, c]));
     const accountById = new Map(accounts.map((a) => [a.id, a]));
@@ -92,6 +100,10 @@ export async function GET() {
         category?.name,
         category?.kind,
         tx.description,
+        {
+          salaryPatterns: settings.salaryPatterns,
+          merchantName: tx.merchantName,
+        },
       );
       if (classification !== "income" && classification !== "expense") continue;
       if (tx.occurredAt > now) continue;

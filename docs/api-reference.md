@@ -66,6 +66,40 @@ Uma passada sobre as transações de 12 meses alimenta: `monthlyFlow`,
 `recurringSummary` e `health` (score 0–100 combinando taxa de poupança e
 dívida de cartão sobre a renda).
 
+## Pessoas e divisões de conta
+
+- `GET /api/people` — pessoas cadastradas com métricas (a receber, recebido, itens); faz backfill automático a partir de empréstimos antigos.
+- `POST /api/people` / `PATCH /api/people/{id}` / `DELETE /api/people/{id}` — CRUD (DELETE retorna 409 se houver pendências).
+- `GET /api/splits` — contas divididas com partes por pessoa e status.
+- `POST /api/splits` — `{ title, totalAmount, date?, domainTransactionId?, shares: [{ personId, amount }] }`; a diferença entre o total e a soma das partes é a parte do próprio usuário.
+- `PATCH /api/splits/{id}` — `{ shareId, status: "PAID"|"PENDING" }`.
+- `POST /api/lends` aceita `personId` (preferido) ou `friendName` legado (cria/reusa a pessoa).
+
+## Cripto
+
+`GET /api/crypto/history?days=90`
+
+Evolução diária do valor da carteira em BRL, reconstruída dos snapshots de
+saldo/preço da Binance (forward-fill). `summary` traz variação, pico e fundo
+do período.
+
+## Insights
+
+`GET /api/insights`
+
+Além de `nudges` e `forensics`, retorna `actions`: lista priorizada de ações
+recomendadas (fatura vencida/vencendo, saldo projetado negativo, metas acima
+da sobra, cartão sem ciclo configurado), cada uma com `severity`, `href` e
+rótulo do botão.
+
+## Classificação de renda e padrões de salário
+
+`classifyCashFlowTransaction` aceita `options.salaryPatterns`: uma entrada
+(INFLOW) que casa um padrão de salário do usuário é classificada como renda
+mesmo quando a categoria indica transferência entre contas próprias. Alterar
+padrões de salário (via settings ou "marcar como salário" numa transação)
+força a re-detecção de recorrências.
+
 ## Inbox
 
 `GET /api/inbox`
