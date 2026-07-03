@@ -30,6 +30,34 @@ describe("classifyCashFlowTransaction", () => {
     ).toBe("excluded");
   });
 
+  it("treats a salary-pattern inflow as income even when categorized as own-account transfer", () => {
+    expect(
+      classifyCashFlowTransaction(
+        DomainTransactionDirection.INFLOW,
+        "Transferencia mesma titularidade - PIX",
+        "TRANSFER",
+        "Transferência Recebida|THIERRY BARRETO DE CASTRO",
+        {
+          salaryPatterns: ["transferencia recebida|thierry barreto de castro"],
+        },
+      ),
+    ).toBe("income");
+  });
+
+  it("does not let salary patterns affect outflows", () => {
+    expect(
+      classifyCashFlowTransaction(
+        DomainTransactionDirection.OUTFLOW,
+        "Transferencia mesma titularidade - PIX",
+        "TRANSFER",
+        "Transferência Enviada|THIERRY BARRETO DE CASTRO",
+        {
+          salaryPatterns: ["thierry barreto de castro"],
+        },
+      ),
+    ).toBe("excluded");
+  });
+
   it("excludes credit card settlements that arrive as inflows", () => {
     expect(
       classifyCashFlowTransaction(

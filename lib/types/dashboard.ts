@@ -11,8 +11,18 @@ export type HiddenSubscription = {
   occurrences: number;
 };
 
+export type InsightAction = {
+  id: string;
+  severity: "critical" | "warning" | "info";
+  title: string;
+  message: string;
+  href: string;
+  hrefLabel: string;
+};
+
 export type InsightsResponse = {
   nudges?: Nudge[];
+  actions?: InsightAction[];
   forensics?: {
     benford?: {
       actual: Array<number | null>;

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import {
   getRecurringPayload,
-  refreshRecurringDerived,
+  ensureRecurringDerivedFresh,
 } from "@/lib/domain/derived";
 import {
   createManualRecurringRule,
@@ -197,12 +197,9 @@ export async function GET(request: Request) {
   const referenceMonth = getReferenceMonth(request);
   const referenceMonthEnd = monthEnd(referenceMonth);
 
-  const existing = await prisma.domainRecurringRule.count({
-    where: { active: true },
-  });
-  if (existing === 0) {
-    await refreshRecurringDerived();
-  }
+  // Re-detecta periodicamente (throttle interno) para captar transações
+  // novas e mudanças de padrões de salário sem exigir banco zerado.
+  await ensureRecurringDerivedFresh();
 
   const rules = await getRecurringPayload();
   const installmentTransactions = await prisma.domainTransaction.findMany({

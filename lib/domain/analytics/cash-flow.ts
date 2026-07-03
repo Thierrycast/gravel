@@ -1,5 +1,6 @@
 import { DomainTransactionDirection } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getUserSettings } from "../queries";
 import {
   buildMetricFilters,
   buildTransactionWhere,
@@ -14,12 +15,13 @@ export async function getCashFlowMetrics(searchParams: URLSearchParams) {
     groupBy: "month",
   });
 
-  const [transactions, categories] = await Promise.all([
+  const [transactions, categories, settings] = await Promise.all([
     prisma.domainTransaction.findMany({
       where: buildTransactionWhere(filters),
       orderBy: { occurredAt: "asc" },
     }),
     prisma.domainCategory.findMany(),
+    getUserSettings(searchParams),
   ]);
 
   const categoryMap = new Map(
@@ -54,6 +56,10 @@ export async function getCashFlowMetrics(searchParams: URLSearchParams) {
       cat?.name,
       cat?.kind,
       transaction.description ?? transaction.normalizedDescription,
+      {
+        salaryPatterns: settings.salaryPatterns,
+        merchantName: transaction.merchantName,
+      },
     );
 
     if (classification === "investment") {

@@ -92,6 +92,10 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
       category?.name,
       category?.kind,
       transaction.description ?? transaction.normalizedDescription,
+      {
+        salaryPatterns: settings.salaryPatterns,
+        merchantName: transaction.merchantName,
+      },
     );
 
     let amount = decimal(transaction.amount).abs();

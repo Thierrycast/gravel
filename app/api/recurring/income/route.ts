@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { getRecurringPayload, refreshRecurringDerived } from "@/lib/domain/derived"
+import { ensureRecurringDerivedFresh, getRecurringPayload } from "@/lib/domain/derived"
 import { monthlyEquivalentAmount } from "@/lib/domain/recurring"
 import { serializeForJson } from "@/lib/core/http"
 import { prisma } from "@/lib/prisma"
@@ -8,10 +8,7 @@ import { prisma } from "@/lib/prisma"
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  const existing = await prisma.domainRecurringRule.count({ where: { active: true } })
-  if (existing === 0) {
-    await refreshRecurringDerived()
-  }
+  await ensureRecurringDerivedFresh()
 
   const rules = await getRecurringPayload("INCOME")
   const categories = await prisma.domainCategory.findMany()

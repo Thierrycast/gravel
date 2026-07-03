@@ -1,18 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useApi } from "@/hooks/use-api";
 import {
   Brain,
   Search,
   BarChart2,
   Zap,
-  Loader2,
   AlertTriangle,
   Lightbulb,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   CheckCircle2,
+  HeartPulse,
+  Info,
 } from "lucide-react";
 import {
   ComposedChart,
@@ -29,13 +32,18 @@ import {
   CardDescription,
   CardHeader,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/page-header";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import type { InsightsResponse } from "@/lib/types/dashboard";
+import { useCurrency } from "@/lib/currency-context";
+import { cn } from "@/lib/utils";
+import type { InsightAction, InsightsResponse } from "@/lib/types/dashboard";
 
 const chartConfig = {
   valor: {
@@ -48,14 +56,69 @@ const chartConfig = {
   },
 };
 
+type ReportsHealth = {
+  score: number;
+  savingsRate: number;
+  avgMonthlyIncome: number;
+  avgMonthlyExpenses: number;
+  cardDebt: number;
+  cardDebtToIncome: number;
+};
+
+type ReportsResponse = {
+  results?: {
+    health?: ReportsHealth;
+  };
+};
+
+const SEVERITY_STYLE: Record<
+  InsightAction["severity"],
+  { container: string; icon: typeof AlertTriangle; iconClass: string }
+> = {
+  critical: {
+    container: "border-red-500/25 bg-red-500/5",
+    icon: AlertTriangle,
+    iconClass: "text-red-400",
+  },
+  warning: {
+    container: "border-amber-500/25 bg-amber-500/5",
+    icon: AlertTriangle,
+    iconClass: "text-amber-400",
+  },
+  info: {
+    container: "border-border bg-card",
+    icon: Info,
+    iconClass: "text-muted-foreground",
+  },
+};
+
+function healthTone(score: number) {
+  if (score >= 70) return "text-emerald-400";
+  if (score >= 40) return "text-amber-400";
+  return "text-red-400";
+}
+
+function healthLabel(score: number) {
+  if (score >= 70) return "Saudável";
+  if (score >= 40) return "Atenção";
+  return "Crítico";
+}
+
 export default function InsightsPage() {
+  const { format } = useCurrency();
   const { data: insights, loading } = useApi<InsightsResponse>("/api/insights");
+  const { data: reports, loading: reportsLoading } = useApi<ReportsResponse>(
+    "/api/domain/metrics/reports",
+  );
   const [forensicsOpen, setForensicsOpen] = useState(false);
 
   if (loading) {
     return (
-      <div className="flex h-[50vh] items-center justify-center">
-        <Loader2 className="size-8 animate-spin text-primary" />
+      <div className="flex flex-col gap-6">
+        <Skeleton className="h-9 w-48" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-48 w-full" />
+        <Skeleton className="h-48 w-full" />
       </div>
     );
   }
@@ -63,6 +126,8 @@ export default function InsightsPage() {
   const nudges = insights?.nudges ?? [];
   const warnings = nudges.filter((n) => n.type === "WARNING");
   const infos = nudges.filter((n) => n.type !== "WARNING");
+  const actions = insights?.actions ?? [];
+  const health = reports?.results?.health;
 
   const benfordData = insights?.forensics?.benford?.actual.map(
     (v: number | null, i: number) => ({
@@ -79,18 +144,114 @@ export default function InsightsPage() {
   const hiddenSubs = insights?.forensics?.hiddenSubs ?? [];
 
   return (
-    <div className="flex flex-col gap-8 max-w-5xl mx-auto">
-      {/* Header */}
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Insights"
+        description="O que merece a sua atenção agora, gerado a partir de faturas, projeções e comportamento."
+      />
+
+      {/* Saúde financeira — hero */}
+      <Card>
+        <CardContent className="flex flex-col gap-4 pt-5 sm:flex-row sm:items-center sm:justify-between">
+          {reportsLoading || !health ? (
+            <Skeleton className="h-16 w-full" />
+          ) : (
+            <>
+              <div className="flex items-center gap-4">
+                <div className="flex size-16 shrink-0 items-center justify-center rounded-full border-4 border-current bg-background">
+                  <span
+                    className={cn(
+                      "text-xl font-bold tabular-nums",
+                      healthTone(health.score),
+                    )}
+                  >
+                    {health.score}
+                  </span>
+                </div>
+                <div>
+                  <p className="flex items-center gap-2 text-sm font-semibold">
+                    <HeartPulse
+                      className={cn("size-4", healthTone(health.score))}
+                    />
+                    Saúde financeira: {healthLabel(health.score)}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Poupança de {health.savingsRate.toFixed(0)}% da renda ·
+                    dívida de cartão em {health.cardDebtToIncome.toFixed(0)}% da
+                    renda mensal
+                  </p>
+                </div>
+              </div>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/reports">
+                  Ver relatórios
+                  <ChevronRight className="size-3.5" />
+                </Link>
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Ações recomendadas */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-          Insights
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Análise automática do seu comportamento financeiro.
-        </p>
+        <div className="mb-3 flex items-center gap-2">
+          <Zap className="size-4 text-primary" />
+          <h2 className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+            Ações recomendadas
+          </h2>
+        </div>
+        {actions.length === 0 ? (
+          <div className="flex items-center gap-3 rounded-xl border bg-card p-5">
+            <CheckCircle2 className="size-5 shrink-0 text-emerald-400" />
+            <p className="text-sm text-muted-foreground">
+              Nada pendente: faturas em dia, projeção positiva e metas no
+              ritmo.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {actions.map((action) => {
+              const style = SEVERITY_STYLE[action.severity];
+              const Icon = style.icon;
+              return (
+                <div
+                  key={action.id}
+                  className={cn(
+                    "flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between",
+                    style.container,
+                  )}
+                >
+                  <div className="flex gap-3">
+                    <Icon
+                      className={cn("mt-0.5 size-4 shrink-0", style.iconClass)}
+                    />
+                    <div>
+                      <p className="text-sm font-medium">{action.title}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {action.message}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 self-start sm:self-auto"
+                  >
+                    <Link href={action.href}>
+                      {action.hrefLabel}
+                      <ChevronRight className="size-3.5" />
+                    </Link>
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Warnings — prominent at top */}
+      {/* Warnings comportamentais */}
       {warnings.length > 0 && (
         <div className="flex flex-col gap-3">
           {warnings.map((nudge, i) => (
@@ -98,12 +259,12 @@ export default function InsightsPage() {
               key={i}
               className="flex gap-4 rounded-xl border border-red-500/20 bg-red-500/5 p-4"
             >
-              <AlertTriangle className="size-5 shrink-0 text-red-400 mt-0.5" />
+              <AlertTriangle className="mt-0.5 size-5 shrink-0 text-red-400" />
               <div>
                 <p className="text-sm font-semibold text-red-400">
                   {nudge.title}
                 </p>
-                <p className="text-sm text-muted-foreground mt-0.5">
+                <p className="mt-0.5 text-sm text-muted-foreground">
                   {nudge.message}
                 </p>
               </div>
@@ -112,41 +273,32 @@ export default function InsightsPage() {
         </div>
       )}
 
-      {/* Behavioral nudges (INFO) */}
+      {/* Nudges informativos */}
       <div>
-        <div className="flex items-center gap-2 mb-3">
+        <div className="mb-3 flex items-center gap-2">
           <Brain className="size-4 text-primary" />
           <h2 className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
             Comportamento financeiro
           </h2>
         </div>
-        {infos.length === 0 && warnings.length === 0 && (
+        {infos.length === 0 ? (
           <div className="flex items-center gap-3 rounded-xl border bg-card p-5">
-            <CheckCircle2 className="size-5 text-emerald-400 shrink-0" />
+            <CheckCircle2 className="size-5 shrink-0 text-emerald-400" />
             <p className="text-sm text-muted-foreground">
-              Tudo calmo por aqui. Nenhum alerta comportamental no momento.
+              Nenhum padrão de comportamento chamando atenção no momento.
             </p>
           </div>
-        )}
-        {infos.length === 0 && warnings.length > 0 && (
-          <div className="flex items-center gap-3 rounded-xl border bg-card p-5">
-            <CheckCircle2 className="size-5 text-emerald-400 shrink-0" />
-            <p className="text-sm text-muted-foreground">
-              Nenhum insight adicional além dos alertas acima.
-            </p>
-          </div>
-        )}
-        {infos.length > 0 && (
+        ) : (
           <div className="grid gap-3 sm:grid-cols-2">
             {infos.map((nudge, i) => (
               <div
                 key={i}
-                className="flex gap-3 rounded-xl border bg-card p-4 hover:bg-muted/30 transition-colors"
+                className="flex gap-3 rounded-xl border bg-card p-4 transition-colors hover:bg-muted/30"
               >
-                <Lightbulb className="size-4 shrink-0 text-amber-400 mt-0.5" />
+                <Lightbulb className="mt-0.5 size-4 shrink-0 text-amber-400" />
                 <div>
                   <p className="text-sm font-medium">{nudge.title}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
+                  <p className="mt-0.5 text-xs text-muted-foreground">
                     {nudge.message}
                   </p>
                 </div>
@@ -156,9 +308,9 @@ export default function InsightsPage() {
         )}
       </div>
 
-      {/* Hidden subscriptions — elevated */}
+      {/* Assinaturas ocultas */}
       <div>
-        <div className="flex items-center gap-2 mb-3">
+        <div className="mb-3 flex items-center gap-2">
           <Search className="size-4 text-primary" />
           <h2 className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
             Assinaturas ocultas detectadas
@@ -168,7 +320,7 @@ export default function InsightsPage() {
           <CardContent className="pt-5">
             {hiddenSubs.length === 0 ? (
               <div className="flex items-center gap-3 py-4">
-                <Zap className="size-5 text-muted-foreground/40 shrink-0" />
+                <Zap className="size-5 shrink-0 text-muted-foreground/40" />
                 <p className="text-sm text-muted-foreground">
                   Nenhuma assinatura oculta detectada.
                 </p>
@@ -187,8 +339,8 @@ export default function InsightsPage() {
                         {sub.occurrences}×
                       </p>
                     </div>
-                    <p className="font-mono font-bold text-pink-400 tabular-nums">
-                      ~R$ {(sub.avgAmount ?? 0).toFixed(2)}
+                    <p className="font-mono font-bold tabular-nums text-pink-400">
+                      ~{format(sub.avgAmount ?? 0)}
                     </p>
                   </div>
                 ))}
@@ -202,11 +354,11 @@ export default function InsightsPage() {
         </Card>
       </div>
 
-      {/* Forensics — collapsible advanced section */}
+      {/* Forense — Benford */}
       <div>
         <button
           type="button"
-          className="flex w-full items-center justify-between rounded-xl border bg-card px-5 py-4 hover:bg-muted/30 transition-colors"
+          className="flex w-full items-center justify-between rounded-xl border bg-card px-5 py-4 transition-colors hover:bg-muted/30"
           onClick={() => setForensicsOpen((v) => !v)}
         >
           <div className="flex items-center gap-2">
@@ -279,10 +431,9 @@ export default function InsightsPage() {
         )}
       </div>
 
-      {/* Footer note */}
-      <p className="text-xs text-muted-foreground/50 text-center pb-4">
-        Os insights são gerados automaticamente com base no histórico de
-        transações.
+      <p className="pb-4 text-center text-xs text-muted-foreground/50">
+        Os insights são gerados automaticamente com base em faturas, projeções
+        e histórico de transações.
       </p>
     </div>
   );

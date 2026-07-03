@@ -190,7 +190,10 @@ export default function RecurringPage() {
       {/* Two columns: Fixed & Installments */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Fixed expenses */}
-        <div>
+        {/* min-w-0: sem isso o conteúdo (nomes longos + valores) alarga a
+            coluna do grid além do viewport no mobile e a lista fica mais
+            larga que os cards de resumo. */}
+        <div className="min-w-0">
           <div className="flex items-center gap-2 mb-4">
             <Repeat className="size-4 text-muted-foreground" />
             <h3 className="font-semibold">Parcelas</h3>
@@ -282,7 +285,7 @@ export default function RecurringPage() {
         </div>
 
         {/* Contas fixas */}
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-2 mb-4">
             <CreditCard className="size-4 text-muted-foreground" />
             <h3 className="font-semibold">Contas Fixas</h3>

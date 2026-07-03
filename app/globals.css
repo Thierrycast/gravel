@@ -334,7 +334,6 @@
   html,
   body {
     height: 100%;
-    height: -webkit-fill-available;
     width: 100%;
     max-width: 100%;
     overflow-x: hidden;
@@ -371,10 +370,12 @@
     padding-bottom: max(5.25rem, calc(4rem + env(safe-area-inset-bottom, 0px) + 1.25rem)) !important;
   }
 
-  /* Override 100dvh on parent wrapper in standalone mode to avoid iOS PWA viewport height bugs */
-  [data-slot="sidebar-wrapper"] {
-    height: 100% !important;
-    height: -webkit-fill-available !important;
+  /* Widget Pluggy Connect (zoid injeta um iframe fullscreen): empurra o
+     conteúdo para baixo da Dynamic Island para o botão de fechar (dentro do
+     iframe, no topo direito) ficar em área clicável. */
+  #PluggyConnect iframe {
+    top: env(safe-area-inset-top, 0px) !important;
+    height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
   }
 }
 
@@ -408,6 +409,22 @@
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
+}
+
+/* Safe-area utilities usadas por sheets/dialogs — sem elas as classes
+   px-safe/pb-safe do sheet.tsx não geravam CSS nenhum (conteúdo por baixo
+   do home indicator e das bordas curvas no iOS). */
+@utility px-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 @utility section-eyebrow {
