@@ -525,14 +525,95 @@ const TOOLS: Tool[] = [
   },
   {
     name: "trigger_sync",
-    description: "Dispara sincronização manual (Pluggy, Binance ou Projeção)",
+    description: "Dispara sincronização manual (Pluggy, Binance ou Projeção). Com refresh, pede dados frescos à instituição via PATCH /items antes de reler.",
     inputSchema: {
       type: "object",
       properties: {
         provider: { type: "string", enum: ["pluggy", "binance", "all"], default: "all", description: "Provedor" },
         force: { type: "boolean", default: false, description: "Forçar liberação de locks existentes" },
+        refresh: { type: "boolean", default: true, description: "Disparar PATCH /items para atualizar na instituição (só Pluggy)" },
       },
     },
+  },
+  {
+    name: "refresh_item",
+    description: "Dispara PATCH /items/{id} e acompanha o executionStatus até terminar (SUCCESS/PARTIAL_SUCCESS/ERROR). Trata MFA, consentimento, reconexão e rate limit.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: { type: "string", description: "ID do item Pluggy" },
+        wait: { type: "boolean", default: true, description: "Aguardar o sync terminar (senão dispara e retorna)" },
+      },
+      required: ["itemId"],
+    },
+  },
+  {
+    name: "get_sync_items",
+    description: "Estado de sincronização de cada item Pluggy: status, executionStatus, último sync, erro, consentimento.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "refresh_account_balance",
+    description: "Atualiza o saldo de uma conta em tempo real via GET /accounts/{id}/balance, sem sync completo. Faz fallback ao saldo salvo em caso de falha.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        accountId: { type: "string", description: "ID da conta de domínio" },
+      },
+      required: ["accountId"],
+    },
+  },
+  {
+    name: "enrich_items",
+    description: "Roda o enriquecimento por item da Pluggy: recurring-payments (recorrências) e behavior-analysis (perfil financeiro).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: { type: "string", description: "ID do item (omitir = todos)" },
+      },
+    },
+  },
+  {
+    name: "get_card_statements",
+    description: "Faturas de cartão por ciclo (motor de billing): fatura atual, próximas, passadas, vencidas e total em aberto, por cartão.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        accountId: { type: "string", description: "ID de um cartão específico (omitir = todos)" },
+      },
+    },
+  },
+  {
+    name: "get_detected_recurring",
+    description: "Recorrências detectadas pela Pluggy (recurring-payments), separadas em receitas e despesas, com regularityScore e ocorrências.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        includeHidden: { type: "boolean", default: false, description: "Incluir as ocultadas pelo usuário" },
+      },
+    },
+  },
+  {
+    name: "set_detected_recurring_status",
+    description: "Confirma, oculta ou reabre uma recorrência detectada pela Pluggy.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "ID da recorrência detectada" },
+        userStatus: { type: "string", enum: ["SUGGESTED", "CONFIRMED", "HIDDEN"], description: "Nova decisão manual" },
+      },
+      required: ["id", "userStatus"],
+    },
+  },
+  {
+    name: "get_reports",
+    description: "Relatórios consolidados de 12 meses: receitas vs despesas, saúde financeira, gastos por conta, faturas por mês, maiores gastos, variação por categoria e recorrências.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "get_people",
+    description: "Pessoas cadastradas com métricas de valores a receber (empréstimos + divisões de conta).",
+    inputSchema: { type: "object", properties: {} },
   },
   {
     name: "update_settings",
@@ -1171,6 +1252,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "trigger_sync": {
         const provider = String(args?.provider ?? "all");
         const force = Boolean(args?.force);
+        const refresh = args?.refresh !== false;
 
         if (force) {
           await prisma.opsSyncLock.deleteMany();
@@ -1178,15 +1260,132 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         if (provider === "all") {
           const { runFullOperationalSync } = await import("../lib/ingestion/provider-sync.js");
-          runFullOperationalSync({}).catch(err => console.error("[mcp] full sync failed:", err));
+          runFullOperationalSync({ pluggy: { refresh } }).catch(err => console.error("[mcp] full sync failed:", err));
         } else if (provider === "pluggy") {
           const { runPluggySync } = await import("../lib/ingestion/provider-sync.js");
-          runPluggySync({ scope: "mcp/manual", resource: "full" }).catch(err => console.error("[mcp] pluggy sync failed:", err));
+          runPluggySync({ scope: "mcp/manual", resource: "full", refresh }).catch(err => console.error("[mcp] pluggy sync failed:", err));
         } else if (provider === "binance") {
           const { runBinanceSync } = await import("../lib/ingestion/provider-sync.js");
           runBinanceSync({ scope: "mcp/manual", resource: "full" }).catch(err => console.error("[mcp] binance sync failed:", err));
         }
-        result = { triggered: true, provider, force };
+        result = { triggered: true, provider, force, refresh };
+        break;
+      }
+      case "refresh_item": {
+        const itemId = String(args?.itemId ?? "");
+        if (!itemId) throw new Error("itemId é obrigatório");
+        const { refreshPluggyItemAndWait } = await import("../lib/pluggy-item-refresh.js");
+        if (args?.wait === false) {
+          void refreshPluggyItemAndWait(itemId).catch((err) =>
+            console.error("[mcp] refresh_item failed:", err),
+          );
+          result = { itemId, triggered: true };
+        } else {
+          result = await refreshPluggyItemAndWait(itemId);
+        }
+        break;
+      }
+      case "get_sync_items": {
+        const items = await prisma.pluggyItem.findMany({ orderBy: { updatedAt: "desc" } });
+        result = items.map((item) => ({
+          itemId: item.pluggyItemId,
+          institution: item.connectorName,
+          status: item.status,
+          executionStatus: item.executionStatus,
+          lastSyncedAt: item.lastSyncedAt,
+          lastUpdatedAt: item.lastUpdatedAt,
+          consentExpiresAt: item.consentExpiresAt,
+          syncError: item.syncError,
+        }));
+        break;
+      }
+      case "refresh_account_balance": {
+        const accountId = String(args?.accountId ?? "");
+        if (!accountId) throw new Error("accountId é obrigatório");
+        const { refreshDomainAccountBalance } = await import("../lib/pluggy-balance.js");
+        result = await refreshDomainAccountBalance(accountId);
+        break;
+      }
+      case "enrich_items": {
+        const itemId = args?.itemId ? String(args.itemId) : undefined;
+        const { runItemEnrichment } = await import("../lib/domain/enrichment/pluggy-item.js");
+        result = await runItemEnrichment(itemId);
+        break;
+      }
+      case "get_card_statements": {
+        const { getCardStatements } = await import("../lib/domain/billing.js");
+        const accountId = args?.accountId ? String(args.accountId) : undefined;
+        result = await getCardStatements({ accountId });
+        break;
+      }
+      case "get_detected_recurring": {
+        const includeHidden = args?.includeHidden === true;
+        const rows = await prisma.pluggyRecurringPayment.findMany({
+          where: includeHidden ? {} : { userStatus: { not: "HIDDEN" } },
+          orderBy: [{ regularityScore: "desc" }, { occurrences: "desc" }],
+        });
+        const mapped = rows.map((row) => ({
+          id: row.id,
+          description: row.description,
+          averageAmount: Number(row.averageAmount.toString()),
+          direction: row.direction,
+          occurrences: row.occurrences,
+          regularityScore: row.regularityScore ? Number(row.regularityScore.toString()) : null,
+          userStatus: row.userStatus,
+          firstDate: row.firstDate,
+          lastDate: row.lastDate,
+        }));
+        result = {
+          income: mapped.filter((r) => r.direction === "INCOME"),
+          expense: mapped.filter((r) => r.direction === "EXPENSE"),
+        };
+        break;
+      }
+      case "set_detected_recurring_status": {
+        const id = String(args?.id ?? "");
+        const userStatus = String(args?.userStatus ?? "");
+        if (!id || !["SUGGESTED", "CONFIRMED", "HIDDEN"].includes(userStatus)) {
+          throw new Error("id e userStatus (SUGGESTED|CONFIRMED|HIDDEN) são obrigatórios");
+        }
+        const updated = await prisma.pluggyRecurringPayment.update({
+          where: { id },
+          data: { userStatus },
+        });
+        result = { id: updated.id, userStatus: updated.userStatus };
+        break;
+      }
+      case "get_reports": {
+        const { getCardStatements } = await import("../lib/domain/billing.js");
+        // Reaproveita a mesma lógica da rota de relatórios via fetch interno
+        // não é possível no MCP; então montamos um resumo essencial aqui.
+        const statements = await getCardStatements({});
+        const totalOpen = statements.reduce((sum, card) => sum + card.totalOpen, 0);
+        const { getProjectionPayload } = await import("../lib/domain/derived.js");
+        const projection = await getProjectionPayload(new URLSearchParams("months=6"));
+        result = {
+          cardDebtOpen: Math.round(totalOpen * 100) / 100,
+          projection: projection.summary,
+        };
+        break;
+      }
+      case "get_people": {
+        const [people, lends] = await Promise.all([
+          prisma.domainPerson.findMany({ orderBy: { name: "asc" } }),
+          prisma.domainLend.findMany(),
+        ]);
+        result = people.map((person) => {
+          const personLends = lends.filter((l) => l.personId === person.id);
+          const pending = personLends
+            .filter((l) => l.status === "PENDING")
+            .reduce((sum, l) => sum + Number(l.amount), 0);
+          return {
+            id: person.id,
+            name: person.name,
+            phone: person.phone,
+            pendingTotal: Math.round(pending * 100) / 100,
+            openItems: personLends.filter((l) => l.status === "PENDING").length,
+          };
+        });
         break;
       }
       case "update_settings": {
