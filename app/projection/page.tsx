@@ -43,6 +43,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { PageError } from "@/components/page-error";
+import { PageHeader } from "@/components/page-header";
 import {
   Tooltip,
   TooltipContent,
@@ -58,6 +59,7 @@ interface ProjectionMonth {
   estimatedSalary?: number;
   income: number;
   recurringExpenses: number;
+  cardBills?: number;
   installments: number;
   variableExpenses: number;
   projected: number;
@@ -69,6 +71,12 @@ interface ProjectionSummary {
   averageMonthlyIncome: number;
   averageMonthlyExpenses: number;
   projectedSavings: number;
+  currentBalance?: number;
+  currentMonthAdjustment?: number;
+  overdueStatements?: number;
+  firstNegativeMonth?: string | null;
+  goalCommitmentMonthly?: number;
+  goalCommitmentCount?: number;
 }
 
 interface ProjectionData {
@@ -96,6 +104,10 @@ const chartConfig: ChartConfig = {
   recurringExpenses: {
     label: "Recorr\u00eancias",
     color: "#f43f5e",
+  },
+  cardBills: {
+    label: "Faturas de cart\u00e3o",
+    color: "#ec4899",
   },
   installments: {
     label: "Parcelas",
@@ -147,6 +159,7 @@ export default function ProjectionPage() {
       (data?.months ?? []).map((month) => ({
         ...month,
         recurringExpenses: -month.recurringExpenses,
+        cardBills: -(month.cardBills ?? 0),
         installments: -month.installments,
         variableExpenses: -month.variableExpenses,
       })),
@@ -183,14 +196,32 @@ export default function ProjectionPage() {
       });
     }
 
+    if (summary?.firstNegativeMonth) {
+      result.push({
+        title: `Saldo projetado fica negativo em ${summary.firstNegativeMonth}`,
+        variant: "destructive",
+      });
+    }
+
+    if ((summary?.overdueStatements ?? 0) > 0) {
+      result.push({
+        title: `Faturas vencidas somam ${format(summary?.overdueStatements ?? 0)}`,
+        variant: "destructive",
+      });
+    }
+
     const overBudget = monthsData.filter(
       (month) =>
-        month.recurringExpenses + month.installments + month.variableExpenses >
+        month.recurringExpenses +
+          (month.cardBills ?? 0) +
+          month.installments +
+          month.variableExpenses >
         month.income,
     );
     if (overBudget.length > 0) {
       const excess =
         overBudget[0].recurringExpenses +
+        (overBudget[0].cardBills ?? 0) +
         overBudget[0].installments +
         overBudget[0].variableExpenses -
         overBudget[0].income;
@@ -207,6 +238,25 @@ export default function ProjectionPage() {
             : `Despesas excedem receita por ${pct}% em ${overBudget.length} mês(es)`,
         variant: "destructive",
       });
+    }
+
+    const goalCommitment = summary?.goalCommitmentMonthly ?? 0;
+    if (goalCommitment > 0 && monthsData.length > 0) {
+      const avgNet =
+        (summary?.averageMonthlyIncome ?? 0) -
+        (summary?.averageMonthlyExpenses ?? 0);
+      const goalCount = summary?.goalCommitmentCount ?? 0;
+      if (avgNet < goalCommitment) {
+        result.push({
+          title: `Metas pedem ${format(goalCommitment)}/mês, mas a sobra média projetada é ${format(Math.max(avgNet, 0))}`,
+          variant: "destructive",
+        });
+      } else {
+        result.push({
+          title: `Sobra projetada cobre os aportes de ${goalCount} meta(s) (${format(goalCommitment)}/mês)`,
+          variant: "default",
+        });
+      }
     }
 
     if ((summary?.projectedSavings ?? 0) > 0) {
@@ -241,32 +291,27 @@ export default function ProjectionPage() {
   return (
     <div className="flex min-w-0 max-w-full flex-col gap-6 overflow-x-hidden">
       {/* Header */}
-      <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            Proje&ccedil;&atilde;o de Saldo
-          </h1>
-          <p className="mt-1 max-w-full text-sm text-muted-foreground">
-            Visualize o impacto das suas despesas recorrentes e parcelas no
-            futuro.
-          </p>
-        </div>
-        <div className="flex gap-0.5">
-          {horizons.map((h) => (
-            <button
-              key={h.value}
-              onClick={() => setMonths(h.value)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                months === h.value
-                  ? "bg-blue-500/20 text-blue-400"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {h.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <PageHeader
+        title="Projeção de Saldo"
+        description="Visualize o impacto das suas despesas recorrentes e parcelas no futuro."
+        actions={
+          <div className="flex gap-0.5">
+            {horizons.map((h) => (
+              <button
+                key={h.value}
+                onClick={() => setMonths(h.value)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  months === h.value
+                    ? "bg-blue-500/20 text-blue-400"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {h.label}
+              </button>
+            ))}
+          </div>
+        }
+      />
 
       <div className="rounded-xl border border-sky-500/30 bg-sky-500/5 p-4 text-sm text-sky-700 dark:text-sky-300">
         <div className="flex items-start gap-3">
@@ -280,6 +325,16 @@ export default function ProjectionPage() {
               Salário estimado entra apenas como complemento quando não há uma
               receita recorrente ou transação futura de salário cobrindo o mês.
             </p>
+            {(data?.summary.currentMonthAdjustment ?? 0) !== 0 && (
+              <p className="opacity-90">
+                Compromissos já conhecidos até o fim deste mês (fatura a vencer,
+                lançamentos agendados) ajustam o saldo inicial em{" "}
+                <strong>
+                  {format(data?.summary.currentMonthAdjustment ?? 0)}
+                </strong>
+                .
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -519,6 +574,12 @@ export default function ProjectionPage() {
                   radius={[4, 4, 0, 0]}
                 />
                 <Bar
+                  dataKey="cardBills"
+                  stackId="outflow"
+                  fill="var(--color-cardBills)"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
                   dataKey="installments"
                   stackId="outflow"
                   fill="var(--color-installments)"
@@ -631,6 +692,12 @@ export default function ProjectionPage() {
                             <TableCell>Recorrências</TableCell>
                             <TableCell className="text-right font-medium text-red-500">
                               {format(-month.recurringExpenses)}
+                            </TableCell>
+                          </TableRow>
+                          <TableRow>
+                            <TableCell>Faturas de cartão</TableCell>
+                            <TableCell className="text-right font-medium text-red-500">
+                              {format(-(month.cardBills ?? 0))}
                             </TableCell>
                           </TableRow>
                           <TableRow>

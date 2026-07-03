@@ -1,134 +1,50 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  ChevronLeft,
+  AlertTriangle,
+  Calendar,
+  CheckCircle2,
+  ChevronDown,
   ChevronRight,
   CreditCard,
-  Calendar,
-  AlertCircle,
-  CheckCircle2,
-  Clock,
+  History,
+  Receipt,
 } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import { useCurrency } from "@/lib/currency-context";
-import { formatDate, daysUntil, daysUntilLabel } from "@/lib/format";
+import { formatDate, daysUntilLabel } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { PageError } from "@/components/page-error";
+import { PageHeader } from "@/components/page-header";
+import type {
+  CardStatement,
+  CardStatementsPayload,
+  CardStatementsResponse,
+  CardStatementStatus,
+} from "@/lib/types/api";
 
-interface Bill {
-  id: string;
-  accountId: string | null;
-  accountName: string;
-  institutionName: string | null;
-  dueDate: string;
-  totalAmount: number;
-  minimumPayment: number;
-  status: string;
-  paidAt?: string | null;
-  closingDate: string;
-}
+const STATUS_LABEL: Record<CardStatementStatus, string> = {
+  OPEN: "Aberta",
+  CLOSED: "Fechada",
+  OVERDUE: "Vencida",
+  PAID: "Paga",
+  FUTURE: "Futura",
+};
 
-
-interface BillsSummary {
-  totalOpen: number;
-  totalOverdue: number;
-  totalPaid: number;
-  counts: {
-    total: number;
-    open: number;
-    overdue: number;
-    paid: number;
-  };
-  upcoming: Bill[];
-}
-
-interface BillsResponse {
-  results: Bill[];
-}
-
-interface BillsSummaryResponse {
-  summary: BillsSummary;
-}
-
-const DISPLAY_CURRENCY_THRESHOLD = 0.005;
-
-function normalizeDisplayedAmount(value: number): number {
-  return Math.abs(value) < DISPLAY_CURRENCY_THRESHOLD ? 0 : value;
-}
-
-function normalizeDisplayedBill(bill: Bill): Bill {
-  const totalAmount = normalizeDisplayedAmount(bill.totalAmount);
-  const status = bill.paidAt
-    ? "PAID"
-    : totalAmount === 0 && bill.status !== "PAID"
-      ? "CLOSED"
-      : bill.status;
-  return {
-    ...bill,
-    accountName: bill.accountName.trim(),
-    institutionName: bill.institutionName?.trim() ?? null,
-    totalAmount,
-    minimumPayment: normalizeDisplayedAmount(bill.minimumPayment),
-    status,
-  };
-}
-
-function getStatusConfig(status: string, dueDate: string, totalAmount: number) {
-  const days = daysUntil(dueDate);
-
-  if (status === "PAID") {
-    return {
-      label: "Paga",
-      className: "bg-blue-400/10 text-blue-400 border-blue-400/20",
-      icon: CheckCircle2,
-      dotColor: "bg-blue-400",
-    };
-  }
-  if (totalAmount === 0) {
-    return {
-      label: "Sem saldo",
-      className: "bg-emerald-400/10 text-emerald-400 border-emerald-400/20",
-      icon: CheckCircle2,
-      dotColor: "bg-emerald-400",
-    };
-  }
-  if (status === "CLOSED") {
-    return {
-      label: "Fechada",
-      className: "bg-emerald-400/10 text-emerald-400 border-emerald-400/20",
-      icon: CheckCircle2,
-      dotColor: "bg-emerald-400",
-    };
-  }
-  if (days < 0) {
-    return {
-      label: "Vencida",
-      className: "bg-red-400/10 text-red-400 border-red-400/20",
-      icon: AlertCircle,
-      dotColor: "bg-red-400",
-    };
-  }
-  if (days <= 7) {
-    return {
-      label: "A vencer",
-      className: "bg-amber-400/10 text-amber-400 border-amber-400/20",
-      icon: Clock,
-      dotColor: "bg-amber-400",
-    };
-  }
-  return {
-    label: "Aberta",
-    className: "bg-zinc-400/10 text-zinc-400 border-zinc-400/20",
-    icon: Calendar,
-    dotColor: "bg-zinc-400",
-  };
-}
+const STATUS_CLASS: Record<CardStatementStatus, string> = {
+  OPEN: "bg-amber-400/10 text-amber-400 border-amber-400/20",
+  CLOSED: "bg-zinc-400/10 text-zinc-400 border-zinc-400/20",
+  OVERDUE: "bg-red-400/10 text-red-400 border-red-400/20",
+  PAID: "bg-emerald-400/10 text-emerald-400 border-emerald-400/20",
+  FUTURE: "bg-blue-400/10 text-blue-400 border-blue-400/20",
+};
 
 function getInitials(name?: string): string {
   if (!name) return "?";
@@ -141,160 +57,310 @@ function getInitials(name?: string): string {
     .toUpperCase();
 }
 
-const monthNames = [
-  "Janeiro",
-  "Fevereiro",
-  "Março",
-  "Abril",
-  "Maio",
-  "Junho",
-  "Julho",
-  "Agosto",
-  "Setembro",
-  "Outubro",
-  "Novembro",
-  "Dezembro",
-];
+function StatusBadge({ status }: { status: CardStatementStatus }) {
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "shrink-0 rounded-full border px-2 py-0 text-[10px] font-semibold uppercase tracking-wider",
+        STATUS_CLASS[status],
+      )}
+    >
+      {STATUS_LABEL[status]}
+    </Badge>
+  );
+}
+
+function cycleTransactionsHref(statement: CardStatement) {
+  const from = statement.periodStart.slice(0, 10);
+  const to = statement.periodEnd.slice(0, 10);
+  return `/transactions?accountId=${statement.accountId}&period=custom&from=${from}&to=${to}`;
+}
+
+function StatementRow({
+  statement,
+  formatAmount,
+  onMarkPaid,
+  paying,
+}: {
+  statement: CardStatement;
+  formatAmount: (value: number) => string;
+  onMarkPaid?: (billId: string) => void;
+  paying?: boolean;
+}) {
+  const canMarkPaid =
+    onMarkPaid &&
+    statement.providerBillId &&
+    (statement.status === "OVERDUE" || statement.status === "CLOSED");
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium tabular-nums">
+            {formatDate(statement.periodStart)} –{" "}
+            {formatDate(statement.periodEnd)}
+          </span>
+          <StatusBadge status={statement.status} />
+        </div>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Vence {formatDate(statement.dueDate)}
+          {statement.transactionCount > 0 &&
+            ` · ${statement.transactionCount} transações`}
+          {statement.reconciled && " · valor do banco"}
+        </p>
+      </div>
+      <div className="text-right">
+        <p className="text-sm font-semibold tabular-nums">
+          {formatAmount(statement.amount)}
+        </p>
+        {statement.minimumPayment != null && statement.minimumPayment > 0 && (
+          <p className="text-xs tabular-nums text-muted-foreground">
+            Mín: {formatAmount(statement.minimumPayment)}
+          </p>
+        )}
+      </div>
+      {canMarkPaid && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          disabled={paying}
+          onClick={() => onMarkPaid(statement.providerBillId as string)}
+        >
+          <CheckCircle2 className="size-3" />
+          {paying ? "..." : "Paga"}
+        </Button>
+      )}
+      <Link
+        href={cycleTransactionsHref(statement)}
+        className="text-muted-foreground transition-colors hover:text-foreground"
+        aria-label="Ver transações do ciclo"
+      >
+        <ChevronRight className="size-4" />
+      </Link>
+    </div>
+  );
+}
+
+function CardSection({
+  card,
+  formatAmount,
+  onMarkPaid,
+  payingBillId,
+}: {
+  card: CardStatementsPayload;
+  formatAmount: (value: number) => string;
+  onMarkPaid: (billId: string) => void;
+  payingBillId: string | null;
+}) {
+  const [showPast, setShowPast] = useState(false);
+  const upcomingTotal = card.upcoming.reduce((sum, s) => sum + s.amount, 0);
+  const overdue = card.past.filter((s) => s.status === "OVERDUE");
+
+  return (
+    <section className="rounded-xl border bg-card">
+      {/* Card header */}
+      <div className="flex items-center gap-3 p-4 sm:p-5">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
+          {getInitials(card.accountName)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="truncate text-base font-semibold">
+              {card.accountName}
+            </h2>
+            {card.institutionName && (
+              <span className="hidden text-[10px] font-mono uppercase tracking-wider text-muted-foreground opacity-70 sm:inline">
+                {card.institutionName}
+              </span>
+            )}
+          </div>
+          {card.configured ? (
+            <p className="text-xs text-muted-foreground">
+              Fecha dia {card.closingDay} · vence dia {card.dueDay ?? "—"}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Ciclo de fatura não configurado
+            </p>
+          )}
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-muted-foreground">Total em aberto</p>
+          <p className="text-sm font-bold tabular-nums text-pink-400">
+            {formatAmount(card.totalOpen)}
+          </p>
+        </div>
+      </div>
+
+      {!card.configured ? (
+        <div className="border-t p-4 sm:p-5">
+          <div className="flex items-start gap-3 rounded-lg border border-amber-400/30 bg-amber-400/5 p-4">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" />
+            <div className="space-y-2 text-sm">
+              <p className="text-amber-500">
+                Para calcular corretamente as faturas deste cartão, adicione o
+                dia de fechamento e o dia de vencimento nas configurações do
+                cartão.
+              </p>
+              <Button asChild variant="outline" size="sm" className="h-7 text-xs">
+                <Link href="/accounts">Configurar cartão</Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Current statement */}
+          <div className="border-t p-4 sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                  Fatura atual
+                </p>
+                <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight">
+                  {formatAmount(card.current?.amount ?? 0)}
+                </p>
+                {card.current && (
+                  <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Calendar className="size-3" />
+                    {formatDate(card.current.periodStart)} –{" "}
+                    {formatDate(card.current.periodEnd)} · vence{" "}
+                    {formatDate(card.current.dueDate)} (
+                    {daysUntilLabel(card.current.dueDate)})
+                  </p>
+                )}
+              </div>
+              {card.current && (
+                <div className="flex items-center gap-2">
+                  <StatusBadge status={card.current.status} />
+                  <Button asChild variant="outline" size="sm" className="h-7 text-xs">
+                    <Link href={cycleTransactionsHref(card.current)}>
+                      Ver transações
+                    </Link>
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Overdue alert */}
+          {overdue.length > 0 && (
+            <div className="border-t px-4 py-3 sm:px-5">
+              <p className="flex items-center gap-2 text-xs font-semibold text-red-400">
+                <AlertTriangle className="size-3.5" />
+                {overdue.length === 1
+                  ? `1 fatura vencida (${formatAmount(overdue[0].amount)})`
+                  : `${overdue.length} faturas vencidas (${formatAmount(overdue.reduce((s, b) => s + b.amount, 0))})`}
+              </p>
+            </div>
+          )}
+
+          {/* Upcoming statements */}
+          {card.upcoming.length > 0 && (
+            <div className="border-t">
+              <div className="flex items-center justify-between px-4 pt-4 sm:px-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                  Próximas faturas
+                </p>
+                <p className="text-xs tabular-nums text-muted-foreground">
+                  {formatAmount(upcomingTotal)} em {card.upcoming.length}{" "}
+                  {card.upcoming.length === 1 ? "fatura" : "faturas"}
+                </p>
+              </div>
+              <div className="divide-y">
+                {card.upcoming.slice(0, 6).map((statement) => (
+                  <StatementRow
+                    key={statement.id}
+                    statement={statement}
+                    formatAmount={formatAmount}
+                  />
+                ))}
+              </div>
+              {card.upcoming.length > 6 && (
+                <p className="px-4 pb-3 text-xs text-muted-foreground sm:px-5">
+                  + {card.upcoming.length - 6} faturas futuras (parcelamentos
+                  longos)
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Past statements */}
+          {card.past.length > 0 && (
+            <div className="border-t">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between px-4 py-3 text-left sm:px-5"
+                onClick={() => setShowPast((value) => !value)}
+              >
+                <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                  <History className="size-3.5" />
+                  Faturas passadas ({card.past.length})
+                </span>
+                <ChevronDown
+                  className={cn(
+                    "size-4 text-muted-foreground transition-transform",
+                    showPast && "rotate-180",
+                  )}
+                />
+              </button>
+              {showPast && (
+                <div className="divide-y border-t">
+                  {card.past.slice(0, 12).map((statement) => (
+                    <StatementRow
+                      key={statement.id}
+                      statement={statement}
+                      formatAmount={formatAmount}
+                      onMarkPaid={onMarkPaid}
+                      paying={payingBillId === statement.providerBillId}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
 
 export default function BillsPage() {
   const { format } = useCurrency();
-  const formatBillAmount = (value: number) =>
-    format(normalizeDisplayedAmount(value));
-  const now = new Date();
-  const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
-  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [payingBillId, setPayingBillId] = useState<string | null>(null);
 
-  const monthParam = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
-
-  const {
-    data: billsData,
-    loading: billsLoading,
-    error: billsError,
-    refetch: refetchBills,
-  } = useApi<BillsResponse>("/api/domain/bills", { month: monthParam });
-
-  const {
-    data: summaryData,
-    loading: summaryLoading,
-    error: summaryError,
-    refetch: refetchSummary,
-  } = useApi<BillsSummaryResponse>("/api/domain/metrics/bills/summary", {
-    month: monthParam,
-  });
-
-  const loading = billsLoading || summaryLoading;
-
-  const bills = billsData?.results;
-  const sourceSummary = summaryData?.summary;
-  const displayedBills = useMemo(
-    () => (bills ?? []).map(normalizeDisplayedBill),
-    [bills],
+  const { data, loading, error, refetch } = useApi<CardStatementsResponse>(
+    "/api/domain/cards/statements",
   );
 
+  const cards = useMemo(() => data?.results ?? [], [data]);
+  const configured = cards.filter((card) => card.configured);
+  const unconfigured = cards.filter((card) => !card.configured);
 
-  const summary = useMemo(() => {
-    if (!sourceSummary || !bills) return sourceSummary;
-
-    const amounts = displayedBills.reduce(
-      (totals, bill) => {
-        if (bill.status === "OVERDUE") {
-          totals.overdue += bill.totalAmount;
-          totals.overdueCount += 1;
-        } else if (bill.status === "OPEN") {
-          totals.open += bill.totalAmount;
-          totals.openCount += 1;
-        } else if (bill.status === "PAID" || bill.status === "CLOSED") {
-          totals.paid += bill.totalAmount;
-          totals.paidCount += 1;
-        }
-        return totals;
-      },
-      {
-        open: 0,
-        overdue: 0,
-        paid: 0,
-        openCount: 0,
-        overdueCount: 0,
-        paidCount: 0,
-      },
+  const totals = useMemo(() => {
+    const current = configured.reduce(
+      (sum, card) => sum + (card.current?.amount ?? 0),
+      0,
     );
-
-    return {
-      totalOpen: amounts.open,
-      totalOverdue: amounts.overdue,
-      totalPaid: amounts.paid,
-      counts: {
-        total: displayedBills.length,
-        open: amounts.openCount,
-        overdue: amounts.overdueCount,
-        paid: amounts.paidCount,
-      },
-      upcoming: sourceSummary.upcoming
-        .map(normalizeDisplayedBill)
-        .filter((bill) => bill.status === "OPEN"),
-    };
-  }, [bills, displayedBills, sourceSummary]);
-
-  const sortedBills = useMemo(() => {
-    return displayedBills
-      .filter((bill) => {
-        // Drop CLOSED bills with zero amount — they are noise (no action needed)
-        if (bill.status === "CLOSED" && bill.totalAmount === 0) return false;
-        return true;
-      })
-      .sort((a, b) => {
-        const statusOrder: Record<string, number> = {
-          OVERDUE: 0,
-          OPEN: 1,
-          CLOSED: 2,
-          PAID: 3,
-        };
-        const aOrder = statusOrder[a.status] ?? 1;
-        const bOrder = statusOrder[b.status] ?? 1;
-        if (aOrder !== bOrder) return aOrder - bOrder;
-        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-      });
-  }, [displayedBills]);
-
-  if (billsError || summaryError) {
-    return (
-      <PageError
-        message="Erro ao carregar faturas"
-        refetch={() => {
-          refetchBills();
-          refetchSummary();
-        }}
-      />
+    const upcoming = configured.reduce(
+      (sum, card) =>
+        sum + card.upcoming.reduce((inner, s) => inner + s.amount, 0),
+      0,
     );
-  }
-
-  const totalAmount = summary
-    ? summary.totalOpen + summary.totalOverdue + summary.totalPaid
-    : 0;
-
-  function navigateToPreviousMonth() {
-    if (selectedMonth === 0) {
-      setSelectedMonth(11);
-      setSelectedYear((y) => y - 1);
-    } else {
-      setSelectedMonth((month) => month - 1);
-    }
-  }
-
-  function navigateToNextMonth() {
-    if (selectedMonth === 11) {
-      setSelectedMonth(0);
-      setSelectedYear((y) => y + 1);
-    } else {
-      setSelectedMonth((month) => month + 1);
-    }
-  }
-
-  function resetToToday() {
-    setSelectedMonth(now.getMonth());
-    setSelectedYear(now.getFullYear());
-  }
+    const overdue = configured.reduce(
+      (sum, card) =>
+        sum +
+        card.past
+          .filter((s) => s.status === "OVERDUE")
+          .reduce((inner, s) => inner + s.amount, 0),
+      0,
+    );
+    const open = cards.reduce((sum, card) => sum + card.totalOpen, 0);
+    return { current, upcoming, overdue, open };
+  }, [cards, configured]);
 
   async function markBillAsPaid(billId: string) {
     setPayingBillId(billId);
@@ -305,415 +371,139 @@ export default function BillsPage() {
         body: JSON.stringify({ paidAt: new Date().toISOString() }),
       });
       if (!response.ok) throw new Error("Falha ao marcar fatura como paga");
-      refetchBills();
-      refetchSummary();
-    } catch (error) {
-      console.error(error);
+      refetch();
+    } catch (err) {
+      console.error(err);
     } finally {
       setPayingBillId(null);
     }
   }
 
-  const isCurrentMonth =
-    selectedMonth === now.getMonth() && selectedYear === now.getFullYear();
-  const isFutureMonth =
-    new Date(selectedYear, selectedMonth, 1) >
-    new Date(now.getFullYear(), now.getMonth(), 1);
-  const periodDescription = isCurrentMonth
-    ? "Mês atual"
-    : isFutureMonth
-      ? "Período futuro - exibe faturas disponíveis"
-      : "Período histórico";
+  if (error) {
+    return <PageError message="Erro ao carregar faturas" refetch={refetch} />;
+  }
 
   return (
-    <div className="flex flex-col gap-6 max-w-5xl mx-auto w-full">
-      {/* Period Navigation */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <h1 className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-          Faturas
-        </h1>
-        <div className="flex flex-col items-end gap-1">
-          <div className="flex items-center gap-1">
-            {!isCurrentMonth && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
-                onClick={resetToToday}
-              >
-                Hoje
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              onClick={navigateToPreviousMonth}
-              aria-label="Mês anterior"
-            >
-              <ChevronLeft className="size-3.5" />
-            </Button>
-            <span
-              className="min-w-[110px] text-center text-sm font-semibold capitalize sm:min-w-[160px]"
-              aria-live="polite"
-            >
-              {monthNames[selectedMonth]} de {selectedYear}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              onClick={navigateToNextMonth}
-              aria-label="Próximo mês"
-              disabled={
-                new Date(selectedYear, selectedMonth + 1, 1) >
-                new Date(now.getFullYear(), now.getMonth() + 2, 1)
-              }
-            >
-              <ChevronRight className="size-3.5" />
-            </Button>
-          </div>
-          <p
-            className={cn(
-              "text-[11px]",
-              isCurrentMonth
-                ? "font-semibold text-primary"
-                : "text-muted-foreground",
-            )}
-          >
-            {isCurrentMonth && (
-              <span className="mr-1 inline-block size-1.5 rounded-full bg-primary align-middle" />
-            )}
-            {periodDescription}
-          </p>
-        </div>
-      </div>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Faturas"
+        description="Faturas de cartão separadas por ciclo: atual, próximas e passadas"
+      />
 
-      {/* Hero Card */}
+      {/* Summary */}
       {loading ? (
-        <div className="rounded-xl border bg-card p-6 space-y-4">
-          <Skeleton className="h-3 w-24" />
-          <Skeleton className="h-10 w-48" />
-          <div className="flex gap-8">
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-4 w-32" />
-          </div>
+        <div className="grid gap-3 sm:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-xl border bg-card p-4">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="mt-2 h-6 w-24" />
+            </div>
+          ))}
         </div>
-      ) : summary ? (
-        <div className="rounded-xl border bg-card p-6 space-y-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-            Total das Faturas
-          </p>
-          <p className="text-4xl font-bold tabular-nums tracking-tight text-pink-400">
-            {formatBillAmount(totalAmount)}
-          </p>
-
-          {/* Breakdown by status */}
-          <div className="flex flex-wrap gap-6">
-            <div className="space-y-1">
+      ) : (
+        cards.length > 0 && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-xl border bg-card p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                Abertas
+                Faturas atuais
               </p>
-              <p className="text-sm font-semibold tabular-nums">
-                {formatBillAmount(summary.totalOpen)}
+              <p className="mt-1 text-lg font-bold tabular-nums">
+                {format(totals.current)}
               </p>
             </div>
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-red-400">
+            <div className="rounded-xl border bg-card p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                Próximas faturas
+              </p>
+              <p className="mt-1 text-lg font-bold tabular-nums">
+                {format(totals.upcoming)}
+              </p>
+            </div>
+            <div className="rounded-xl border bg-card p-4">
+              <p
+                className={cn(
+                  "text-xs font-semibold uppercase tracking-[0.15em]",
+                  totals.overdue > 0 ? "text-red-400" : "text-muted-foreground",
+                )}
+              >
                 Vencidas
               </p>
-              <p className="text-sm font-semibold tabular-nums text-red-400">
-                {formatBillAmount(summary.totalOverdue)}
+              <p
+                className={cn(
+                  "mt-1 text-lg font-bold tabular-nums",
+                  totals.overdue > 0 && "text-red-400",
+                )}
+              >
+                {format(totals.overdue)}
               </p>
             </div>
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-emerald-400">
-                Pagas
+            <div className="rounded-xl border bg-card p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                Total em aberto
               </p>
-              <p className="text-sm font-semibold tabular-nums text-emerald-400">
-                {formatBillAmount(summary.totalPaid)}
+              <p className="mt-1 text-lg font-bold tabular-nums text-pink-400">
+                {format(totals.open)}
               </p>
             </div>
           </div>
-
-          {/* Progress bar showing composition */}
-          <div className="flex h-1.5 rounded-full bg-muted/50 overflow-hidden">
-            {totalAmount > 0 && (
-              <>
-                <div
-                  className="h-full bg-zinc-400 rounded-l-full"
-                  style={{
-                    width: `${(summary.totalOpen / totalAmount) * 100}%`,
-                  }}
-                />
-                <div
-                  className="h-full bg-red-400"
-                  style={{
-                    width: `${(summary.totalOverdue / totalAmount) * 100}%`,
-                  }}
-                />
-                <div
-                  className="h-full bg-emerald-400 rounded-r-full"
-                  style={{
-                    width: `${(summary.totalPaid / totalAmount) * 100}%`,
-                  }}
-                />
-              </>
-            )}
-          </div>
-
-          {/* Legend */}
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block size-2 rounded-full bg-zinc-400" />
-              Abertas
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block size-2 rounded-full bg-red-400" />
-              Vencidas
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block size-2 rounded-full bg-emerald-400" />
-              Pagas
-            </span>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Status summary pills */}
-      {!loading && summary && (
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
-          <div className="rounded-xl border bg-card p-4 space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-              Abertas
-            </p>
-            <p className="text-lg font-bold tabular-nums">
-              {summary.counts.open}
-            </p>
-            <p className="text-xs tabular-nums text-muted-foreground">
-              {formatBillAmount(summary.totalOpen)}
-            </p>
-          </div>
-          <div className="rounded-xl border bg-card p-4 space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-red-400">
-              Vencidas
-            </p>
-            <p className="text-lg font-bold tabular-nums text-red-400">
-              {summary.counts.overdue}
-            </p>
-            <p className="text-xs tabular-nums text-muted-foreground">
-              {formatBillAmount(summary.totalOverdue)}
-            </p>
-          </div>
-          <div className="rounded-xl border bg-card p-4 space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-emerald-400">
-              Pagas
-            </p>
-            <p className="text-lg font-bold tabular-nums text-emerald-400">
-              {summary.counts.paid}
-            </p>
-            <p className="text-xs tabular-nums text-muted-foreground">
-              {formatBillAmount(summary.totalPaid)}
-            </p>
-          </div>
-        </div>
+        )
       )}
 
-      {/* Bills list */}
-      <div className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-          Faturas do Periodo
-        </p>
-        {loading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="rounded-xl border bg-card p-5">
-                <div className="flex items-center gap-4">
-                  <Skeleton className="size-10 rounded-full" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-4 w-32" />
-                    <Skeleton className="h-3 w-20" />
-                  </div>
-                  <Skeleton className="h-6 w-24" />
+      {/* Cards */}
+      {loading ? (
+        <div className="space-y-4">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="rounded-xl border bg-card p-5 space-y-4">
+              <div className="flex items-center gap-3">
+                <Skeleton className="size-10 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-24" />
                 </div>
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {sortedBills.map((bill) => {
-              const statusConfig = getStatusConfig(
-                bill.status,
-                bill.dueDate,
-                bill.totalAmount,
-              );
-              const StatusIcon = statusConfig.icon;
-              const days = daysUntil(bill.dueDate);
-
-              return (
-                <div
-                  key={bill.id}
-                  className="rounded-xl border bg-card p-4 transition-colors hover:bg-accent/50"
-                >
-                  {/* Row 1: avatar + info */}
-                  <div className="flex items-start gap-3">
-                    <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
-                      {getInitials(bill.accountName)}
-                    </div>
-                    <div className="flex-1 min-w-0 space-y-0.5">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="text-sm font-semibold truncate max-w-[12rem]">
-                          {bill.accountName}
-                        </span>
-                        {bill.institutionName && (
-                          <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-mono opacity-70 hidden sm:inline">
-                            {bill.institutionName}
-                          </span>
-                        )}
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "shrink-0 rounded-full border px-2 py-0 text-xs font-semibold uppercase tracking-wider",
-                            statusConfig.className,
-                          )}
-                        >
-                          <StatusIcon className="mr-1 size-2.5" />
-                          {statusConfig.label}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="size-3" />
-                          Vence {formatDate(bill.dueDate)}
-                        </span>
-                        <span
-                          className={cn(
-                            "font-semibold",
-                            days < 0
-                              ? "text-red-400"
-                              : days <= 3
-                                ? "text-amber-400"
-                                : "text-muted-foreground",
-                          )}
-                        >
-                          {bill.status === "PAID"
-                            ? "Paga"
-                            : daysUntilLabel(bill.dueDate)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Row 2: amount + actions, indented to align with info */}
-                  <div className="mt-3 flex items-center justify-between pl-[calc(2.25rem+0.75rem)]">
-                    <div className="space-y-0.5">
-                      <p className="text-base font-bold tabular-nums text-pink-400">
-                        {formatBillAmount(bill.totalAmount)}
-                      </p>
-                      <p className="text-xs tabular-nums text-muted-foreground">
-                        Min: {formatBillAmount(bill.minimumPayment)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {(bill.status === "OPEN" || bill.status === "OVERDUE") && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="shrink-0 h-8 px-3 text-xs"
-                          disabled={payingBillId === bill.id}
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            markBillAsPaid(bill.id);
-                          }}
-                        >
-                          <CheckCircle2 className="size-3.5" />
-                          {payingBillId === bill.id ? "..." : "Paga"}
-                        </Button>
-                      )}
-                      <Link
-                        href={
-                          bill.accountId
-                            ? `/transactions?accountId=${bill.accountId}`
-                            : "/transactions"
-                        }
-                        className="text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        <ChevronRight className="size-4" />
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Empty State */}
-      {!loading && displayedBills.length === 0 && (
+              <Skeleton className="h-16" />
+            </div>
+          ))}
+        </div>
+      ) : cards.length === 0 ? (
         <EmptyState
           className="bg-card/50 py-20"
           icon={CreditCard}
-          title="Nenhuma fatura encontrada"
-          description={`Não identificamos registros de faturas para o período de ${monthNames[selectedMonth]} de ${selectedYear}.`}
+          title="Nenhum cartão de crédito encontrado"
+          description="Conecte um cartão de crédito em Conexões para acompanhar as faturas por ciclo."
         />
-      )}
+      ) : (
+        <div className="space-y-4">
+          {configured.map((card) => (
+            <CardSection
+              key={card.accountId}
+              card={card}
+              formatAmount={format}
+              onMarkPaid={markBillAsPaid}
+              payingBillId={payingBillId}
+            />
+          ))}
 
-      {/* Upcoming Bills */}
-      {!loading && summary?.upcoming && summary.upcoming.length > 0 && (
-        <div className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-            Próximos vencimentos
-          </p>
-          <div className="rounded-xl border bg-card divide-y">
-            {summary.upcoming.map((bill) => {
-              const statusConfig = getStatusConfig(
-                bill.status,
-                bill.dueDate,
-                bill.totalAmount,
-              );
-              return (
-                <div
-                  key={bill.id}
-                  className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-accent/50"
-                >
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
-                    {getInitials(bill.accountName)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">
-                      {bill.accountName}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatDate(bill.dueDate)}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-bold tabular-nums">
-                      {formatBillAmount(bill.totalAmount)}
-                    </p>
-                    <p
-                      className={cn(
-                        "text-xs font-semibold uppercase tracking-wider",
-                        statusConfig.className.split(" ")[1],
-                      )}
-                    >
-                      {statusConfig.label}
-                    </p>
-                  </div>
-                  <span
-                    className={cn(
-                      "size-2 shrink-0 rounded-full",
-                      statusConfig.dotColor,
-                    )}
-                  />
-                </div>
-              );
-            })}
-          </div>
+          {unconfigured.length > 0 && configured.length > 0 && (
+            <div className="flex items-center gap-3 pt-2">
+              <Separator className="flex-1" />
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Receipt className="size-3.5" />
+                Cartões sem ciclo configurado
+              </span>
+              <Separator className="flex-1" />
+            </div>
+          )}
+
+          {unconfigured.map((card) => (
+            <CardSection
+              key={card.accountId}
+              card={card}
+              formatAmount={format}
+              onMarkPaid={markBillAsPaid}
+              payingBillId={payingBillId}
+            />
+          ))}
         </div>
       )}
     </div>

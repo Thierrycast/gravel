@@ -4,6 +4,11 @@ import {
   getRecurringPayload,
   refreshRecurringDerived,
 } from "@/lib/domain/derived";
+import {
+  createManualRecurringRule,
+  monthlyEquivalentAmount,
+  validateManualRecurringInput,
+} from "@/lib/domain/recurring";
 import { serializeForJson } from "@/lib/core/http";
 import { prisma } from "@/lib/prisma";
 import { getMerchantLogo } from "@/lib/domain/utils";
@@ -333,7 +338,12 @@ export async function GET(request: Request) {
   const fixedMonthlyExpenses = currency(
     fixedRules
       .filter((rule) => rule.type === "EXPENSE")
-      .reduce((sum, rule) => sum + amount(Number(rule.amount)), 0),
+      .reduce(
+        (sum, rule) =>
+          sum +
+          monthlyEquivalentAmount(amount(Number(rule.amount)), rule.interval),
+        0,
+      ),
   );
   const monthlyTotals = Array.from({ length: 12 }, (_, index) => {
     const month = new Date(Date.UTC(referenceMonth.getUTCFullYear(), index, 1));
@@ -364,7 +374,12 @@ export async function GET(request: Request) {
     totalMonthlyIncome: currency(
       fixedRules
         .filter((rule) => rule.type === "INCOME")
-        .reduce((sum, rule) => sum + amount(Number(rule.amount)), 0),
+        .reduce(
+          (sum, rule) =>
+            sum +
+            monthlyEquivalentAmount(amount(Number(rule.amount)), rule.interval),
+          0,
+        ),
     ),
     count: mapped.length + installmentMapped.length,
     referenceMonth: referenceMonth.toISOString(),
@@ -377,4 +392,21 @@ export async function GET(request: Request) {
       monthlyTotals,
     }),
   );
+}
+
+export async function POST(request: Request) {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
+  }
+
+  const validation = validateManualRecurringInput(body);
+  if (!validation.ok) {
+    return NextResponse.json({ error: validation.error }, { status: 400 });
+  }
+
+  const rule = await createManualRecurringRule(validation.input);
+  return NextResponse.json(serializeForJson(rule), { status: 201 });
 }

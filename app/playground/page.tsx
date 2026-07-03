@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from "react"
 import { toast } from "sonner"
 import {
-  Calculator,
   Plus,
   Trash2,
   TrendingUp,
@@ -36,6 +35,7 @@ import { Switch } from "@/components/ui/switch"
 import { useApi } from "@/hooks/use-api"
 import { useCurrency } from "@/lib/currency-context"
 import { cn } from "@/lib/utils"
+import { PageHeader } from "@/components/page-header"
 
 type ProjectionMonth = {
   month: number
@@ -43,11 +43,21 @@ type ProjectionMonth = {
   label: string
   income: number
   recurringExpenses: number
+  cardBills?: number
   installments: number
   variableExpenses: number
+  scenarioAdjustments?: number
   projected: number
   balance: number
   startingBalance: number
+}
+
+type ScenarioEvent = {
+  id: string
+  title: string
+  amount: number
+  date: string
+  isRecurring: boolean
 }
 
 type ProjectionPayload = {
@@ -80,6 +90,8 @@ export default function PlaygroundPage() {
   
   // Carrega os 12 meses de projeção base
   const { data: baseProjection, loading: loadingProjection } = useApi<ProjectionPayload>("/api/projection?months=12")
+  const { data: scenarios, refetch: refetchScenarios } =
+    useApi<ScenarioEvent[]>("/api/scenarios")
 
   const [hypotheses, setHypotheses] = useState<Hypothesis[]>([])
   
@@ -180,8 +192,21 @@ export default function PlaygroundPage() {
 
       if (!response.ok) throw new Error()
       toast.success("Exportado! A hipótese virou um cenário oficial na Projeção.")
+      refetchScenarios()
     } catch {
       toast.error("Erro ao exportar cenário.")
+    }
+  }
+
+  // Remove um cenário salvo (afeta a projeção real)
+  const deleteScenario = async (id: string) => {
+    try {
+      const res = await fetch(`/api/scenarios?id=${id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error()
+      toast.success("Cenário removido da projeção.")
+      refetchScenarios()
+    } catch {
+      toast.error("Erro ao remover cenário.")
     }
   }
 
@@ -193,8 +218,9 @@ export default function PlaygroundPage() {
     const activeHypotheses = hypotheses.filter((h) => h.active)
 
     return baseProjection.months.map((m) => {
-      // Começa com a variação e despesas reais do mês correspondente
-      const baseNet = m.income - (m.recurringExpenses + m.installments + m.variableExpenses)
+      // Variação real do mês (usa `projected` da API para incluir todos os
+      // componentes: faturas de cartão, cenários salvos, ajustes do mês).
+      const baseNet = m.projected
       let scenarioAdjustments = 0
 
       // Processa cada hipótese aplicável para este mês
@@ -254,16 +280,11 @@ export default function PlaygroundPage() {
   }, [])
 
   return (
-    <div className="flex flex-col gap-6 max-w-6xl mx-auto p-4 sm:p-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-          <Calculator className="size-8 text-primary" />
-          Playground Financeiro
-        </h1>
-        <p className="text-muted-foreground">
-          Crie simulações e simule o impacto de receitas e despesas nas projeções do seu patrimônio antes de transformá-las em cenários reais.
-        </p>
-      </div>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Playground Financeiro"
+        description="Teste hipóteses (&quot;e se eu comprar/receber X?&quot;) sobre a projeção real. Hipóteses ficam só neste navegador; ao exportar, viram cenários salvos que passam a afetar as Projeções."
+      />
 
       {loadingProjection ? (
         <div className="flex flex-col items-center justify-center p-24 gap-4">
@@ -513,6 +534,62 @@ export default function PlaygroundPage() {
                           <Trash2 className="size-3.5" />
                         </Button>
                       </div>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* Cenários salvos (persistidos — afetam a projeção real) */}
+            <Card className="border-sky-500/15">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Share2 className="size-4 text-sky-500" />
+                  Cenários salvos ({scenarios?.length ?? 0})
+                </CardTitle>
+                <CardDescription>
+                  Gravados no banco e considerados na página de Projeções.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {(scenarios?.length ?? 0) === 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-4">
+                    Nenhum cenário salvo. Exporte uma hipótese com o botão{" "}
+                    <Share2 className="size-3 inline" /> para consolidá-la.
+                  </p>
+                )}
+                {scenarios?.map((scenario) => (
+                  <div
+                    key={scenario.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border bg-muted/20 p-2.5"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-semibold">
+                        {scenario.title}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {scenario.isRecurring ? "Mensal a partir de " : ""}
+                        {new Date(scenario.date).toLocaleDateString("pt-BR")}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <span
+                        className={cn(
+                          "font-mono text-xs font-bold",
+                          scenario.amount < 0 ? "text-red-400" : "text-emerald-400",
+                        )}
+                      >
+                        {formatCurrency(scenario.amount)}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-6 text-muted-foreground hover:text-red-400"
+                        onClick={() => deleteScenario(scenario.id)}
+                        title="Remover cenário da projeção"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
                     </div>
                   </div>
                 ))}

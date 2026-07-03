@@ -99,10 +99,54 @@ export interface Account {
   totalSpent?: number;
   firstTransactionAt?: string | null;
   lastTransactionAt?: string | null;
+  billingClosingDay?: number | null;
+  billingDueDay?: number | null;
 }
 
 export interface AccountsResponse {
   results: Account[];
+}
+
+// Credit-card statements (billing cycles) — see lib/domain/billing.ts
+export type CardStatementStatus =
+  | "PAID"
+  | "CLOSED"
+  | "OPEN"
+  | "FUTURE"
+  | "OVERDUE";
+
+export interface CardStatement {
+  id: string;
+  accountId: string;
+  periodStart: string;
+  periodEnd: string;
+  dueDate: string;
+  amount: number;
+  providerAmount: number | null;
+  minimumPayment: number | null;
+  status: CardStatementStatus;
+  transactionCount: number;
+  reconciled: boolean;
+  paidAt: string | null;
+  providerBillId: string | null;
+}
+
+export interface CardStatementsPayload {
+  accountId: string;
+  accountName: string;
+  institutionName: string | null;
+  configured: boolean;
+  closingDay: number | null;
+  dueDay: number | null;
+  suggestedDueDay: number | null;
+  totalOpen: number;
+  current: CardStatement | null;
+  upcoming: CardStatement[];
+  past: CardStatement[];
+}
+
+export interface CardStatementsResponse {
+  results: CardStatementsPayload[];
 }
 
 export interface AllocationResult {

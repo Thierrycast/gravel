@@ -19,6 +19,8 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { formatDate } from "@/lib/format";
+import { PageHeader } from "@/components/page-header";
+import { PageError } from "@/components/page-error";
 
 import { type RecurringData } from "@/lib/types/api";
 
@@ -53,7 +55,7 @@ export default function RecurringPage() {
   const [selectedRule, setSelectedRule] = useState<SelectedRule | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  const { data, loading } = useApi<MonthlyRecurringData>("/api/recurring", {
+  const { data, loading, error, refetch } = useApi<MonthlyRecurringData>("/api/recurring", {
     year: String(year),
     month: String(month),
   });
@@ -108,6 +110,10 @@ export default function RecurringPage() {
       .map(([name, stats]) => ({ name, ...stats }));
   }, [data]);
 
+  if (error) {
+    return <PageError message="Erro ao carregar recorrências" refetch={refetch} />;
+  }
+
   if (loading) {
     return (
       <div className="flex flex-col gap-6">
@@ -124,25 +130,25 @@ export default function RecurringPage() {
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-          Recorr&ecirc;ncias
-        </h1>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/recurring/expenses"
-            className="text-xs text-blue-400 hover:text-blue-300"
-          >
-            Ver despesas
-          </Link>
-          <Link
-            href="/recurring/income"
-            className="text-xs text-emerald-400 hover:text-emerald-300"
-          >
-            Ver receitas
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title="Recorrências"
+        actions={
+          <div className="flex items-center gap-3">
+            <Link
+              href="/recurring/expenses"
+              className="text-xs text-blue-400 hover:text-blue-300"
+            >
+              Ver despesas
+            </Link>
+            <Link
+              href="/recurring/income"
+              className="text-xs text-emerald-400 hover:text-emerald-300"
+            >
+              Ver receitas
+            </Link>
+          </div>
+        }
+      />
 
       {/* Monthly summary cards */}
       <div className="grid gap-4 sm:grid-cols-3">

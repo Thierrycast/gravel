@@ -2,10 +2,18 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Plus, Minus, Building2, Pencil, Wallet } from "lucide-react";
+import {
+  Plus,
+  Minus,
+  Building2,
+  Pencil,
+  Wallet,
+  AlertTriangle,
+  CreditCard,
+} from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import { usePeriod } from "@/hooks/use-period";
-import { formatDateFull, formatPercent } from "@/lib/format";
+import { formatDate, formatDateFull, formatPercent } from "@/lib/format";
 import { useCurrency } from "@/lib/currency-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +30,9 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PageError } from "@/components/page-error";
+import { PageHeader } from "@/components/page-header";
 import { PeriodSwitcher } from "@/components/period-switcher";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Sheet,
   SheetContent,
@@ -35,7 +45,26 @@ import {
   type Account,
   type AccountsResponse,
   type AllocationResponse,
+  type CardStatementsPayload,
+  type CardStatementsResponse,
+  type CardStatementStatus,
 } from "@/lib/types/api";
+
+const STATEMENT_STATUS_LABEL: Record<CardStatementStatus, string> = {
+  OPEN: "Aberta",
+  CLOSED: "Fechada",
+  OVERDUE: "Vencida",
+  PAID: "Paga",
+  FUTURE: "Futura",
+};
+
+const STATEMENT_STATUS_CLASS: Record<CardStatementStatus, string> = {
+  OPEN: "bg-amber-400/10 text-amber-400 border-amber-400/20",
+  CLOSED: "bg-zinc-400/10 text-zinc-400 border-zinc-400/20",
+  OVERDUE: "bg-red-400/10 text-red-400 border-red-400/20",
+  PAID: "bg-emerald-400/10 text-emerald-400 border-emerald-400/20",
+  FUTURE: "bg-blue-400/10 text-blue-400 border-blue-400/20",
+};
 
 function getInitials(name: string): string {
   return name
@@ -104,6 +133,8 @@ export default function AccountsPage() {
     error: allocationError,
     refetch: refetchAllocation,
   } = useApi<AllocationResponse>("/api/domain/metrics/accounts/allocation");
+  const { data: statementsData, refetch: refetchStatements } =
+    useApi<CardStatementsResponse>("/api/domain/cards/statements");
 
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -112,12 +143,25 @@ export default function AccountsPage() {
   const [savingNickname, setSavingNickname] = useState(false);
   const [cashInput, setCashInput] = useState("");
   const [savingCash, setSavingCash] = useState(false);
+  const [closingDayInput, setClosingDayInput] = useState("");
+  const [dueDayInput, setDueDayInput] = useState("");
+  const [savingBilling, setSavingBilling] = useState(false);
 
   const loading = accountsLoading || allocationLoading;
 
   useEffect(() => {
     if (selectedAccount) {
       setNicknameInput(selectedAccount.nickname || selectedAccount.name || "");
+      setClosingDayInput(
+        selectedAccount.billingClosingDay != null
+          ? String(selectedAccount.billingClosingDay)
+          : "",
+      );
+      setDueDayInput(
+        selectedAccount.billingDueDay != null
+          ? String(selectedAccount.billingDueDay)
+          : "",
+      );
     }
   }, [selectedAccount]);
 
@@ -145,6 +189,9 @@ export default function AccountsPage() {
 
   const allocationMap = new Map(
     (allocationData?.results ?? []).map((r) => [r.accountId, r]),
+  );
+  const statementsMap = new Map<string, CardStatementsPayload>(
+    (statementsData?.results ?? []).map((entry) => [entry.accountId, entry]),
   );
   const institutionGroups = Array.from(
     accounts
@@ -189,6 +236,35 @@ export default function AccountsPage() {
     setSheetOpen(true);
   }
 
+  async function handleBillingSave() {
+    if (!selectedAccount) return;
+    const closingDay = closingDayInput ? Number(closingDayInput) : null;
+    const dueDay = dueDayInput ? Number(dueDayInput) : null;
+    setSavingBilling(true);
+    try {
+      const res = await fetch(`/api/domain/accounts/${selectedAccount.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          billingClosingDay: closingDay,
+          billingDueDay: dueDay,
+        }),
+      });
+      if (!res.ok) throw new Error("Erro ao salvar ciclo de fatura");
+      setSelectedAccount((prev) =>
+        prev
+          ? { ...prev, billingClosingDay: closingDay, billingDueDay: dueDay }
+          : prev,
+      );
+      refetchAccounts();
+      refetchStatements();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSavingBilling(false);
+    }
+  }
+
   async function handleCashAdjust(direction: "add" | "remove") {
     if (!selectedAccount) return;
     const amount = parseFloat(cashInput.replace(",", "."));
@@ -216,24 +292,19 @@ export default function AccountsPage() {
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-6">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            Contas
-          </h1>
-          <p className="text-muted-foreground">
-            Bancos, carteiras e saldos atuais
-          </p>
-        </div>
-        <Button variant="outline" asChild className="self-start sm:self-auto">
-          <Link href="/connect">
-            <Plus data-icon="inline-start" />
-            Adicionar Conta
-          </Link>
-        </Button>
-      </div>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Contas"
+        description="Bancos, carteiras e saldos atuais"
+        actions={
+          <Button variant="outline" asChild className="self-start sm:self-auto">
+            <Link href="/connect">
+              <Plus data-icon="inline-start" />
+              Adicionar Conta
+            </Link>
+          </Button>
+        }
+      />
 
       {/* Period Selector */}
       <div className="flex justify-start sm:justify-end">
@@ -374,37 +445,126 @@ export default function AccountsPage() {
                           </div>
                         </CardHeader>
                         <CardContent className="space-y-3">
-                          <div>
-                            <div className="mb-1 grid gap-1 text-sm sm:flex sm:items-center sm:justify-between sm:gap-2">
-                              <span className="text-muted-foreground">
-                                {credit ? "Fatura Atual" : "Saldo"}
-                              </span>
-                              <span
-                                className={`break-words font-semibold sm:text-right ${
-                                  credit && account.balance > 0
-                                    ? "text-destructive"
-                                    : "text-foreground"
-                                }`}
-                              >
-                                {format(
-                                  credit
-                                    ? Math.abs(account.balance)
-                                    : account.balance,
-                                )}
-                              </span>
-                            </div>
-                            {allocation && (
-                              <>
-                                <Progress
-                                  value={Math.min(allocation.percentage, 100)}
-                                />
-                                <div className="mt-1 text-xs text-muted-foreground sm:text-right">
-                                  {formatPercent(allocation.percentage)} do
-                                  saldo positivo em contas
+                          {credit ? (
+                            (() => {
+                              const statements = statementsMap.get(account.id);
+                              if (!statements) {
+                                return (
+                                  <div className="flex items-center justify-between text-sm">
+                                    <span className="text-muted-foreground">
+                                      Total em aberto
+                                    </span>
+                                    <span className="font-semibold text-destructive">
+                                      {format(Math.abs(account.balance))}
+                                    </span>
+                                  </div>
+                                );
+                              }
+                              if (!statements.configured) {
+                                return (
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between text-sm">
+                                      <span className="text-muted-foreground">
+                                        Total em aberto
+                                      </span>
+                                      <span className="font-semibold text-destructive">
+                                        {format(statements.totalOpen)}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-start gap-2 rounded-lg border border-amber-400/30 bg-amber-400/5 p-2.5 text-xs text-amber-500">
+                                      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                                      <span>
+                                        Para calcular corretamente as faturas
+                                        deste cartão, adicione o dia de
+                                        fechamento e o dia de vencimento nas
+                                        configurações do cartão.
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              const upcomingTotal = statements.upcoming.reduce(
+                                (sum, s) => sum + s.amount,
+                                0,
+                              );
+                              const current = statements.current;
+                              return (
+                                <div className="space-y-2 text-sm">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-muted-foreground">
+                                      Fatura atual
+                                    </span>
+                                    <span className="flex items-center gap-2 font-semibold">
+                                      {current && (
+                                        <Badge
+                                          variant="outline"
+                                          className={`rounded-full px-2 py-0 text-[10px] font-semibold uppercase tracking-wider ${STATEMENT_STATUS_CLASS[current.status]}`}
+                                        >
+                                          {STATEMENT_STATUS_LABEL[current.status]}
+                                        </Badge>
+                                      )}
+                                      <span
+                                        className={
+                                          current && current.amount > 0
+                                            ? "text-destructive"
+                                            : "text-foreground"
+                                        }
+                                      >
+                                        {format(current?.amount ?? 0)}
+                                      </span>
+                                    </span>
+                                  </div>
+                                  {current && (
+                                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                      <span>Vencimento</span>
+                                      <span>{formatDate(current.dueDate)}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                    <span>
+                                      Próximas faturas
+                                      {statements.upcoming.length > 0 &&
+                                        ` (${statements.upcoming.length})`}
+                                    </span>
+                                    <span className="tabular-nums">
+                                      {format(upcomingTotal)}
+                                    </span>
+                                  </div>
+                                  <Separator />
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-muted-foreground">
+                                      Total em aberto
+                                    </span>
+                                    <span className="font-semibold tabular-nums text-destructive">
+                                      {format(statements.totalOpen)}
+                                    </span>
+                                  </div>
                                 </div>
-                              </>
-                            )}
-                          </div>
+                              );
+                            })()
+                          ) : (
+                            <div>
+                              <div className="mb-1 grid gap-1 text-sm sm:flex sm:items-center sm:justify-between sm:gap-2">
+                                <span className="text-muted-foreground">
+                                  Saldo
+                                </span>
+                                <span className="break-words font-semibold text-foreground sm:text-right">
+                                  {format(account.balance)}
+                                </span>
+                              </div>
+                              {allocation && (
+                                <>
+                                  <Progress
+                                    value={Math.min(allocation.percentage, 100)}
+                                  />
+                                  <div className="mt-1 text-xs text-muted-foreground sm:text-right">
+                                    {formatPercent(allocation.percentage)} do
+                                    saldo positivo em contas
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
                         </CardContent>
                       </Card>
                     );
@@ -416,24 +576,19 @@ export default function AccountsPage() {
 
       {/* Empty State */}
       {!loading && accounts.length === 0 && (
-        <Card className="py-12">
-          <CardContent className="flex flex-col items-center text-center">
-            <Building2 className="size-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">
-              Nenhuma conta conectada
-            </h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Conecte suas contas bancárias para começar a acompanhar suas
-              finanças.
-            </p>
+        <EmptyState
+          icon={Building2}
+          title="Nenhuma conta conectada"
+          description="Conecte suas contas bancárias para começar a acompanhar suas finanças."
+          action={
             <Button asChild>
               <Link href="/connect">
                 <Plus data-icon="inline-start" />
                 Adicionar Conta
               </Link>
             </Button>
-          </CardContent>
-        </Card>
+          }
+        />
       )}
 
       {/* Account Detail Sheet */}
@@ -653,6 +808,69 @@ export default function AccountsPage() {
                   </div>
                 );
               })()}
+
+              {isCreditAccount(selectedAccount) && (
+                <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <CreditCard className="size-4 text-muted-foreground" />
+                    Ciclo de fatura
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Informe os dias de fechamento e vencimento para separar a
+                    fatura atual das próximas com precisão.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">
+                        Dia de fechamento
+                      </label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="31"
+                        placeholder="ex: 3"
+                        value={closingDayInput}
+                        onChange={(e) => setClosingDayInput(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">
+                        Dia de vencimento
+                      </label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="31"
+                        placeholder={
+                          statementsMap.get(selectedAccount.id)
+                            ?.suggestedDueDay
+                            ? `sugerido: ${statementsMap.get(selectedAccount.id)?.suggestedDueDay}`
+                            : "ex: 10"
+                        }
+                        value={dueDayInput}
+                        onChange={(e) => setDueDayInput(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    disabled={savingBilling}
+                    onClick={handleBillingSave}
+                  >
+                    {savingBilling ? "Salvando..." : "Salvar ciclo de fatura"}
+                  </Button>
+                  {!statementsMap.get(selectedAccount.id)?.configured && (
+                    <p className="flex items-start gap-1.5 text-xs text-amber-500">
+                      <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+                      Sem o dia de fechamento, a fatura atual não pode ser
+                      separada das próximas.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {selectedAccount.kind === "CASH" && (
                 <div className="rounded-lg border bg-muted/30 p-4 space-y-3">

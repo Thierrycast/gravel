@@ -76,6 +76,10 @@ model DomainAccount {
   institutionName  String?
   nickname         String?
   imageUrl         String?
+  // Credit-card billing cycle (day of month, 1-31). Needed to compute the
+  // current statement precisely; when null the UI shows a setup warning.
+  billingClosingDay Int?
+  billingDueDay     Int?
   metadataJson     String?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt

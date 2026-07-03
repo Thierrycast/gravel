@@ -8,6 +8,11 @@ import {
   getCryptoPortfolioMetrics,
   getOverviewMetrics,
 } from "@/lib/domain/analytics";
+import { getCardStatements } from "@/lib/domain/billing";
+import {
+  occurrenceDatesInMonth,
+  ruleSuppressionKeys,
+} from "@/lib/domain/recurring";
 import { getUserSettings } from "@/lib/domain/queries";
 import { prisma } from "@/lib/prisma";
 
@@ -16,7 +21,7 @@ const MS_IN_DAY = 24 * 60 * 60 * 1000;
 
 type DecimalLike = Prisma.Decimal | null | undefined;
 
-type RecurringRuleOrigin = "detected" | "manual";
+type RecurringRuleOrigin = "detected" | "manual" | "dismissed";
 
 type RecurringMetadata = {
   origin?: RecurringRuleOrigin;
@@ -120,14 +125,6 @@ function parseOccurrenceDate(ruleDate?: string) {
   if (!ruleDate) return null;
   const parsed = new Date(ruleDate);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-function occurrenceForMonth(nextDate: Date, monthStart: Date) {
-  const monthDelta =
-    (monthStart.getUTCFullYear() - nextDate.getUTCFullYear()) * 12 +
-    (monthStart.getUTCMonth() - nextDate.getUTCMonth());
-  if (monthDelta < 0) return null;
-  return addMonths(nextDate, monthDelta);
 }
 
 function isLoanActive(status?: string | null) {
@@ -334,7 +331,33 @@ export async function refreshRecurringDerived(options?: {
     });
   }
 
-  for (const candidate of detectedCandidates) {
+  // Não recria regras que o usuário gerencia manualmente ou descartou.
+  const suppressedKeys = new Set(
+    existingRules
+      .filter((rule) => {
+        const origin = parseMetadata(rule.metadataJson).origin;
+        return origin === "manual" || origin === "dismissed";
+      })
+      .flatMap((rule) => ruleSuppressionKeys(rule)),
+  );
+  const survivingCandidates = detectedCandidates.filter((candidate) => {
+    const direction = candidate.type;
+    if (
+      candidate.merchantId &&
+      suppressedKeys.has(`merchant:${direction}:${candidate.merchantId}`)
+    )
+      return false;
+    if (
+      candidate.descriptionPattern &&
+      suppressedKeys.has(
+        `pattern:${direction}:${candidate.descriptionPattern.toLowerCase()}`,
+      )
+    )
+      return false;
+    return true;
+  });
+
+  for (const candidate of survivingCandidates) {
     await prisma.domainRecurringRule.create({
       data: {
         name: candidate.name,
@@ -362,7 +385,7 @@ export async function refreshRecurringDerived(options?: {
   return {
     lookbackDays,
     minOccurrences,
-    detected: detectedCandidates.length,
+    detected: survivingCandidates.length,
     preservedManual: existingRules.length - autoDetectedIds.length,
   };
 }
@@ -434,6 +457,8 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
     categories,
     settings,
     scenarioEvents,
+    cardStatements,
+    activeGoals,
   ] = await Promise.all([
     getOverviewMetrics(new URLSearchParams("period=all")),
     getRecurringPayload(),
@@ -457,7 +482,68 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
       where: { isActive: true },
       orderBy: { date: "asc" },
     }),
+    getCardStatements({ now }),
+    prisma.goal.findMany({ where: { active: true } }),
   ]);
+
+  // Compromisso mensal com metas ativas ainda não concluídas. Os aportes não
+  // saem das contas (o dinheiro continua no saldo), então NÃO entram como
+  // despesa da projeção — mas o resumo expõe o valor para o insight
+  // "sobra projetada vs metas".
+  const goalCommitmentMonthly = safeNumber(
+    sumDecimals(
+      activeGoals
+        .filter((goal) =>
+          decimal(goal.currentAmount).lessThan(decimal(goal.targetAmount)),
+        )
+        .map((goal) => decimal(goal.monthlyContribution).abs()),
+    ),
+  );
+  const goalCommitmentCount = activeGoals.filter(
+    (goal) =>
+      decimal(goal.currentAmount).lessThan(decimal(goal.targetAmount)) &&
+      decimal(goal.monthlyContribution).greaterThan(0),
+  ).length;
+
+  // Cartões com ciclo de fatura configurado usam o motor de faturas como
+  // fonte única de saídas futuras (fatura atual + próximas, no vencimento).
+  // Isso substitui, para esses cartões, as heurísticas antigas (DomainBill
+  // futuro, parcelas detectadas e regras de parcelamento) e elimina a dupla
+  // contagem entre elas.
+  const configuredCards = cardStatements.filter((card) => card.configured);
+  const configuredCardIds = new Set(
+    configuredCards.map((card) => card.accountId),
+  );
+  const statementOutflowByMonth = new Map<string, number>();
+  let overdueStatementsOutflow = 0;
+  let currentMonthStatementsOutflow = 0;
+  const nextMonthStart = startOfMonth(addMonths(now, 1));
+  for (const card of configuredCards) {
+    const payable = [
+      ...card.past.filter((statement) => statement.status === "OVERDUE"),
+      ...(card.current ? [card.current] : []),
+      ...card.upcoming,
+    ];
+    for (const statement of payable) {
+      if (statement.status === "PAID") continue;
+      const due = new Date(statement.dueDate);
+      if (statement.status === "OVERDUE") {
+        overdueStatementsOutflow += statement.amount;
+        continue;
+      }
+      if (due < nextMonthStart) {
+        // Vence ainda neste mês: entra como ajuste do saldo inicial, já que a
+        // projeção mensal começa no mês seguinte.
+        currentMonthStatementsOutflow += statement.amount;
+        continue;
+      }
+      const key = monthKey(due);
+      statementOutflowByMonth.set(
+        key,
+        (statementOutflowByMonth.get(key) ?? 0) + statement.amount,
+      );
+    }
+  }
 
   const categoryMap = new Map<string, (typeof categories)[number]>(
     categories.map((category) => [category.id, category]),
@@ -518,7 +604,34 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
     ? safeNumber(totalVariableOutflow.div(3))
     : 0;
 
-  let currentBalance = overview.accountBalance;
+  // Ajustes do restante do mês corrente: a projeção mensal começa no mês
+  // seguinte, mas faturas e transações agendadas que ainda vencem neste mês
+  // precisam sair/entrar do saldo inicial (antes eram simplesmente ignoradas).
+  const remainingCurrentMonthTransactions = pastTransactions.filter(
+    (tx) =>
+      !tx.installmentGroupId &&
+      !tx.installmentTotal &&
+      tx.occurredAt > now &&
+      tx.occurredAt < nextMonthStart &&
+      !(tx.domainAccountId && configuredCardIds.has(tx.domainAccountId)),
+  );
+  const remainingCurrentMonthNet = safeNumber(
+    sumDecimals(
+      remainingCurrentMonthTransactions.map((tx) =>
+        tx.direction === DomainTransactionDirection.INFLOW
+          ? tx.amount.abs()
+          : tx.amount.abs().neg(),
+      ),
+    ),
+  );
+  const startingBalanceAdjustment =
+    (settings.showFutureAccounts
+      ? -(currentMonthStatementsOutflow + overdueStatementsOutflow)
+      : 0) + remainingCurrentMonthNet;
+
+  let currentBalance = overview.accountBalance.plus(
+    new Prisma.Decimal(startingBalanceAdjustment.toFixed(2)),
+  );
   const monthsData = [] as Array<{
     month: number;
     year: number;
@@ -528,6 +641,7 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
     income: number;
     scenarioAdjustments: number;
     recurringExpenses: number;
+    cardBills: number;
     installments: number;
     variableExpenses: number;
     projected: number;
@@ -548,14 +662,27 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
     // 1. Recurring Rules
     for (const rule of recurringRules) {
       if (!rule.active) continue;
-      const nextDate = rule.nextDate;
-      const occurrenceDate = occurrenceForMonth(nextDate, pointDate);
-      if (!occurrenceDate) continue;
-      if (occurrenceDate < pointDate || occurrenceDate > pointMonthEnd)
+      // Parcelamentos em cartões com ciclo configurado já estão nas faturas.
+      if (
+        rule.isInstallment &&
+        rule.accountId &&
+        configuredCardIds.has(rule.accountId)
+      )
         continue;
+      // Respeita a periodicidade real: semanais podem ocorrer 4-5x no mês,
+      // trimestrais/anuais só nos meses corretos (antes tudo era tratado
+      // como mensal).
+      const occurrences = occurrenceDatesInMonth(
+        rule.interval,
+        rule.nextDate,
+        pointDate,
+        pointMonthEnd,
+      );
+      if (occurrences.length === 0) continue;
+      const multiplier = new Prisma.Decimal(occurrences.length);
 
       if (rule.type === "INCOME") {
-        const incomeAmount = decimal(rule.amount);
+        const incomeAmount = decimal(rule.amount).abs().times(multiplier);
         recurringInflow = recurringInflow.plus(incomeAmount);
         if (
           (rule.categoryId && salaryCategoryIds.has(rule.categoryId)) ||
@@ -566,21 +693,28 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
       } else if (rule.isInstallment) {
         if (settings.showFutureAccounts) {
           installmentsOutflow = installmentsOutflow.plus(
-            decimal(rule.amount).abs(),
+            decimal(rule.amount).abs().times(multiplier),
           );
         }
       } else {
-        recurringOutflow = recurringOutflow.plus(decimal(rule.amount).abs());
+        recurringOutflow = recurringOutflow.plus(
+          decimal(rule.amount).abs().times(multiplier),
+        );
       }
     }
 
-    // 2. Bills
+    // 2. Bills (apenas cartões sem ciclo configurado — os demais vêm do
+    // motor de faturas em statementOutflowByMonth)
     const monthlyBills = settings.showFutureAccounts
       ? bills.filter(
           (bill) =>
             bill.dueDate &&
             bill.dueDate >= pointDate &&
-            bill.dueDate <= pointMonthEnd,
+            bill.dueDate <= pointMonthEnd &&
+            !(
+              bill.domainAccountId &&
+              configuredCardIds.has(bill.domainAccountId)
+            ),
         )
       : [];
     const billsOutflow = sumDecimals(
@@ -596,6 +730,9 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
     const detectedInstallments = settings.showFutureAccounts
       ? pastTransactions.filter((tx) => {
           if (tx.direction !== DomainTransactionDirection.OUTFLOW) return false;
+          if (tx.domainAccountId && configuredCardIds.has(tx.domainAccountId)) {
+            return false;
+          }
           if (tx.domainAccountId && billAccountIds.has(tx.domainAccountId)) {
             return false;
           }
@@ -618,13 +755,15 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
       detectedInstallments.map((tx) => tx.amount.abs()),
     );
 
-    // 4. Future Transactions (Manual or scheduled)
+    // 4. Future Transactions (Manual or scheduled). Compras futuras em
+    // cartões configurados já estão embutidas nas próximas faturas.
     const futureTransactions = pastTransactions.filter(
       (tx) =>
         !tx.installmentGroupId &&
         !tx.installmentTotal &&
         tx.occurredAt >= pointDate &&
-        tx.occurredAt <= pointMonthEnd,
+        tx.occurredAt <= pointMonthEnd &&
+        !(tx.domainAccountId && configuredCardIds.has(tx.domainAccountId)),
     );
     const futureInflow = sumDecimals(
       futureTransactions
@@ -677,6 +816,9 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
       ),
     );
     const recurringExpenses = safeNumber(recurringOutflow);
+    const cardBills = settings.showFutureAccounts
+      ? (statementOutflowByMonth.get(monthKey(pointDate)) ?? 0)
+      : 0;
     const installments = safeNumber(
       installmentsOutflow.plus(billsOutflow).plus(smartInstallmentsOutflow),
     );
@@ -684,7 +826,11 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
     const knownFutureOutflow = safeNumber(futureOutflow);
 
     const totalOutflow =
-      recurringExpenses + installments + variableExpenses + knownFutureOutflow;
+      recurringExpenses +
+      cardBills +
+      installments +
+      variableExpenses +
+      knownFutureOutflow;
     const monthlyNet = income + scenarioAdjustments - totalOutflow;
     const monthlyNetDecimal = new Prisma.Decimal(monthlyNet.toFixed(2));
     currentBalance = startingBalance.plus(monthlyNetDecimal);
@@ -698,6 +844,7 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
       income,
       scenarioAdjustments,
       recurringExpenses,
+      cardBills,
       installments,
       variableExpenses: variableExpenses + knownFutureOutflow,
       projected: safeNumber(monthlyNetDecimal),
@@ -736,10 +883,17 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
     monthsData.length > 0
       ? monthsData.reduce(
           (sum, month) =>
-            sum + month.recurringExpenses + month.installments + month.variableExpenses,
+            sum +
+            month.recurringExpenses +
+            month.cardBills +
+            month.installments +
+            month.variableExpenses,
           0,
         ) / monthsData.length
       : 0;
+
+  const firstNegativeMonth =
+    monthsData.find((month) => month.balance < 0) ?? null;
 
   return {
     summary: {
@@ -748,6 +902,17 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
       projectedSavings: safeNumber(
         currentBalance.minus(overview.accountBalance),
       ),
+      currentBalance: safeNumber(overview.accountBalance),
+      // Saídas/entradas já conhecidas até o fim do mês corrente (faturas a
+      // vencer, transações agendadas) aplicadas antes do primeiro mês.
+      currentMonthAdjustment:
+        Math.round(startingBalanceAdjustment * 100) / 100,
+      overdueStatements: Math.round(overdueStatementsOutflow * 100) / 100,
+      firstNegativeMonth: firstNegativeMonth?.label ?? null,
+      // Aportes mensais planejados em metas ativas (não descontados do saldo;
+      // usados no insight de capacidade de poupança).
+      goalCommitmentMonthly,
+      goalCommitmentCount,
     },
     months: monthsData,
   };

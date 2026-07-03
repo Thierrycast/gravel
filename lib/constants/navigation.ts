@@ -16,9 +16,9 @@ import {
   ArrowUpRight,
   Activity,
   Settings2,
-  Sparkles,
   Brain,
   Calculator,
+  Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -52,8 +52,8 @@ export const NAV_INVESTMENTS: NavItem[] = [
 export const NAV_PLANNING: NavItem[] = [
   { title: "Insights AI", href: "/insights", icon: Brain },
   { title: "Projeções", href: "/projection", icon: Activity },
-  { title: "Cenários", href: "/scenarios", icon: Sparkles },
   { title: "Playground", href: "/playground", icon: Calculator },
+  { title: "Pessoas", href: "/people", icon: Users },
   { title: "Metas", href: "/goals", icon: Target },
   { title: "Relatórios", href: "/reports", icon: FileText },
   { title: "Configurações", href: "/settings", icon: Settings2 },

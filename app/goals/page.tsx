@@ -8,12 +8,12 @@ import {
   Trash2,
   Target,
   CalendarClock,
-  Copy,
   TrendingUp,
   ShieldCheck,
   Plane,
   CreditCard,
   Home,
+  AlertCircle,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -46,6 +46,9 @@ import {
 import { useApi } from "@/hooks/use-api"
 import { useCurrency } from "@/lib/currency-context"
 import { formatDateFull, daysUntilLabel } from "@/lib/format"
+import { PageError } from "@/components/page-error"
+import { PageHeader } from "@/components/page-header"
+import { EmptyState } from "@/components/ui/empty-state"
 
 
 interface Goal {
@@ -153,23 +156,31 @@ function estimatedCompletion(
   const months = Math.ceil((target - current) / monthly)
   const date = new Date()
   date.setMonth(date.getMonth() + months)
-  return formatDateFull(date)
+  const str = new Intl.DateTimeFormat("pt-BR", { month: "short", year: "numeric" }).format(date)
+  return str.replace(" de ", "/").replace(".", "")
 }
 
-async function copyDebugId(id: string, label: string) {
-  try {
-    await navigator.clipboard.writeText(id)
-    toast.success(`${label} copiado`)
-  } catch {
-    toast.error("Não foi possível copiar o ID")
+function paceAlert(
+  target: number,
+  current: number,
+  monthly: number,
+  targetDate: string | null
+): number | null {
+  if (!targetDate || current >= target) return null
+  const tDate = new Date(targetDate)
+  const now = new Date()
+  const monthsLeft = (tDate.getFullYear() - now.getFullYear()) * 12 + (tDate.getMonth() - now.getMonth())
+  const effectiveMonths = Math.max(monthsLeft, 1)
+  const needed = (target - current) / effectiveMonths
+  if (monthly < needed) {
+    return needed
   }
+  return null
 }
-
-
 
 export default function GoalsPage() {
   const { format } = useCurrency()
-  const { data, loading, refetch } = useApi<GoalsResponse>("/api/goals")
+  const { data, loading, error, refetch } = useApi<GoalsResponse>("/api/goals")
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
@@ -314,7 +325,7 @@ export default function GoalsPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6 p-6">
+      <div className="flex flex-col gap-6">
         <Skeleton className="h-8 w-48" />
         <div className="grid gap-4 sm:grid-cols-3">
           <Skeleton className="h-24" />
@@ -330,26 +341,25 @@ export default function GoalsPage() {
     )
   }
 
+  if (error) {
+    return <PageError message="Não foi possível carregar as metas." refetch={refetch} />
+  }
 
   if (goals.length === 0) {
     return (
       <>
-        <div className="flex flex-col gap-8 p-6">
-          <div className="flex flex-col items-center gap-4 pt-6 text-center">
-            <div className="flex size-16 items-center justify-center rounded-full bg-muted">
-              <Target className="size-8 text-muted-foreground" />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold">Nenhuma meta ainda</h2>
-              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                Defina o que você quer conquistar e acompanhe seu progresso.
-              </p>
-            </div>
-            <Button onClick={openCreate}>
-              <Plus className="mr-2 size-4" />
-              Nova Meta
-            </Button>
-          </div>
+        <div className="flex flex-col gap-6">
+          <EmptyState
+            icon={Target}
+            title="Você ainda não tem nenhuma meta"
+            description="Defina o que você quer conquistar, planeje seus aportes e acompanhe seu progresso."
+            action={
+              <Button onClick={openCreate}>
+                <Plus className="mr-2 size-4" />
+                Nova Meta
+              </Button>
+            }
+          />
 
           <div className="mx-auto w-full max-w-lg">
             <p className="mb-3 text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground">
@@ -389,15 +399,17 @@ export default function GoalsPage() {
 
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Metas</h1>
-        <Button onClick={openCreate}>
-          <Plus className="mr-2 size-4" />
-          Nova Meta
-        </Button>
-      </div>
+      <PageHeader
+        title="Metas"
+        actions={
+          <Button onClick={openCreate}>
+            <Plus className="mr-2 size-4" />
+            Nova Meta
+          </Button>
+        }
+      />
 
       {/* Summary cards */}
       {summary && (
@@ -455,6 +467,7 @@ export default function GoalsPage() {
           const monthly = parseFloat(goal.monthlyContribution)
           const pct = target > 0 ? (current / target) * 100 : 0
           const est = estimatedCompletion(target, current, monthly)
+          const alertNeeded = paceAlert(target, current, monthly, goal.targetDate)
 
           return (
             <Card key={goal.id} className="relative">
@@ -548,20 +561,17 @@ export default function GoalsPage() {
                   {est && (
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Target className="size-4" />
-                      <span>Conclusão estimada: {est}</span>
+                      <span>Previsão: {est}</span>
                     </div>
                   )}
 
+                  {alertNeeded && (
+                    <div className="flex items-center gap-2 text-amber-600 dark:text-amber-500">
+                      <AlertCircle className="size-4" />
+                      <span>Precisa de {format(alertNeeded)}/mês para chegar a tempo</span>
+                    </div>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => copyDebugId(goal.id, "Goal ID")}
-                  className="inline-flex w-fit items-center gap-1 font-mono text-[10px] text-muted-foreground/60 hover:text-primary"
-                  title={`Copiar ID da meta: ${goal.id}`}
-                >
-                  ID {goal.id.slice(0, 8)}
-                  <Copy className="size-3" />
-                </button>
 
                 {/* Add contribution button */}
                 <Button
@@ -876,7 +886,7 @@ function GoalDialog({
             <Progress value={pct} className="h-2" />
             <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
               <span>Guardado: {format(current)}</span>
-              <span>Conclusão: {est ?? "sem aporte mensal"}</span>
+              <span>Previsão: {est ?? "sem aporte mensal"}</span>
             </div>
           </div>
         </div>

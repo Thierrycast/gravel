@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { getRecurringPayload, refreshRecurringDerived } from "@/lib/domain/derived"
+import { monthlyEquivalentAmount } from "@/lib/domain/recurring"
 import { serializeForJson } from "@/lib/core/http"
 import { prisma } from "@/lib/prisma"
 
@@ -32,8 +33,14 @@ export async function GET() {
     origin: r.origin,
   }))
 
+  // Total mensal correto soma o equivalente mensal de cada periodicidade
+  // (semanal ≈ 4,33x, trimestral ÷ 3, anual ÷ 12).
   const summary = {
-    totalMonthlyIncome: rules.reduce((sum, r) => sum + Math.abs(Number(r.amount)), 0),
+    totalMonthlyIncome: rules.reduce(
+      (sum, r) =>
+        sum + monthlyEquivalentAmount(Math.abs(Number(r.amount)), r.interval),
+      0,
+    ),
     count: rules.length,
   }
 
