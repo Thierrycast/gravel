@@ -54,17 +54,18 @@ import {
  * Exposes financial tools to AI agents using the Model Context Protocol.
  */
 
-const server = new Server(
-  {
-    name: "gravel-finance",
-    version: "0.1.0",
-  },
-  {
-    capabilities: {
-      tools: {},
+function createServer() {
+  const server = new Server(
+    {
+      name: "gravel-finance",
+      version: "0.1.0",
     },
-  }
-);
+    {
+      capabilities: {
+        tools: {},
+      },
+    }
+  );
 
 
 const TOOLS: Tool[] = [
@@ -1278,6 +1279,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
+  return server;
+}
+
 
 async function runServer() {
   const portEnv = process.env.MCP_PORT || process.env.PORT;
@@ -1308,6 +1312,7 @@ async function runServer() {
       const response = res as ConstructorParameters<typeof SSEServerTransport>[1] & StatusResponse;
       console.error(`[mcp] SSE connection request received`);
       try {
+        const server = createServer();
         const transport = new SSEServerTransport("/messages", response);
         const sessionId = transport.sessionId;
         transports.set(sessionId, transport);
@@ -1366,6 +1371,7 @@ async function runServer() {
       console.error(`- Message Post Endpoint: http://${bindHost}:${port}/messages`);
     });
   } else {
+    const server = createServer();
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error("Gravel Finance MCP Server running on stdio");
