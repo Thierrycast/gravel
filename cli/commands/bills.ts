@@ -55,6 +55,40 @@ billsCommand
   })
 
 billsCommand
+  .command("statements")
+  .description("Faturas por ciclo (motor de billing): atual, próximas, passadas, total em aberto")
+  .option("-a, --account <id>", "ID de um cartão específico")
+  .action(async (options) => {
+    const { getCardStatements } = await import("../../lib/domain/billing.js")
+    const cards = await getCardStatements(
+      options.account ? { accountId: options.account } : {},
+    )
+    log.heading("Faturas por cartão")
+    if (cards.length === 0) {
+      log.warn("Nenhum cartão encontrado.")
+      return
+    }
+    for (const card of cards) {
+      const header = card.configured
+        ? `${card.accountName} · fecha dia ${card.closingDay} · vence dia ${card.dueDay ?? "—"}`
+        : `${card.accountName} · ciclo não configurado`
+      log.info(chalk.bold(header))
+      if (card.configured) {
+        const cur = card.current
+        console.log(
+          `  Fatura atual:   ${cur ? `R$ ${cur.amount.toFixed(2)} (${cur.status}) vence ${cur.dueDate.slice(0, 10)}` : "—"}`,
+        )
+        console.log(`  Próximas:       ${card.upcoming.filter((s) => s.amount > 0).length} · total em aberto R$ ${card.totalOpen.toFixed(2)}`)
+        const overdue = card.past.filter((s) => s.status === "OVERDUE")
+        if (overdue.length > 0) {
+          console.log(chalk.red(`  Vencidas:       ${overdue.length} (R$ ${overdue.reduce((s, b) => s + b.amount, 0).toFixed(2)})`))
+        }
+      }
+      console.log("")
+    }
+  })
+
+billsCommand
   .command("pay <id>")
   .description("Marca uma fatura como paga")
   .option("--status <status>", "Novo status (paid|open|overdue)", "paid")

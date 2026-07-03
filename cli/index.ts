@@ -19,6 +19,8 @@ import { settingsCommand } from "./commands/settings.js"
 import { syncCommand } from "./commands/sync.js"
 import { investmentsCommand } from "./commands/investments.js"
 import { cryptoCommand } from "./commands/crypto.js"
+import { peopleCommand } from "./commands/people.js"
+import { recurringCommand } from "./commands/recurring.js"
 import { mcpCommand } from "./commands/mcp.js"
 
 const program = new Command()
@@ -45,6 +47,8 @@ program.addCommand(settingsCommand)
 program.addCommand(syncCommand)
 program.addCommand(investmentsCommand)
 program.addCommand(cryptoCommand)
+program.addCommand(peopleCommand)
+program.addCommand(recurringCommand)
 program.addCommand(mcpCommand)
 
 program.parse()

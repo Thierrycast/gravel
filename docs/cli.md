@@ -24,13 +24,15 @@ Use `--help` em qualquer comando para ver as opções detalhadas.
 | `accounts` | Visualização e edição de contas bancárias | `list`, `update` |
 | `investments` | Visualização de ativos de renda fixa e variável | `list` |
 | `crypto` | Visualização do portfólio de criptomoedas | `list` |
-| `bills` | Gerenciamento de faturas de cartão de crédito | `list`, `pay` |
+| `bills` | Gerenciamento de faturas de cartão de crédito | `list`, `statements`, `pay` |
 | `goals` | Metas de economia com aportes automáticos | `list`, `create`, `update`, `delete` |
 | `scenarios` | Simulação de receitas/despesas futuras | `list`, `create`, `delete` |
 | `lends` | Empréstimos devidos/a receber de amigos | `list`, `create`, `update`, `delete` |
+| `people` | Pessoas cadastradas e valores a receber | `list` |
+| `recurring` | Recorrências detectadas pela Pluggy | `detected`, `set-status` |
 | `rules` | Regras de categorização automática de transações | `list`, `create`, `delete` |
 | `settings` | Exibição e atualização de preferências do usuário | `show`, `update` |
-| `sync` | Disparo manual e monitoramento de sincronização | `trigger`, `status` |
+| `sync` | Sincronização, refresh de item, saldo e enriquecimento | `trigger`, `status`, `items`, `refresh-item`, `balance`, `enrich-items` |
 | `mcp` | Instalação e gerenciamento do MCP Server | `install` |
 
 ---
@@ -63,6 +65,7 @@ Acompanhamento do portfólio de ativos cripto.
 ### 5. Faturas (`gravel bills`)
 Monitoramento do passivo de cartões.
 *   **`list`**: Exibe faturas com vencimento, status (aberta/paga/atrasada) e valores residuais.
+*   **`statements`**: Faturas por ciclo (motor de billing) — fatura atual, próximas, passadas, vencidas e total em aberto por cartão. Opção `-a, --account <id>` para um cartão específico.
 *   **`pay <id>`**: Marca uma fatura de cartão de crédito como quitada.
 
 ### 6. Metas (`gravel goals`)
@@ -100,17 +103,29 @@ Gerencia as preferências gerais de cálculo da plataforma.
 *   **`show`**: Exibe salário base, intervalo de sync, cooldown e status de encriptação do Vault.
 *   **`update`**: Modifica variáveis como `--salary`, `--show-future-salary` (`true` / `false`), `--show-future-accounts` (`true` / `false`), `--sync-interval` e `--lookback`.
 
-### 11. Sincronização (`gravel sync`)
-Controle operacional das integrações de dados.
-*   **`trigger`**: Dispara sincronização para `--provider pluggy`, `binance` ou `all`. A opção `--force` limpa travas de lock ativas devido a interrupções abruptas anteriores.
-*   **`status`**: Exibe o status da última rodada de sincronização, incluindo tempo de execução e status final.
+### 11. Pessoas (`gravel people`)
+*   **`list`**: Pessoas cadastradas com telefone e valores a receber (empréstimos + divisões de conta pendentes).
 
-### 12. Inbox e Fechamento (`gravel review`)
+### 12. Recorrências detectadas (`gravel recurring`)
+Recorrências identificadas pela Pluggy (recurring-payments).
+*   **`detected`**: Lista recorrências separadas em receita/despesa, com valor médio, ocorrências, confiança (a partir do regularityScore) e status manual. `--hidden` inclui as ocultadas.
+*   **`set-status <id> <status>`**: Confirma (`CONFIRMED`), oculta (`HIDDEN`) ou reabre (`SUGGESTED`) uma recorrência.
+
+### 13. Sincronização (`gravel sync`)
+Controle operacional das integrações de dados, refresh de item, saldo em tempo real e enriquecimento.
+*   **`trigger`**: Dispara sincronização para `--provider pluggy`, `binance` ou `all`. `--force` limpa travas de lock. `--no-refresh` relê os dados sem disparar `PATCH /items` (por padrão o refresh é ativado, pedindo dados frescos à instituição).
+*   **`status`**: Exibe o status da última rodada de sincronização.
+*   **`items`**: Estado de sincronização de cada item Pluggy (status, executionStatus, último sync, erro).
+*   **`refresh-item <itemId>`**: Dispara `PATCH /items/{id}` e acompanha o `executionStatus` até terminar. `--no-wait` dispara em segundo plano.
+*   **`balance <accountId>`**: Atualiza o saldo de uma conta em tempo real (`GET /accounts/{id}/balance`), com fallback ao saldo salvo.
+*   **`enrich-items [itemId]`**: Roda recurring-payments + behavior-analysis por item (todos ou um específico).
+
+### 14. Inbox e Fechamento (`gravel review`)
 Fluxos guiados de organização e conformidade financeira.
 *   **`inbox`**: Lista itens que necessitam de atenção na Inbox Financeira (ex: transações sem categoria, salário não confirmado).
 *   **`monthly-close`**: Acompanhamento e checklist do fechamento mensal de receitas e despesas.
 
-### 13. Model Context Protocol (`gravel mcp`)
+### 15. Model Context Protocol (`gravel mcp`)
 Gerenciamento de integrações MCP.
 *   **`install`**: Instala e configura automaticamente o Gravel MCP Server no Claude Desktop e cria a Skill correspondente para Codex/Antigravity.
     *   Opções: `--claude-only` (instala apenas no Claude), `--skill-only` (cria apenas a Skill local).

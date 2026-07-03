@@ -141,9 +141,14 @@ Você tem acesso ao servidor MCP `gravel-finance`. Use-o sempre que o usuário s
 *   **`search_transactions`**: Busca transações de forma paginada com suporte a termos de pesquisa, filtros de data, direção, conta, comerciantes e valores mínimos/máximos.
 *   **`get_accounts`**: Detalha saldos de todas as contas associadas.
 *   **`get_bills`**: Exibe faturas de cartão de crédito do mês.
+*   **`get_card_statements`**: Faturas por ciclo (motor de billing): fatura atual, próximas, passadas, vencidas e total em aberto, por cartão.
 *   **`get_investments`**: Lista ativos de renda fixa e fundos.
 *   **`get_crypto_portfolio`**: Posição e P&L consolidado de ativos de criptomoedas.
 *   **`get_recurring_expenses`**: Parcelamentos e assinaturas recorrentes com datas.
+*   **`get_detected_recurring`**: Recorrências detectadas pela Pluggy (recurring-payments), separadas em receitas e despesas, com regularityScore e ocorrências.
+*   **`get_reports`**: Resumo consolidado (dívida de cartão em aberto + projeção de 6 meses).
+*   **`get_people`**: Pessoas cadastradas com valores a receber (empréstimos + divisões).
+*   **`get_sync_items`**: Estado de sincronização de cada item Pluggy (status, executionStatus, último sync, erro, consentimento).
 *   **`get_goals`**: Exibe metas ativas e percentual de progresso.
 *   **get_scenarios**: Cenários e eventos de simulação futuros.
 *   **get_financial_inbox**: Retorna pendências de conciliação.
@@ -163,4 +168,10 @@ Você tem acesso ao servidor MCP `gravel-finance`. Use-o sempre que o usuário s
 *   **`create_lend`** / **`update_lend`** / **`delete_lend`**: Registra empréstimos a receber ou dívidas a pagar para amigos.
 *   **`create_automation_rule`** / **`delete_automation_rule`**: Cria e remove regras de conciliação automática baseadas em palavras-chave ou regex.
 *   **`update_settings`**: Altera configurações de exibição e valores base de salário.
-*   **`trigger_sync`**: Dispara rotinas de atualização da Pluggy e Binance.
+*   **`set_detected_recurring_status`**: Confirma, oculta ou reabre uma recorrência detectada pela Pluggy.
+
+### 🔄 Sincronização, saldo e enriquecimento Pluggy
+*   **`trigger_sync`**: Dispara rotinas de atualização da Pluggy e Binance. Com `refresh: true` (default) pede dados frescos à instituição via `PATCH /items/{id}` antes de reler.
+*   **`refresh_item`**: Dispara `PATCH /items/{id}` e acompanha o `executionStatus` até terminar (SUCCESS/PARTIAL_SUCCESS/ERROR), tratando MFA, consentimento, reconexão e rate limit. `wait: false` dispara e retorna.
+*   **`refresh_account_balance`**: Atualiza o saldo de uma conta em tempo real via `GET /accounts/{id}/balance`, sem sync completo, com fallback ao saldo salvo.
+*   **`enrich_items`**: Roda o enriquecimento por item (recurring-payments + behavior-analysis).
