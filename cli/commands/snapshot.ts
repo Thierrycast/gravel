@@ -49,7 +49,8 @@ snapshotCommand
     const paramsWithTop = new URLSearchParams(params)
     paramsWithTop.set("limit", String(topN))
 
-    const { getOverviewMetrics, getCashFlowMetrics, getSpendingByCategoryMetrics, getSpendingByMerchantMetrics, getBillsSummaryMetrics, getCryptoPortfolioMetrics, getCryptoAssetMetrics } = await import("@/lib/domain/analytics")
+    const { getOverviewMetrics, getCashFlowMetrics, getSpendingByCategoryMetrics, getSpendingByMerchantMetrics, getCryptoPortfolioMetrics, getCryptoAssetMetrics } = await import("@/lib/domain/analytics")
+    const { getCardStatementsSummaryMetrics } = await import("@/lib/domain/billing")
     const { getRecurringPayload, getProjectionPayload, getPortfolioPayload } = await import("@/lib/domain/derived")
     const { getDomainTransactions, getDomainCategories, getDomainMerchants, getDomainAccounts, getDomainBills } = await import("@/lib/domain/queries")
     const { prisma } = await import("@/lib/prisma")
@@ -70,7 +71,7 @@ snapshotCommand
     const rawMerchants = serializeDecimal(await getDomainMerchants(new URLSearchParams()))
 
     log.info("Coletando faturas...")
-    const billsSummary = serializeDecimal(await getBillsSummaryMetrics(params))
+    const billsSummary = serializeDecimal(await getCardStatementsSummaryMetrics())
     const rawBills = serializeDecimal(await getDomainBills(new URLSearchParams()))
 
     log.info("Coletando contas...")

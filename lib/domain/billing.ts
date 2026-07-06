@@ -505,3 +505,72 @@ export async function getCardStatements(options?: {
     } satisfies CardStatementsPayload;
   });
 }
+
+export type CardStatementsSummaryMetrics = {
+  counts: { overdue: number; open: number; paid: number; future: number };
+  overdueAmount: number;
+  openAmount: number;
+  dueIn7DaysAmount: number;
+  statements: CardStatementsPayload[];
+};
+
+/**
+ * Agrega os dados do motor de ciclo de fatura em métricas consolidadas.
+ * Substitui getBillsSummaryMetrics() no CLI e MCP para garantir que os
+ * números sejam idênticos aos exibidos na UI /bills.
+ */
+export async function getCardStatementsSummaryMetrics(options?: {
+  accountId?: string;
+  now?: Date;
+}): Promise<CardStatementsSummaryMetrics> {
+  const now = options?.now ?? new Date();
+  const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const statements = await getCardStatements(options);
+
+  let overdueCount = 0;
+  let openCount = 0;
+  let paidCount = 0;
+  let futureCount = 0;
+  let overdueAmount = 0;
+  let openAmount = 0;
+  let dueIn7DaysAmount = 0;
+
+  for (const card of statements) {
+    const all = [
+      ...(card.current ? [card.current] : []),
+      ...card.upcoming,
+      ...card.past,
+    ];
+    for (const s of all) {
+      const due = new Date(s.dueDate);
+      const amount = s.amount;
+      switch (s.status) {
+        case "OVERDUE":
+          overdueCount++;
+          overdueAmount += amount;
+          break;
+        case "OPEN":
+          openCount++;
+          openAmount += amount;
+          if (due <= in7Days) dueIn7DaysAmount += amount;
+          break;
+        case "PAID":
+        case "CLOSED":
+          paidCount++;
+          break;
+        case "FUTURE":
+          futureCount++;
+          if (due <= in7Days) dueIn7DaysAmount += amount;
+          break;
+      }
+    }
+  }
+
+  return {
+    counts: { overdue: overdueCount, open: openCount, paid: paidCount, future: futureCount },
+    overdueAmount,
+    openAmount,
+    dueIn7DaysAmount,
+    statements,
+  };
+}

@@ -393,11 +393,15 @@ model UserSetting {
   syncIntervalHours   Int      @default(6)
   syncLookbackDays    Int      @default(30)
   dashboardConfigJson String?
-  vaultEnabled        Boolean  @default(false)
-  vaultMasterPassword String?
-  vaultInactivityMin  Int      @default(0)
-  updatedAt           DateTime @updatedAt
-  createdAt           DateTime @default(now())
+  vaultEnabled            Boolean  @default(false)
+  vaultMasterPassword     String?
+  vaultInactivityMin      Int      @default(0)
+  notificationWebhookUrl  String?
+  telegramBotToken        String?
+  telegramChatId          String?
+  anthropicApiKey         String?
+  updatedAt               DateTime @updatedAt
+  createdAt               DateTime @default(now())
 }
 
 model AppSecret {

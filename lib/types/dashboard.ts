@@ -45,6 +45,7 @@ export type OverviewDashboardData = {
       netWorth: number;
       assets: number;
       investments: number;
+      liquid: number;
     };
     inflow: number;
     outflow: number;

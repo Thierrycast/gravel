@@ -2,12 +2,24 @@ import { prisma } from "@/lib/prisma";
 import { getOverviewMetrics } from "./analytics";
 
 export async function getBehavioralNudges() {
-  const [overview, transactions] = await Promise.all([
+  const now = new Date();
+  const historyStart = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+  const historyEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+
+  const [overview, transactions, historyTransactions, btcSnapshot] = await Promise.all([
     getOverviewMetrics(),
     prisma.domainTransaction.findMany({
-      where: { direction: "OUTFLOW" },
+      where: { ignored: false, direction: "OUTFLOW" },
       orderBy: { occurredAt: "desc" },
       take: 100,
+    }),
+    prisma.domainTransaction.findMany({
+      where: { ignored: false, direction: "OUTFLOW", occurredAt: { gte: historyStart, lte: historyEnd } },
+      select: { amount: true },
+    }),
+    prisma.binanceAssetPriceSnapshot.findFirst({
+      where: { symbol: "BTCBRL" },
+      orderBy: { fetchedAt: "desc" },
     }),
   ]);
 
@@ -15,19 +27,18 @@ export async function getBehavioralNudges() {
 
   // 1. Budget Guardrail (75% check)
   const currentOutflow = Number(overview.monthlyOutflow);
-  // Historical average (simple proxy: average of last 3 months if available)
-  const historicalAvg = 5000; // Placeholder, could be dynamic
+  const historyTotal = historyTransactions.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  const historicalAvg = historyTotal > 0 ? historyTotal / 3 : null;
 
-  if (currentOutflow > historicalAvg * 0.75 && new Date().getDate() <= 15) {
+  if (historicalAvg !== null && currentOutflow > historicalAvg * 0.75 && now.getDate() <= 15) {
     nudges.push({
       type: "WARNING",
       title: "Se liga!",
-      message: `Você já queimou R$ ${currentOutflow.toFixed(2)} este mês. Isso é mais de 75% da sua média histórica e ainda estamos no dia ${new Date().getDate()}.`,
+      message: `Você já queimou R$ ${currentOutflow.toFixed(2)} este mês. Isso é mais de 75% da sua média histórica de R$ ${historicalAvg.toFixed(2)} e ainda estamos no dia ${now.getDate()}.`,
     });
   }
 
   // 2. Opportunity Cost (Tax to BTC)
-  // Find transactions with "Taxa" or "Tarifa"
   const taxes = transactions.filter(
     (tax) =>
       (tax.description || "").toLowerCase().includes("taxa") ||
@@ -37,7 +48,7 @@ export async function getBehavioralNudges() {
   const totalTaxes = taxes.reduce((sum, tax) => sum + Math.abs(Number(tax.amount)), 0);
 
   if (totalTaxes > 10) {
-    const btcPrice = 500000; // Approximate BRL price for BTC
+    const btcPrice = btcSnapshot ? Number(btcSnapshot.price) : 500000;
     const btcAmount = totalTaxes / btcPrice;
     nudges.push({
       type: "INSIGHT",

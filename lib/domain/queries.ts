@@ -980,3 +980,68 @@ export async function getUserSettings(searchParams?: URLSearchParams) {
 
   return base
 }
+
+export async function getGoalHistory(goalId: string, months = 12) {
+  const goal = await prisma.goal.findUnique({ where: { id: goalId } });
+  if (!goal) throw new Error(`Meta não encontrada: ${goalId}`);
+
+  const enriched = await enrichGoalWithAutoTransactions(goal);
+
+  if (!goal.matchCategorySlug && !goal.matchKeyword) {
+    return {
+      goal: enriched,
+      hasHistory: false,
+      series: [] as Array<{ year: number; month: number; label: string; addedAmount: number; cumulativeAmount: number }>,
+    };
+  }
+
+  const startDate = goal.matchDateStart ?? goal.createdAt;
+  const lookbackStart = new Date();
+  lookbackStart.setMonth(lookbackStart.getMonth() - months);
+  const queryStart = lookbackStart < startDate ? startDate : lookbackStart;
+
+  const filters: Prisma.DomainTransactionWhereInput[] = [
+    { ignored: false },
+    { occurredAt: { gte: queryStart } },
+  ];
+
+  const orConditions: Prisma.DomainTransactionWhereInput[] = [];
+  if (goal.matchCategorySlug) {
+    const category = await prisma.domainCategory.findUnique({ where: { slug: goal.matchCategorySlug } });
+    if (category) orConditions.push({ domainCategoryId: category.id });
+  }
+  if (goal.matchKeyword) {
+    orConditions.push({
+      OR: [
+        { description: { contains: goal.matchKeyword } },
+        { normalizedDescription: { contains: goal.matchKeyword } },
+        { merchantName: { contains: goal.matchKeyword } },
+      ],
+    });
+  }
+  if (orConditions.length > 0) filters.push({ OR: orConditions });
+
+  const transactions = await prisma.domainTransaction.findMany({
+    where: { AND: filters },
+    select: { amount: true, occurredAt: true },
+    orderBy: { occurredAt: "asc" },
+  });
+
+  const monthlyMap = new Map<string, number>();
+  for (const tx of transactions) {
+    const d = tx.occurredAt;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    monthlyMap.set(key, (monthlyMap.get(key) ?? 0) + Math.abs(Number(tx.amount)));
+  }
+
+  let cumulative = 0;
+  const series = [...monthlyMap.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([label, addedAmount]) => {
+      cumulative += addedAmount;
+      const [y, m] = label.split("-").map(Number);
+      return { year: y, month: m, label, addedAmount, cumulativeAmount: cumulative };
+    });
+
+  return { goal: enriched, hasHistory: true, series };
+}

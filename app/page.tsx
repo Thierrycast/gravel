@@ -62,6 +62,7 @@ export default async function Page({
         netWorth: overview.fiatNetWorth.plus(cryptoTotalBrl),
         assets: overview.fiatAssets.plus(cryptoTotalBrl),
         investments: overview.investmentsTotal,
+        liquid: overview.accountBalance,
       },
       inflow: overview.periodInflow,
       outflow: overview.periodOutflow,
