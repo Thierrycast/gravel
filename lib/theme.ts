@@ -1,15 +1,19 @@
 export type ThemeMode = "light" | "dark"
-export type ThemeFamily = "default" | "cyberpunk" | "emerald"
+export type ThemeFamily = "default" | "obsidian" | "neon-noir" | "ocean" | "warm-sand"
 
-export const THEME_FAMILIES: ThemeFamily[] = ["default", "cyberpunk", "emerald"]
+export const THEME_FAMILIES: ThemeFamily[] = ["default", "obsidian", "neon-noir", "ocean", "warm-sand"]
 
 export const NEXT_THEMES_REGISTRY = [
   "light",
   "dark",
-  "cyberpunk-light",
-  "cyberpunk-dark",
-  "emerald-light",
-  "emerald-dark",
+  "obsidian-light",
+  "obsidian-dark",
+  "neon-noir-light",
+  "neon-noir-dark",
+  "ocean-light",
+  "ocean-dark",
+  "warm-sand-light",
+  "warm-sand-dark",
 ] as const
 
 export function getMode(theme: string | undefined | null): ThemeMode {
@@ -19,11 +23,9 @@ export function getMode(theme: string | undefined | null): ThemeMode {
 }
 
 export function getFamily(theme: string | undefined | null): ThemeFamily {
-  if (!theme || theme === "light" || theme === "dark" || theme === "system") {
-    return "default"
-  }
-  const base = theme.replace(/-(light|dark)$/, "")
-  if (base === "cyberpunk" || base === "emerald") return base
+  if (!theme || theme === "light" || theme === "dark" || theme === "system") return "default"
+  const base = theme.replace(/-(light|dark)$/, "") as ThemeFamily
+  if (THEME_FAMILIES.includes(base)) return base
   return "default"
 }
 
