@@ -205,6 +205,7 @@ export interface RecurringRule {
   id: string;
   description: string;
   amount: number;
+  currencyCode: string | null;
   frequency: string;
   category: string;
   categoryId: string | null;

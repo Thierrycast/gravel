@@ -23,7 +23,7 @@ interface UseApiResult<T> {
 
 /**
  * Internal error type carrying structured info up through the query layer.
- * useQuery preserves Error instances — we attach UseApiError as `.info`.
+ * useQuery preserves Error instances; we attach UseApiError as `.info`.
  */
 class ApiError extends Error {
   info: UseApiError

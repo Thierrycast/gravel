@@ -18,7 +18,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatCurrencyByCode } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { PageError } from "@/components/page-error";
 
@@ -244,7 +244,9 @@ export default function RecurringPage() {
                   <span className="text-sm truncate">{rule.description}</span>
                 </div>
                 <span className="text-sm font-medium tabular-nums text-foreground shrink-0 ml-2">
-                  {format(Math.abs(Number(rule.amount)))}
+                  {rule.currencyCode && rule.currencyCode !== "BRL"
+                    ? formatCurrencyByCode(Math.abs(Number(rule.amount)), rule.currencyCode)
+                    : format(Math.abs(Number(rule.amount)))}
                 </span>
               </button>
             ))}
@@ -341,7 +343,9 @@ export default function RecurringPage() {
                     </div>
                   </div>
                   <span className="shrink-0 text-sm font-semibold tabular-nums text-pink-400 ml-3">
-                    {format(Math.abs(rule.amount))}
+                    {rule.currencyCode && rule.currencyCode !== "BRL"
+                      ? formatCurrencyByCode(Math.abs(rule.amount), rule.currencyCode)
+                      : format(Math.abs(rule.amount))}
                   </span>
                 </button>
               );
@@ -403,7 +407,9 @@ export default function RecurringPage() {
                   </div>
                 </div>
                 <span className="shrink-0 text-sm font-semibold tabular-nums text-pink-400 ml-3">
-                  {format(Math.abs(rule.amount))}
+                  {rule.currencyCode && rule.currencyCode !== "BRL"
+                    ? formatCurrencyByCode(Math.abs(rule.amount), rule.currencyCode)
+                    : format(Math.abs(rule.amount))}
                 </span>
               </button>
             ))}
@@ -425,7 +431,9 @@ export default function RecurringPage() {
             <div className="flex flex-1 flex-col gap-0 overflow-y-auto px-4 pb-6">
               <div className="py-4 text-center">
                 <p className="text-3xl font-bold tabular-nums text-pink-400">
-                  {format(Math.abs(selectedRule.amount))}
+                  {selectedRule.currencyCode && selectedRule.currencyCode !== "BRL"
+                    ? formatCurrencyByCode(Math.abs(selectedRule.amount), selectedRule.currencyCode)
+                    : format(Math.abs(selectedRule.amount))}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">por {frequencyLabel[selectedRule.frequency] ?? selectedRule.frequency}</p>
               </div>
