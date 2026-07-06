@@ -7,7 +7,7 @@ import {
   CartesianGrid,
 } from "recharts"
 import { useApi } from "@/hooks/use-api"
-import { daysUntilLabel } from "@/lib/format"
+import { daysUntilLabel, formatCurrencyByCode } from "@/lib/format"
 import { useCurrency } from "@/lib/currency-context"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -23,6 +23,7 @@ interface RecurringExpenseRule {
   id: string
   description: string
   amount: number
+  currencyCode?: string | null
   frequency: string
   category: string
   nextDate: string
@@ -222,7 +223,9 @@ export default function RecurringExpensesPage() {
                 </div>
                 <div className="text-right ml-3">
                   <p className="text-sm font-bold tabular-nums text-pink-400">
-                    {format(Math.abs(rule.amount))}
+                    {rule.currencyCode && rule.currencyCode !== "BRL"
+                      ? formatCurrencyByCode(Math.abs(rule.amount), rule.currencyCode)
+                      : format(Math.abs(rule.amount))}
                   </p>
                   {rule.nextDate && (
                     <p className="text-xs text-muted-foreground">

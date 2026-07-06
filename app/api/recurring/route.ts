@@ -247,6 +247,7 @@ export async function GET(request: Request) {
       id: rule.id,
       description: rule.title,
       amount: Number(rule.amount),
+      currencyCode: rule.currencyCode ?? null,
       frequency: rule.interval,
       category: rule.categoryId
         ? (categoryMap.get(rule.categoryId) ?? "Sem categoria")
@@ -302,6 +303,7 @@ export async function GET(request: Request) {
         id: `installment-${series.id}`,
         description,
         amount: displayedOccurrence.amount,
+        currencyCode: transaction.currencyCode ?? null,
         frequency: "MONTHLY",
         category: transaction.domainCategoryId
           ? (categoryMap.get(transaction.domainCategoryId) ?? "Sem categoria")

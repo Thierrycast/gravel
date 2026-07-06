@@ -315,15 +315,17 @@ function SettingsContent() {
   }
 
   useEffect(() => {
+    let mounted = true
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
       setPushState("unsupported")
       return
     }
     navigator.serviceWorker.ready.then((reg) =>
       reg.pushManager.getSubscription().then((sub) => {
-        setPushState(sub ? "active" : "idle")
+        if (mounted) setPushState(sub ? "active" : "idle")
       })
-    ).catch(() => setPushState("unsupported"))
+    ).catch(() => { if (mounted) setPushState("unsupported") })
+    return () => { mounted = false }
   }, [])
   const [salaryPatterns, setSalaryPatterns] = useState<string[]>([])
   const [salarySources, setSalarySources] = useState<SalarySource[]>([])

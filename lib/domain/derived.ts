@@ -34,6 +34,7 @@ type RecurringMetadata = {
   direction?: string | null;
   sourceTransactionIds?: string[];
   isInstallment?: boolean;
+  currencyCode?: string | null;
 };
 
 function decimal(value?: DecimalLike) {
@@ -259,6 +260,7 @@ export async function refreshRecurringDerived(options?: {
     categoryId?: string;
     descriptionPattern?: string;
     amount: Prisma.Decimal;
+    currencyCode?: string | null;
     interval: string;
     nextDate: Date;
     type: "INCOME" | "EXPENSE";
@@ -384,6 +386,7 @@ export async function refreshRecurringDerived(options?: {
       nextDate.setUTCFullYear(nextDate.getUTCFullYear() + 1);
 
     detectedCandidates.push({
+      currencyCode: lastTransaction.currencyCode ?? null,
       name:
         lastTransaction.merchantName ??
         lastTransaction.description ??
@@ -466,6 +469,7 @@ export async function refreshRecurringDerived(options?: {
           direction: candidate.type,
           sourceTransactionIds: candidate.sourceTransactionIds,
           isInstallment: candidate.isInstallment ?? false,
+          currencyCode: candidate.currencyCode ?? null,
         } satisfies RecurringMetadata),
       },
     });
@@ -507,6 +511,7 @@ export async function getRecurringPayload(type?: "INCOME" | "EXPENSE") {
         title: rule.name,
         type: recurringType,
         amount: rule.amount,
+        currencyCode: metadata.currencyCode ?? null,
         interval: rule.interval ?? "MONTHLY",
         nextDate,
         active: rule.active,
