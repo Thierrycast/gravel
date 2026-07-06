@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useApi } from "@/hooks/use-api";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Brain,
   Search,
@@ -16,6 +17,8 @@ import {
   CheckCircle2,
   HeartPulse,
   Info,
+  Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import {
   ComposedChart,
@@ -128,13 +131,29 @@ function healthLabel(score: number) {
   return "Crítico";
 }
 
+type BriefingResponse =
+  | { text: string; generatedAt: string }
+  | { error: string }
+
 export default function InsightsPage() {
   const { format } = useCurrency();
+  const queryClient = useQueryClient();
   const { data: insights, loading } = useApi<InsightsResponse>("/api/insights");
   const { data: reports, loading: reportsLoading } = useApi<ReportsResponse>(
     "/api/domain/metrics/reports",
   );
+  const {
+    data: briefing,
+    loading: briefingLoading,
+  } = useApi<BriefingResponse>("/api/briefing");
+  const [briefingRefreshing, setBriefingRefreshing] = useState(false);
   const [forensicsOpen, setForensicsOpen] = useState(false);
+
+  async function refreshBriefing() {
+    setBriefingRefreshing(true);
+    await queryClient.invalidateQueries({ queryKey: ["/api/briefing"] });
+    setBriefingRefreshing(false);
+  }
 
   if (loading) {
     return (
@@ -174,6 +193,64 @@ export default function InsightsPage() {
         title="Insights"
         description="O que merece a sua atenção agora, gerado a partir de faturas, projeções e comportamento."
       />
+
+      {/* Briefing Automático por IA */}
+      {briefingLoading ? (
+        <Card>
+          <CardContent className="pt-5 space-y-2">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+          </CardContent>
+        </Card>
+      ) : briefing && "error" in briefing ? (
+        briefing.error === "api_key_missing" ? (
+          <Card className="border-dashed">
+            <CardContent className="flex items-center justify-between gap-4 pt-5">
+              <div className="flex items-center gap-3">
+                <Sparkles className="size-5 shrink-0 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium">Briefing por IA disponível</p>
+                  <p className="text-xs text-muted-foreground">Configure sua Anthropic API Key para gerar análises mensais automáticas.</p>
+                </div>
+              </div>
+              <Link
+                href="/settings?tab=notificacoes"
+                className="text-xs text-primary underline-offset-2 hover:underline shrink-0"
+              >
+                Configurar →
+              </Link>
+            </CardContent>
+          </Card>
+        ) : null
+      ) : briefing && "text" in briefing ? (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="size-4 text-primary" />
+                <span className="text-sm font-semibold text-primary">Briefing do Mês</span>
+                <span className="text-[11px] text-muted-foreground">
+                  {new Date(briefing.generatedAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={refreshBriefing}
+                disabled={briefingRefreshing}
+                className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+                title="Atualizar briefing"
+              >
+                <RefreshCw className={cn("size-3.5", briefingRefreshing && "animate-spin")} />
+              </button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm leading-relaxed whitespace-pre-line">{briefing.text}</p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* Saúde financeira — hero */}
       <Card>

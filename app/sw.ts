@@ -60,3 +60,28 @@ const serwist = new Serwist({
 });
 
 serwist.addEventListeners();
+
+// Push notification handlers — typed via globalThis cast to avoid SW/lib.dom conflicts
+const sw = globalThis as unknown as {
+  addEventListener: (type: string, listener: (event: unknown) => void) => void
+  registration: { showNotification: (title: string, opts?: object) => Promise<void> }
+  clients: { openWindow: (url: string) => Promise<unknown> }
+}
+
+sw.addEventListener("push", (event) => {
+  const e = event as { data?: { json?: () => { title?: string; body?: string; href?: string } }; waitUntil: (p: Promise<unknown>) => void }
+  const data = e.data?.json?.() ?? {}
+  e.waitUntil(
+    sw.registration.showNotification(data.title ?? "Gravel Finance", {
+      body: data.body ?? "",
+      icon: "/icons/icon-192x192.png",
+      data: { href: data.href ?? "/" },
+    })
+  )
+})
+
+sw.addEventListener("notificationclick", (event) => {
+  const e = event as { notification: { close: () => void; data?: { href?: string } }; waitUntil: (p: Promise<unknown>) => void }
+  e.notification.close()
+  e.waitUntil(sw.clients.openWindow(e.notification.data?.href ?? "/"))
+})
