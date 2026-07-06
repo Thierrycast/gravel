@@ -6,12 +6,8 @@ import { Toaster } from "sonner";
 export function AppToaster() {
   const { resolvedTheme } = useTheme();
 
-  const sonnerTheme: "light" | "dark" =
-    resolvedTheme === "light" ||
-    resolvedTheme === "cyberpunk-light" ||
-    resolvedTheme === "emerald-light"
-      ? "light"
-      : "dark";
+  const isLight = !resolvedTheme || resolvedTheme === "light" || resolvedTheme.endsWith("-light")
+  const sonnerTheme: "light" | "dark" = isLight ? "light" : "dark";
 
   return (
     <Toaster
