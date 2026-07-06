@@ -3,6 +3,49 @@ import { Suspense } from "react";
 import Image from "next/image";
 import { ViewTransitions } from "next-view-transitions";
 import "./globals.css";
+import {
+  Space_Mono,
+  Instrument_Serif,
+  Space_Grotesk,
+  Plus_Jakarta_Sans,
+  DM_Mono,
+} from "next/font/google"
+
+const spaceMono = Space_Mono({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  variable: "--font-space-mono",
+  display: "swap",
+})
+
+const instrumentSerif = Instrument_Serif({
+  subsets: ["latin"],
+  weight: "400",
+  style: ["normal", "italic"],
+  variable: "--font-instrument-serif",
+  display: "swap",
+})
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  variable: "--font-space-grotesk",
+  display: "swap",
+})
+
+const plusJakartaSans = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "800"],
+  variable: "--font-plus-jakarta",
+  display: "swap",
+})
+
+const dmMono = DM_Mono({
+  subsets: ["latin"],
+  weight: ["300", "400", "500"],
+  variable: "--font-dm-mono",
+  display: "swap",
+})
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -70,7 +113,11 @@ export default async function RootLayout({
 
   return (
     <ViewTransitions>
-    <html lang="pt-BR" suppressHydrationWarning>
+    <html
+      lang="pt-BR"
+      suppressHydrationWarning
+      className={`${spaceMono.variable} ${instrumentSerif.variable} ${spaceGrotesk.variable} ${plusJakartaSans.variable} ${dmMono.variable}`}
+    >
       <body className="antialiased">
         <ThemeProvider
           attribute="class"
