@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import {
@@ -19,6 +20,8 @@ import {
   AlertTriangle,
   Download,
   Bell,
+  ChevronRight,
+  ArrowLeft,
 } from "lucide-react"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -80,15 +83,65 @@ type SettingsResponse = SettingsFormData & {
 }
 
 const SECTIONS = [
-  { id: "financeiro", label: "Financeiro", icon: DollarSign },
-  { id: "cartoes", label: "Cartões", icon: CreditCard },
-  { id: "salario", label: "Fontes de salário", icon: Tags },
-  { id: "aparencia", label: "Aparência", icon: Palette },
-  { id: "seguranca", label: "Segurança", icon: Shield },
-  { id: "notificacoes", label: "Notificações", icon: Bell },
-  { id: "sincronizacao", label: "Sincronização", icon: RefreshCw },
-  { id: "dados", label: "Dados e cache", icon: Database },
+  {
+    id: "financeiro",
+    label: "Financeiro",
+    icon: DollarSign,
+    description: "Salário, projeções e patrimônio",
+    hasSave: true,
+  },
+  {
+    id: "cartoes",
+    label: "Cartões",
+    icon: CreditCard,
+    description: "Ciclos de fatura dos cartões",
+    hasSave: false,
+  },
+  {
+    id: "salario",
+    label: "Fontes de salário",
+    icon: Tags,
+    description: "Identificação automática de salário",
+    hasSave: false,
+  },
+  {
+    id: "aparencia",
+    label: "Aparência",
+    icon: Palette,
+    description: "Tema e modo claro/escuro",
+    hasSave: false,
+  },
+  {
+    id: "seguranca",
+    label: "Segurança",
+    icon: Shield,
+    description: "Vault local e senha mestre",
+    hasSave: true,
+  },
+  {
+    id: "notificacoes",
+    label: "Notificações",
+    icon: Bell,
+    description: "Webhook, Telegram e chave de IA",
+    hasSave: true,
+  },
+  {
+    id: "sincronizacao",
+    label: "Sincronização",
+    icon: RefreshCw,
+    description: "Intervalos e período de busca",
+    hasSave: true,
+  },
+  {
+    id: "dados",
+    label: "Dados e cache",
+    icon: Database,
+    description: "Exportação e limpeza de cache",
+    hasSave: false,
+  },
 ] as const
+
+type SectionId = (typeof SECTIONS)[number]["id"]
 
 function isCreditCard(account: Account) {
   return account.kind === "CARD" || account.kind === "CREDIT"
@@ -110,7 +163,6 @@ function CardBillingRow({
     account.billingDueDay != null ? String(account.billingDueDay) : "",
   )
   const [saving, setSaving] = useState(false)
-
   const configured = account.billingClosingDay != null
 
   async function save() {
@@ -186,18 +238,19 @@ function CardBillingRow({
   )
 }
 
-export default function SettingsPage() {
-  const { data: settings, loading, refetch } =
-    useApi<SettingsResponse>("/api/settings")
-  const { data: accountsData, refetch: refetchAccounts } =
-    useApi<AccountsResponse>("/api/domain/accounts")
-  const { data: statementsData, refetch: refetchStatements } =
-    useApi<CardStatementsResponse>("/api/domain/cards/statements")
+function SettingsContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const rawTab = searchParams.get("tab") as SectionId | null
+  const activeTab: SectionId = (rawTab && SECTIONS.some((s) => s.id === rawTab) ? rawTab : SECTIONS[0].id) as SectionId
+
+  const { data: settings, loading, refetch } = useApi<SettingsResponse>("/api/settings")
+  const { data: accountsData, refetch: refetchAccounts } = useApi<AccountsResponse>("/api/domain/accounts")
+  const { data: statementsData, refetch: refetchStatements } = useApi<CardStatementsResponse>("/api/domain/cards/statements")
   const queryClient = useQueryClient()
   const { format } = useCurrency()
   const [saving, setSaving] = useState(false)
   const [clearingCache, setClearingCache] = useState(false)
-  const [activeSection, setActiveSection] = useState<string>(SECTIONS[0].id)
   const [salaryPatterns, setSalaryPatterns] = useState<string[]>([])
   const [salarySources, setSalarySources] = useState<SalarySource[]>([])
   const [salarySuggestions, setSalarySuggestions] = useState<SalarySuggestion[]>([])
@@ -219,10 +272,7 @@ export default function SettingsPage() {
 
   const creditCards = (accountsData?.results ?? []).filter(isCreditCard)
   const suggestedDueDayByAccount = new Map(
-    (statementsData?.results ?? []).map((entry) => [
-      entry.accountId,
-      entry.suggestedDueDay,
-    ]),
+    (statementsData?.results ?? []).map((entry) => [entry.accountId, entry.suggestedDueDay]),
   )
 
   useEffect(() => {
@@ -241,15 +291,9 @@ export default function SettingsPage() {
         telegramChatId: settings.telegramChatId || "",
         anthropicApiKey: settings.anthropicApiKey || "",
       })
-      if (Array.isArray(settings.salaryPatterns)) {
-        setSalaryPatterns(settings.salaryPatterns)
-      }
-      if (Array.isArray(settings.salarySources)) {
-        setSalarySources(settings.salarySources)
-      }
-      if (Array.isArray(settings.salarySuggestions)) {
-        setSalarySuggestions(settings.salarySuggestions)
-      }
+      if (Array.isArray(settings.salaryPatterns)) setSalaryPatterns(settings.salaryPatterns)
+      if (Array.isArray(settings.salarySources)) setSalarySources(settings.salarySources)
+      if (Array.isArray(settings.salarySuggestions)) setSalarySuggestions(settings.salarySuggestions)
     }
   }, [settings])
 
@@ -274,10 +318,7 @@ export default function SettingsPage() {
   async function addPattern() {
     const trimmed = newPattern.trim()
     if (!trimmed || salaryPatterns.includes(trimmed)) return
-    const ok = await patchPatterns(
-      [...salaryPatterns, trimmed],
-      `Fonte "${trimmed}" cadastrada`,
-    )
+    const ok = await patchPatterns([...salaryPatterns, trimmed], `Fonte "${trimmed}" cadastrada`)
     if (ok) setNewPattern("")
   }
 
@@ -329,78 +370,19 @@ export default function SettingsPage() {
     }
   }
 
-  function scrollToSection(id: string) {
-    setActiveSection(id)
-    document.getElementById(`section-${id}`)?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    })
+  function navigateTo(id: SectionId) {
+    router.replace(`/settings?tab=${id}`)
   }
 
-  if (loading) {
-    return (
-      <div className="flex w-full max-w-3xl flex-col gap-6">
-        <Skeleton className="h-9 w-64" />
-        <Skeleton className="h-10 w-full" />
-        <div className="grid gap-6">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-48" />
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    // max-w-3xl: formulários de configurações ficam ilegíveis/deformados
-    // ocupando a largura total do app em telas grandes.
-    <div className="flex w-full max-w-3xl flex-col gap-6">
-      <PageHeader
-        title="Configurações"
-        description="Gerencie as preferências do seu painel financeiro."
-      />
-
-      {/* Section navigation */}
-      <nav
-        aria-label="Seções de configurações"
-        className="sticky top-0 z-10 -mx-1 flex gap-1 overflow-x-auto bg-background/95 px-1 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80"
-      >
-        {SECTIONS.map((section) => {
-          const Icon = section.icon
-          return (
-            <button
-              key={section.id}
-              type="button"
-              onClick={() => scrollToSection(section.id)}
-              className={cn(
-                "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                activeSection === section.id
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : "border-transparent bg-muted/50 text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Icon className="size-3.5" />
-              {section.label}
-            </button>
-          )
-        })}
-      </nav>
-
-      <div className="grid gap-6">
-        {/* Financeiro */}
-        <Card id="section-financeiro" className="scroll-mt-16">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <DollarSign className="size-5 text-primary" />
-              <CardTitle>Financeiro</CardTitle>
-            </div>
-            <CardDescription>Defina parâmetros para cálculos de projeção e patrimônio.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
+  function renderPanel(id: SectionId) {
+    switch (id) {
+      case "financeiro":
+        return (
+          <div className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="salary">Salário Mensal Estimado (Líquido)</Label>
+              <Label htmlFor="salary">Salário mensal estimado (líquido)</Label>
               <div className="relative">
-                <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">R$</span>
+                <span className="absolute left-3 top-2.5 text-sm text-muted-foreground">R$</span>
                 <Input
                   id="salary"
                   type="number"
@@ -409,10 +391,12 @@ export default function SettingsPage() {
                   onChange={(e) => setFormData({ ...formData, monthlySalary: parseFloat(e.target.value) })}
                 />
               </div>
+              <p className="text-xs text-muted-foreground">
+                Usado para calcular o fluxo de caixa projetado e a capacidade de aporte em metas.
+              </p>
               {(!formData.showFutureSalary || formData.monthlySalary <= 0) && (
                 <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-                  A projeção não incluirá salário enquanto houver valor zero ou
-                  a opção de projetar salário estiver desligada.
+                  A projeção não incluirá salário enquanto o valor estiver zerado ou a opção abaixo estiver desligada.
                 </p>
               )}
             </div>
@@ -421,8 +405,10 @@ export default function SettingsPage() {
 
             <div className="flex items-center justify-between gap-2">
               <div className="space-y-0.5">
-                <Label>Projetar Salário Futuro</Label>
-                <p className="text-xs text-muted-foreground">Incluir receita estimada nos meses futuros do gráfico de patrimônio.</p>
+                <Label>Projetar salário futuro</Label>
+                <p className="text-xs text-muted-foreground">
+                  Inclui receita estimada nos meses futuros do gráfico de projeção.
+                </p>
               </div>
               <Switch
                 checked={formData.showFutureSalary}
@@ -432,35 +418,30 @@ export default function SettingsPage() {
 
             <div className="flex items-center justify-between gap-2">
               <div className="space-y-0.5">
-                <Label>Projetar Contas Futuras</Label>
-                <p className="text-xs text-muted-foreground">Incluir gastos recorrentes, faturas de cartão e parcelas nas projeções.</p>
+                <Label>Projetar contas futuras</Label>
+                <p className="text-xs text-muted-foreground">
+                  Inclui recorrências, faturas de cartão e parcelas na projeção.
+                </p>
               </div>
               <Switch
                 checked={formData.showFutureAccounts}
                 onCheckedChange={(checked) => setFormData({ ...formData, showFutureAccounts: checked })}
               />
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        )
 
-        {/* Cartões */}
-        <Card id="section-cartoes" className="scroll-mt-16">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <CreditCard className="size-5 text-primary" />
-              <CardTitle>Cartões de crédito</CardTitle>
-            </div>
-            <CardDescription>
-              Dia de fechamento e vencimento de cada cartão. Sem esses dados não
-              é possível separar a fatura atual das próximas em Faturas,
-              Contas e Projeções.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
+      case "cartoes":
+        return (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Dia de fechamento e vencimento de cada cartão. Sem esses dados o app usa estimativas para separar a fatura atual das próximas.
+            </p>
             {creditCards.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic">
-                Nenhum cartão de crédito conectado.
-              </p>
+              <div className="rounded-xl border border-dashed p-8 text-center">
+                <CreditCard className="mx-auto mb-2 size-8 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Nenhum cartão de crédito conectado.</p>
+              </div>
             ) : (
               creditCards.map((card) => (
                 <CardBillingRow
@@ -474,30 +455,25 @@ export default function SettingsPage() {
                 />
               ))
             )}
-          </CardContent>
-        </Card>
+          </div>
+        )
 
-        {/* Fontes de salário */}
-        <Card id="section-salario" className="scroll-mt-16">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Tags className="size-5 text-primary" />
-              <CardTitle>Fontes de salário</CardTitle>
+      case "salario":
+        return (
+          <div className="space-y-5">
+            <div className="rounded-xl border border-muted bg-muted/10 p-4 text-sm text-muted-foreground space-y-1">
+              <p className="font-medium text-foreground text-sm">Como funciona a detecção automática</p>
+              <p className="text-xs">
+                O app analisa seus histórico de entradas e identifica depósitos recorrentes com valores parecidos vindo da mesma origem em meses diferentes. Quando encontra um padrão, ele aparece como sugestão abaixo — basta confirmar.
+              </p>
             </div>
-            <CardDescription>
-              Adicione palavras-chave para identificar automaticamente transações de salário (ex: &quot;Nubank&quot;, &quot;Salário&quot;, &quot;XYZ SA&quot;).
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+
             {salarySuggestions.length > 0 && (
               <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
                 <div className="flex items-center gap-2 text-primary font-semibold text-sm">
                   <Sparkles className="size-4" />
-                  <span>Sugestões de Salário Detectadas</span>
+                  <span>Padrões detectados automaticamente</span>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Identificamos depósitos recorrentes com valores parecidos nos últimos meses. Deseja rastrear alguma dessas fontes como seu salário?
-                </p>
                 <div className="grid gap-2">
                   {salarySuggestions.map((sug) => (
                     <div
@@ -507,7 +483,7 @@ export default function SettingsPage() {
                       <div className="min-w-0 flex-1">
                         <span className="font-semibold text-xs block truncate text-foreground">{sug.pattern}</span>
                         <span className="text-[10px] text-muted-foreground block truncate">
-                          Média: {format(sug.averageAmount)}/mês • Última: {sug.lastDescription || sug.pattern} ({new Date(sug.lastDate).toLocaleDateString("pt-BR")})
+                          Média: {format(sug.averageAmount)}/mês · Última: {sug.lastDescription || sug.pattern} ({new Date(sug.lastDate).toLocaleDateString("pt-BR")})
                         </span>
                       </div>
                       <Button
@@ -515,40 +491,48 @@ export default function SettingsPage() {
                         size="sm"
                         variant="outline"
                         onClick={() => acceptSuggestion(sug.pattern)}
-                        className="gap-1.5 px-2.5 h-8 shrink-0 border-primary/30 text-primary hover:bg-primary/10 hover:text-primary transition-all text-xs font-medium"
+                        disabled={salaryPatterns.includes(sug.pattern)}
+                        className="gap-1.5 px-2.5 h-8 shrink-0 border-primary/30 text-primary hover:bg-primary/10 hover:text-primary text-xs font-medium"
                       >
                         <Sparkles className="size-3" />
-                        Sim, é meu salário
+                        {salaryPatterns.includes(sug.pattern) ? "Ativada" : "É meu salário"}
                       </Button>
                     </div>
                   ))}
                 </div>
               </div>
             )}
-            <div className="flex gap-2">
-              <Input
-                placeholder="Ex: Nubank, Salário, XYZ SA..."
-                value={newPattern}
-                onChange={(e) => setNewPattern(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addPattern() } }}
-                className="flex-1"
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={addPattern}
-                disabled={!newPattern.trim()}
-                className="gap-1.5 shrink-0"
-              >
-                <Plus className="size-4" />
-                Adicionar
-              </Button>
+
+            <div className="space-y-3">
+              <Label>Adicionar fonte manualmente</Label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Ex: Nubank, Salário, XYZ SA..."
+                  value={newPattern}
+                  onChange={(e) => setNewPattern(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addPattern() } }}
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={addPattern}
+                  disabled={!newPattern.trim()}
+                  className="gap-1.5 shrink-0"
+                >
+                  <Plus className="size-4" />
+                  Adicionar
+                </Button>
+              </div>
             </div>
 
             {salarySources.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic">Nenhuma fonte de salário cadastrada ainda. Marque uma transação de entrada como salário na lista de transações para começar!</p>
+              <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground text-center">
+                Nenhuma fonte cadastrada. Aceite uma sugestão ou adicione manualmente.
+              </p>
             ) : (
               <div className="grid gap-3">
+                <Label className="text-xs text-muted-foreground">Fontes ativas</Label>
                 {salarySources.map((source) => (
                   <div
                     key={source.pattern}
@@ -561,7 +545,7 @@ export default function SettingsPage() {
                       </div>
                       {source.lastDescription ? (
                         <p className="text-xs text-muted-foreground truncate">
-                          Última: {source.lastDescription} • {new Date(source.lastDate!).toLocaleDateString("pt-BR")}
+                          Última: {source.lastDescription} · {new Date(source.lastDate!).toLocaleDateString("pt-BR")}
                         </p>
                       ) : (
                         <p className="text-xs text-muted-foreground italic">Nenhuma transação recebida ainda no período de busca.</p>
@@ -586,50 +570,38 @@ export default function SettingsPage() {
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        )
 
-        {/* Aparência */}
-        <Card id="section-aparencia" className="scroll-mt-16">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Palette className="size-5 text-primary" />
-              <CardTitle>Aparência</CardTitle>
-            </div>
-            <CardDescription>
-              Escolha a personalidade visual do painel. Cada tema tem tipografia e cantos próprios, e cada um suporta modo claro e escuro. Use o botão no cabeçalho para alternar claro/escuro.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+      case "aparencia":
+        return (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Cada tema tem tipografia e cantos próprios e suporta modo claro e escuro. Use o botão no cabeçalho para alternar entre claro e escuro.
+            </p>
             <ThemePicker />
-          </CardContent>
-        </Card>
+          </div>
+        )
 
-        {/* Segurança */}
-        <Card
-          id="section-seguranca"
-          className={cn(
-            "scroll-mt-16 transition-all",
-            formData.vaultEnabled && "border-primary/50 shadow-md",
-          )}
-        >
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Shield className={`size-5 ${formData.vaultEnabled ? "text-primary" : "text-muted-foreground"}`} />
-                <CardTitle>Vault (Segurança)</CardTitle>
+      case "seguranca":
+        return (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between gap-4 rounded-xl border p-4">
+              <div className="space-y-0.5">
+                <Label className="text-base">Vault local</Label>
+                <p className="text-xs text-muted-foreground">
+                  Trava a interface com senha para evitar olhares curiosos. Não é criptografia bancária — é uma camada visual de proteção local.
+                </p>
               </div>
               <Switch
                 checked={formData.vaultEnabled}
                 onCheckedChange={(checked) => setFormData({ ...formData, vaultEnabled: checked })}
               />
             </div>
-            <CardDescription>Trave sua interface localmente para evitar olhares curiosos.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid gap-6" aria-disabled={!formData.vaultEnabled}>
+
+            <div className={cn("space-y-4 transition-opacity", !formData.vaultEnabled && "pointer-events-none opacity-40")}>
               <div className="space-y-2">
-                <Label htmlFor="vaultPassword">Senha Mestre Local</Label>
+                <Label htmlFor="vaultPassword">Senha mestre</Label>
                 <Input
                   id="vaultPassword"
                   type="password"
@@ -638,76 +610,80 @@ export default function SettingsPage() {
                   value={formData.vaultMasterPassword}
                   onChange={(e) => setFormData({ ...formData, vaultMasterPassword: e.target.value })}
                 />
-                <p className="text-xs text-muted-foreground italic">DICA: Use o atalho ESC para travar instantaneamente (Panic Key).</p>
+                <p className="text-xs text-muted-foreground">Use ESC para travar instantaneamente (Panic Key).</p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="vaultInactivity">Bloquear após inatividade (minutos)</Label>
+                <Label htmlFor="vaultInactivity">Bloquear após inatividade</Label>
                 <div className="flex items-center gap-3">
                   <Input
                     id="vaultInactivity"
                     type="number"
+                    min="0"
                     className="max-w-24"
                     disabled={!formData.vaultEnabled}
                     value={formData.vaultInactivityMin}
-                    onChange={(e) => setFormData({ ...formData, vaultInactivityMin: parseInt(e.target.value) })}
+                    onChange={(e) => setFormData({ ...formData, vaultInactivityMin: parseInt(e.target.value) || 0 })}
                   />
-                  <span className="text-sm text-muted-foreground">minutos (0 para desativar)</span>
+                  <span className="text-sm text-muted-foreground">minutos (0 = desativado)</span>
                 </div>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        )
 
-        {/* Notificações */}
-        <Card id="section-notificacoes" className="scroll-mt-16">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Bell className="size-5 text-primary" />
-              <CardTitle>Notificações</CardTitle>
-            </div>
-            <CardDescription>
-              Receba alertas de orçamento, faturas e fluxo de caixa via Webhook (Slack/Discord) ou Telegram.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
+      case "notificacoes":
+        return (
+          <div className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="webhookUrl">Webhook URL (Slack / Discord)</Label>
               <Input
                 id="webhookUrl"
                 type="url"
-                placeholder="https://hooks.slack.com/..."
+                placeholder="https://hooks.slack.com/services/..."
                 value={formData.notificationWebhookUrl}
                 onChange={(e) => setFormData({ ...formData, notificationWebhookUrl: e.target.value })}
               />
+              <p className="text-xs text-muted-foreground">
+                Receba alertas de orçamento, faturas vencidas e caixa negativo diretamente no Slack ou Discord.
+              </p>
             </div>
+
             <Separator />
+
             <div className="space-y-4">
-              <p className="text-sm font-medium">Telegram</p>
-              <div className="space-y-2">
-                <Label htmlFor="telegramToken">Bot Token</Label>
-                <Input
-                  id="telegramToken"
-                  type="password"
-                  placeholder="123456:ABCdef..."
-                  value={formData.telegramBotToken}
-                  onChange={(e) => setFormData({ ...formData, telegramBotToken: e.target.value })}
-                />
+              <div>
+                <p className="text-sm font-medium">Telegram</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Crie um bot em @BotFather para obter o token.</p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="telegramChat">Chat ID</Label>
-                <Input
-                  id="telegramChat"
-                  placeholder="-100123456789"
-                  value={formData.telegramChatId}
-                  onChange={(e) => setFormData({ ...formData, telegramChatId: e.target.value })}
-                />
-                <p className="text-xs text-muted-foreground">Use @userinfobot no Telegram para descobrir seu Chat ID.</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="telegramToken">Bot Token</Label>
+                  <Input
+                    id="telegramToken"
+                    type="password"
+                    placeholder="123456:ABCdef..."
+                    value={formData.telegramBotToken}
+                    onChange={(e) => setFormData({ ...formData, telegramBotToken: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="telegramChat">Chat ID</Label>
+                  <Input
+                    id="telegramChat"
+                    placeholder="-100123456789"
+                    value={formData.telegramChatId}
+                    onChange={(e) => setFormData({ ...formData, telegramChatId: e.target.value })}
+                  />
+                </div>
               </div>
+              <p className="text-xs text-muted-foreground">Use @userinfobot no Telegram para descobrir seu Chat ID.</p>
             </div>
+
             <Separator />
+
             <div className="space-y-2">
-              <Label htmlFor="anthropicKey">Anthropic API Key (para Briefing por IA)</Label>
+              <Label htmlFor="anthropicKey">Anthropic API Key</Label>
               <Input
                 id="anthropicKey"
                 type="password"
@@ -715,72 +691,81 @@ export default function SettingsPage() {
                 value={formData.anthropicApiKey}
                 onChange={(e) => setFormData({ ...formData, anthropicApiKey: e.target.value })}
               />
-              <p className="text-xs text-muted-foreground">Necessária para o Briefing Automático Mensal em /insights.</p>
+              <p className="text-xs text-muted-foreground">
+                Necessária para o Briefing Automático Mensal em /insights.
+              </p>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        )
 
-        {/* Sincronização */}
-        <Card id="section-sincronizacao" className="scroll-mt-16">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <RefreshCw className="size-5 text-primary" />
-              <CardTitle>Sincronização</CardTitle>
-            </div>
-            <CardDescription>Configure como o sistema busca novos dados das suas contas.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
+      case "sincronizacao":
+        return (
+          <div className="space-y-6">
+            <div className="grid gap-6 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="syncInterval">Atualização automática (horas)</Label>
-                <Input
-                  id="syncInterval"
-                  type="number"
-                  value={formData.syncIntervalHours}
-                  onChange={(e) => setFormData({ ...formData, syncIntervalHours: parseInt(e.target.value) })}
-                />
+                <Label htmlFor="syncInterval">Intervalo de sincronização</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="syncInterval"
+                    type="number"
+                    min="1"
+                    className="max-w-24"
+                    value={formData.syncIntervalHours}
+                    onChange={(e) => setFormData({ ...formData, syncIntervalHours: parseInt(e.target.value) || 6 })}
+                  />
+                  <span className="text-sm text-muted-foreground">horas</span>
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  O sistema revisita suas contas para buscar novos dados a cada X horas.
+                  O app revisita suas contas e busca transações novas a cada X horas.
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="lookback">Período de busca (dias)</Label>
-                <Input
-                  id="lookback"
-                  type="number"
-                  value={formData.syncLookbackDays}
-                  onChange={(e) => setFormData({ ...formData, syncLookbackDays: parseInt(e.target.value) })}
-                />
+                <Label htmlFor="lookback">Janela de busca</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="lookback"
+                    type="number"
+                    min="7"
+                    max="365"
+                    className="max-w-24"
+                    value={formData.syncLookbackDays}
+                    onChange={(e) => setFormData({ ...formData, syncLookbackDays: parseInt(e.target.value) || 30 })}
+                  />
+                  <span className="text-sm text-muted-foreground">dias</span>
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  O app procura transações ocorridas nos últimos X dias em cada sincronização.
+                  Quantos dias para trás o app procura transações em cada sincronização.
                 </p>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        )
 
-        {/* Dados e cache */}
-        <Card id="section-dados" className="scroll-mt-16">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Database className="size-5 text-primary" />
-              <CardTitle>Dados e cache</CardTitle>
-            </div>
-            <CardDescription>
-              Exportação de dados e limpeza do cache local (PWA e consultas).
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Button variant="outline" asChild className="gap-2">
+      case "dados":
+        return (
+          <div className="space-y-6">
+            <div className="space-y-3">
+              <Label>Exportação</Label>
+              <Button variant="outline" asChild className="gap-2 w-full sm:w-auto">
                 <a href="/api/domain/transactions/export" download>
                   <Download className="size-4" />
                   Exportar transações (CSV)
                 </a>
               </Button>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+              <div>
+                <Label>Cache local</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Se valores parecerem desatualizados, limpe o cache. Os dados do banco de dados não são afetados.
+                </p>
+              </div>
               <Button
                 variant="outline"
-                className="gap-2"
+                className="gap-2 w-full sm:w-auto"
                 disabled={clearingCache}
                 onClick={clearLocalCache}
               >
@@ -792,22 +777,163 @@ export default function SettingsPage() {
                 Limpar cache local
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Se algum valor parecer desatualizado (dados antigos servidos pelo
-              cache offline), limpe o cache local — os dados do banco não são
-              afetados.
-            </p>
-          </CardContent>
-        </Card>
+          </div>
+        )
+    }
+  }
+
+  const activeSection = SECTIONS.find((s) => s.id === activeTab) ?? SECTIONS[0]
+
+  if (loading) {
+    return (
+      <div className="flex w-full flex-col gap-6">
+        <Skeleton className="h-9 w-64" />
+        <div className="flex gap-6">
+          <Skeleton className="hidden lg:block h-80 w-56 shrink-0" />
+          <div className="flex-1 grid gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-16" />
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex w-full flex-col gap-6">
+      <PageHeader
+        title="Configurações"
+        description="Gerencie as preferências do seu painel financeiro."
+      />
+
+      {/* Mobile: show list when no tab in URL, otherwise show section */}
+      <div className="lg:hidden">
+        {!rawTab ? (
+          <div className="grid gap-2">
+            {SECTIONS.map((section) => {
+              const Icon = section.icon
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => navigateTo(section.id)}
+                  className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3.5 text-left transition-colors hover:bg-muted/50 active:bg-muted"
+                >
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                    <Icon className="size-4 text-primary" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{section.label}</p>
+                    <p className="text-xs text-muted-foreground truncate">{section.description}</p>
+                  </div>
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <button
+              type="button"
+              onClick={() => router.replace("/settings")}
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="size-4" />
+              Configurações
+            </button>
+
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <activeSection.icon className="size-5 text-primary" />
+                  <CardTitle>{activeSection.label}</CardTitle>
+                </div>
+                <CardDescription>{activeSection.description}</CardDescription>
+              </CardHeader>
+              <CardContent>{renderPanel(activeTab)}</CardContent>
+            </Card>
+
+            {activeSection.hasSave && (
+              <div className="flex gap-3">
+                <Button variant="outline" className="flex-1" onClick={() => refetch()} disabled={saving}>
+                  Cancelar
+                </Button>
+                <Button className="flex-1 gap-2" onClick={saveSettings} disabled={saving}>
+                  {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                  Salvar
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="flex justify-end gap-3">
-        <Button variant="outline" onClick={() => refetch()} disabled={saving}>Cancelar</Button>
-        <Button onClick={saveSettings} disabled={saving} className="gap-2">
-          {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-          Salvar Alterações
-        </Button>
+      {/* Desktop: sidebar + panel */}
+      <div className="hidden lg:flex gap-6 items-start">
+        {/* Sidebar */}
+        <aside className="w-60 shrink-0 sticky top-4">
+          <nav className="grid gap-1">
+            {SECTIONS.map((section) => {
+              const Icon = section.icon
+              const isActive = section.id === activeTab
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => navigateTo(section.id)}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors w-full",
+                    isActive
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  <Icon className={cn("size-4 shrink-0", isActive ? "text-primary" : "")} />
+                  <div className="min-w-0 flex-1">
+                    <p className={cn("font-medium leading-none", isActive ? "text-primary" : "")}>{section.label}</p>
+                    <p className="mt-0.5 text-[11px] leading-tight truncate opacity-70">{section.description}</p>
+                  </div>
+                </button>
+              )
+            })}
+          </nav>
+        </aside>
+
+        {/* Active panel */}
+        <div className="flex-1 min-w-0 space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <activeSection.icon className="size-5 text-primary" />
+                <CardTitle>{activeSection.label}</CardTitle>
+              </div>
+              <CardDescription>{activeSection.description}</CardDescription>
+            </CardHeader>
+            <CardContent>{renderPanel(activeTab)}</CardContent>
+          </Card>
+
+          {activeSection.hasSave && (
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => refetch()} disabled={saving}>
+                Cancelar
+              </Button>
+              <Button className="gap-2" onClick={saveSettings} disabled={saving}>
+                {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                Salvar alterações
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
+  )
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense>
+      <SettingsContent />
+    </Suspense>
   )
 }
