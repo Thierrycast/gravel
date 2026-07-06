@@ -251,6 +251,80 @@ function SettingsContent() {
   const { format } = useCurrency()
   const [saving, setSaving] = useState(false)
   const [clearingCache, setClearingCache] = useState(false)
+  const [pushState, setPushState] = useState<"idle" | "loading" | "active" | "unsupported">("idle")
+
+  async function togglePushSubscription() {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setPushState("unsupported")
+      return
+    }
+    setPushState("loading")
+    try {
+      const reg = await navigator.serviceWorker.ready
+      const existing = await reg.pushManager.getSubscription()
+
+      if (existing) {
+        await existing.unsubscribe()
+        await fetch("/api/push/subscribe", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: existing.endpoint }),
+        })
+        setPushState("idle")
+        toast.success("Notificações push desativadas")
+        return
+      }
+
+      const permission = await Notification.requestPermission()
+      if (permission !== "granted") {
+        setPushState("idle")
+        toast.error("Permissão negada pelo navegador")
+        return
+      }
+
+      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+      if (!vapidKey) {
+        setPushState("unsupported")
+        toast.error("VAPID key não configurada no servidor")
+        return
+      }
+
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: vapidKey,
+      })
+
+      const subJson = sub.toJSON() as { endpoint: string; keys: { p256dh: string; auth: string } }
+      await fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          endpoint: subJson.endpoint,
+          p256dh: subJson.keys.p256dh,
+          auth: subJson.keys.auth,
+        }),
+      })
+
+      setPushState("active")
+      toast.success("Notificações push ativadas!")
+    } catch (err) {
+      console.error("[PUSH]", err)
+      setPushState("idle")
+      toast.error("Erro ao configurar notificações push")
+    }
+  }
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setPushState("unsupported")
+      return
+    }
+    navigator.serviceWorker.ready.then((reg) =>
+      reg.pushManager.getSubscription().then((sub) => {
+        setPushState(sub ? "active" : "idle")
+      })
+    ).catch(() => setPushState("unsupported"))
+  }, [])
   const [salaryPatterns, setSalaryPatterns] = useState<string[]>([])
   const [salarySources, setSalarySources] = useState<SalarySource[]>([])
   const [salarySuggestions, setSalarySuggestions] = useState<SalarySuggestion[]>([])
@@ -694,6 +768,39 @@ function SettingsContent() {
               <p className="text-xs text-muted-foreground">
                 Necessária para o Briefing Automático Mensal em /insights.
               </p>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-medium">Notificações Push (PWA)</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Receba alertas diretamente no seu dispositivo, mesmo com o app fechado.
+                </p>
+              </div>
+              {pushState === "unsupported" ? (
+                <p className="text-xs text-muted-foreground italic">
+                  Notificações push não são suportadas neste navegador.
+                </p>
+              ) : (
+                <Button
+                  type="button"
+                  variant={pushState === "active" ? "destructive" : "outline"}
+                  size="sm"
+                  disabled={pushState === "loading"}
+                  onClick={togglePushSubscription}
+                  className="gap-2"
+                >
+                  {pushState === "loading" && <Loader2 className="size-3.5 animate-spin" />}
+                  {pushState === "active" ? "Desativar notificações push" : "Ativar notificações push"}
+                </Button>
+              )}
+              {pushState === "active" && (
+                <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                  Notificações push ativadas neste dispositivo.
+                </p>
+              )}
             </div>
           </div>
         )

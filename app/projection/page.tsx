@@ -3,6 +3,8 @@
 import { useState, useMemo } from "react";
 import {
   ComposedChart,
+  AreaChart,
+  Area,
   Bar,
   Line,
   XAxis,
@@ -11,7 +13,7 @@ import {
   ReferenceLine,
 } from "recharts";
 
-import { Lightbulb, ChevronDown, ChevronUp, Info } from "lucide-react";
+import { Lightbulb, ChevronDown, ChevronUp, Info, Shield } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import { useCurrency } from "@/lib/currency-context";
 
@@ -90,6 +92,24 @@ interface SettingsResponse {
   showFutureSalary: boolean;
 }
 
+interface MonteCarloSeries {
+  label: string;
+  p10: number;
+  p25: number;
+  p50: number;
+  p75: number;
+  p90: number;
+}
+
+interface MonteCarloData {
+  months: number;
+  n: number;
+  survivalRate: number;
+  meanIncome: number;
+  meanExpenses: number;
+  series: MonteCarloSeries[];
+}
+
 const horizons = [
   { label: "3M", value: "3" },
   { label: "6M", value: "6" },
@@ -123,9 +143,17 @@ const chartConfig: ChartConfig = {
   },
 };
 
+const mcHorizons = [
+  { label: "1 ano", value: "12" },
+  { label: "3 anos", value: "36" },
+  { label: "5 anos", value: "60" },
+];
+
 export default function ProjectionPage() {
   const { format, formatCompact } = useCurrency();
   const [months, setMonths] = useState("6");
+  const [viewMode, setViewMode] = useState<"projecao" | "longo-prazo">("projecao");
+  const [mcHorizon, setMcHorizon] = useState("60");
   const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
   const [salaryOverride, setSalaryOverride] = useState<boolean | null>(null);
   const [includeInstallments, setIncludeInstallments] = useState(true);
@@ -153,6 +181,11 @@ export default function ProjectionPage() {
       includeVariableExpenses: String(includeVariableExpenses),
     },
   );
+  const { data: mcData, loading: mcLoading } = useApi<MonteCarloData>(
+    viewMode === "longo-prazo" ? "/api/projection/montecarlo" : null,
+    { months: mcHorizon },
+  );
+
   const loading = settingsLoading || projectionLoading;
   const chartData = useMemo(
     () =>
@@ -295,24 +328,70 @@ export default function ProjectionPage() {
         title="Projeção de Saldo"
         description="Visualize o impacto das suas despesas recorrentes e parcelas no futuro."
         actions={
-          <div className="flex gap-0.5">
-            {horizons.map((h) => (
+          <div className="flex items-center gap-2">
+            {/* View mode toggle */}
+            <div className="flex rounded-lg border overflow-hidden">
               <button
-                key={h.value}
-                onClick={() => setMonths(h.value)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  months === h.value
-                    ? "bg-blue-500/20 text-blue-400"
+                onClick={() => setViewMode("projecao")}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  viewMode === "projecao"
+                    ? "bg-primary/15 text-primary"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {h.label}
+                Projeção
               </button>
-            ))}
+              <button
+                onClick={() => setViewMode("longo-prazo")}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors border-l ${
+                  viewMode === "longo-prazo"
+                    ? "bg-primary/15 text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Longo Prazo
+              </button>
+            </div>
+            {/* Horizon selector */}
+            {viewMode === "projecao" && (
+              <div className="flex gap-0.5">
+                {horizons.map((h) => (
+                  <button
+                    key={h.value}
+                    onClick={() => setMonths(h.value)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                      months === h.value
+                        ? "bg-blue-500/20 text-blue-400"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {h.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {viewMode === "longo-prazo" && (
+              <div className="flex gap-0.5">
+                {mcHorizons.map((h) => (
+                  <button
+                    key={h.value}
+                    onClick={() => setMcHorizon(h.value)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                      mcHorizon === h.value
+                        ? "bg-blue-500/20 text-blue-400"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {h.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         }
       />
 
+      {viewMode === "projecao" && <>
       <div className="rounded-xl border border-sky-500/30 bg-sky-500/5 p-4 text-sm text-sky-700 dark:text-sky-300">
         <div className="flex items-start gap-3">
           <Info className="mt-0.5 size-4 shrink-0" />
@@ -750,6 +829,166 @@ export default function ProjectionPage() {
           </div>
         </CardContent>
       </Card>
+      </>}
+
+      {/* Monte Carlo — Longo Prazo */}
+      {viewMode === "longo-prazo" && (
+        <div className="space-y-4">
+          {mcLoading ? (
+            <>
+              <div className="grid gap-4 md:grid-cols-3">
+                <Skeleton className="h-20" />
+                <Skeleton className="h-20" />
+                <Skeleton className="h-20" />
+              </div>
+              <Skeleton className="h-80" />
+            </>
+          ) : mcData ? (
+            <>
+              {/* Summary cards */}
+              <div className="grid gap-4 md:grid-cols-3">
+                <Card>
+                  <CardContent className="flex items-center gap-4 pt-5">
+                    <Shield className={`size-8 shrink-0 ${mcData.survivalRate >= 80 ? "text-emerald-400" : mcData.survivalRate >= 50 ? "text-amber-400" : "text-red-400"}`} />
+                    <div>
+                      <p className="text-2xl font-bold tabular-nums">{mcData.survivalRate}%</p>
+                      <p className="text-xs text-muted-foreground">Taxa de sobrevivência</p>
+                      <p className="text-[11px] text-muted-foreground">% de cenários com saldo positivo</p>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="flex items-center gap-4 pt-5">
+                    <div className="size-8 shrink-0 flex items-center justify-center rounded-full bg-emerald-500/10">
+                      <span className="text-xs font-bold text-emerald-400">p50</span>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold tabular-nums">{formatCompact(mcData.series.at(-1)?.p50 ?? 0)}</p>
+                      <p className="text-xs text-muted-foreground">Saldo mediano final</p>
+                      <p className="text-[11px] text-muted-foreground">Cenário mais provável</p>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="flex items-center gap-4 pt-5">
+                    <div className="size-8 shrink-0 flex items-center justify-center rounded-full bg-sky-500/10">
+                      <span className="text-xs font-bold text-sky-400">N</span>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold tabular-nums">{mcData.n.toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground">Simulações rodadas</p>
+                      <p className="text-[11px] text-muted-foreground">{mcData.months} meses · Monte Carlo</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Fan chart */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Distribuição de Cenários</CardTitle>
+                  <CardDescription>
+                    Bandas de percentil p10–p90 para {mcData.months} meses. A linha central é a mediana (p50).
+                    Quanto mais larga a banda, maior a incerteza.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ChartContainer
+                    config={{
+                      outer: { label: "p10–p90", color: "hsl(var(--chart-1))" },
+                      inner: { label: "p25–p75", color: "hsl(var(--chart-1))" },
+                      p50: { label: "Mediana", color: "hsl(var(--primary))" },
+                    }}
+                    className="h-80 w-full"
+                  >
+                    <AreaChart
+                      data={mcData.series.map((s) => ({
+                        label: s.label,
+                        outerBase: s.p10,
+                        outerBand: s.p90 - s.p10,
+                        innerBase: s.p25,
+                        innerBand: s.p75 - s.p25,
+                        p50: s.p50,
+                      }))}
+                      margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.3)" />
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                        interval={Math.floor(mcData.series.length / 8)}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        tickFormatter={(v) => formatCompact(v)}
+                        tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                        axisLine={false}
+                        tickLine={false}
+                        width={60}
+                      />
+                      <ChartTooltip
+                        content={<ChartTooltipContent formatter={(v) => formatCompact(Number(v))} />}
+                      />
+                      {/* Outer band base (transparent) */}
+                      <Area
+                        type="monotone"
+                        dataKey="outerBase"
+                        stackId="outer"
+                        fill="transparent"
+                        stroke="none"
+                      />
+                      {/* Outer band fill */}
+                      <Area
+                        type="monotone"
+                        dataKey="outerBand"
+                        stackId="outer"
+                        fill="hsl(var(--primary))"
+                        fillOpacity={0.08}
+                        stroke="none"
+                      />
+                      {/* Inner band base (transparent) */}
+                      <Area
+                        type="monotone"
+                        dataKey="innerBase"
+                        stackId="inner"
+                        fill="transparent"
+                        stroke="none"
+                      />
+                      {/* Inner band fill */}
+                      <Area
+                        type="monotone"
+                        dataKey="innerBand"
+                        stackId="inner"
+                        fill="hsl(var(--primary))"
+                        fillOpacity={0.18}
+                        stroke="none"
+                      />
+                      {/* Median line */}
+                      <Line
+                        type="monotone"
+                        dataKey="p50"
+                        stroke="hsl(var(--primary))"
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                      <ReferenceLine y={0} stroke="hsl(var(--destructive))" strokeDasharray="4 2" />
+                    </AreaChart>
+                  </ChartContainer>
+                </CardContent>
+              </Card>
+
+              <div className="rounded-xl border border-muted bg-muted/10 p-4 text-xs text-muted-foreground">
+                <p>
+                  Simulação com {mcData.n} trajetórias usando distribuição normal calibrada por {Math.ceil(mcData.months / 5)} meses de histórico
+                  (renda média R$ {format(mcData.meanIncome)}/mês · despesas médias R$ {format(mcData.meanExpenses)}/mês).
+                  Resultados são probabilísticos e não constituem previsão financeira.
+                </p>
+              </div>
+            </>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

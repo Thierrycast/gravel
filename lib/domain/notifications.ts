@@ -1,9 +1,16 @@
 import * as fs from "fs"
 import * as path from "path"
+import webpush from "web-push"
 import { prisma } from "@/lib/prisma"
 import { getProjectionPayload } from "@/lib/domain/derived"
 
 const LOG_FILE_PATH = path.join(process.cwd(), ".agents", "logs", "notifications.log")
+
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY
+if (VAPID_PUBLIC && VAPID_PRIVATE) {
+  webpush.setVapidDetails("mailto:admin@gravel.finance", VAPID_PUBLIC, VAPID_PRIVATE)
+}
 
 // Assegura que o diretório de logs existe
 function ensureLogDir() {
@@ -52,6 +59,23 @@ export async function triggerNotificationDelivery(
     }
   } catch (err) {
     console.error("[NOTIFICATION] Settings lookup failed:", err)
+  }
+
+  if (VAPID_PUBLIC && VAPID_PRIVATE) {
+    try {
+      const subs = await prisma.pushSubscription.findMany()
+      const payload = JSON.stringify({ title, body: message, href: "/" })
+      await Promise.allSettled(
+        subs.map((sub) =>
+          webpush.sendNotification(
+            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            payload,
+          ).catch((err) => console.error("[NOTIFICATION] Push delivery failed:", err))
+        )
+      )
+    } catch (err) {
+      console.error("[NOTIFICATION] Push subscriptions lookup failed:", err)
+    }
   }
 }
 
