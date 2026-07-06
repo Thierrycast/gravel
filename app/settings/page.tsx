@@ -18,6 +18,7 @@ import {
   Database,
   AlertTriangle,
   Download,
+  Bell,
 } from "lucide-react"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -48,6 +49,10 @@ type SettingsFormData = {
   vaultEnabled: boolean
   vaultMasterPassword: string
   vaultInactivityMin: number
+  notificationWebhookUrl: string
+  telegramBotToken: string
+  telegramChatId: string
+  anthropicApiKey: string
 }
 
 type SalarySource = {
@@ -68,6 +73,10 @@ type SettingsResponse = SettingsFormData & {
   salaryPatterns?: string[]
   salarySources?: SalarySource[]
   salarySuggestions?: SalarySuggestion[]
+  notificationWebhookUrl?: string | null
+  telegramBotToken?: string | null
+  telegramChatId?: string | null
+  anthropicApiKey?: string | null
 }
 
 const SECTIONS = [
@@ -76,6 +85,7 @@ const SECTIONS = [
   { id: "salario", label: "Fontes de salário", icon: Tags },
   { id: "aparencia", label: "Aparência", icon: Palette },
   { id: "seguranca", label: "Segurança", icon: Shield },
+  { id: "notificacoes", label: "Notificações", icon: Bell },
   { id: "sincronizacao", label: "Sincronização", icon: RefreshCw },
   { id: "dados", label: "Dados e cache", icon: Database },
 ] as const
@@ -201,6 +211,10 @@ export default function SettingsPage() {
     vaultEnabled: false,
     vaultMasterPassword: "",
     vaultInactivityMin: 0,
+    notificationWebhookUrl: "",
+    telegramBotToken: "",
+    telegramChatId: "",
+    anthropicApiKey: "",
   })
 
   const creditCards = (accountsData?.results ?? []).filter(isCreditCard)
@@ -222,6 +236,10 @@ export default function SettingsPage() {
         vaultEnabled: settings.vaultEnabled,
         vaultMasterPassword: settings.vaultMasterPassword || "",
         vaultInactivityMin: settings.vaultInactivityMin,
+        notificationWebhookUrl: settings.notificationWebhookUrl || "",
+        telegramBotToken: settings.telegramBotToken || "",
+        telegramChatId: settings.telegramChatId || "",
+        anthropicApiKey: settings.anthropicApiKey || "",
       })
       if (Array.isArray(settings.salaryPatterns)) {
         setSalaryPatterns(settings.salaryPatterns)
@@ -637,6 +655,67 @@ export default function SettingsPage() {
                   <span className="text-sm text-muted-foreground">minutos (0 para desativar)</span>
                 </div>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Notificações */}
+        <Card id="section-notificacoes" className="scroll-mt-16">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Bell className="size-5 text-primary" />
+              <CardTitle>Notificações</CardTitle>
+            </div>
+            <CardDescription>
+              Receba alertas de orçamento, faturas e fluxo de caixa via Webhook (Slack/Discord) ou Telegram.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="webhookUrl">Webhook URL (Slack / Discord)</Label>
+              <Input
+                id="webhookUrl"
+                type="url"
+                placeholder="https://hooks.slack.com/..."
+                value={formData.notificationWebhookUrl}
+                onChange={(e) => setFormData({ ...formData, notificationWebhookUrl: e.target.value })}
+              />
+            </div>
+            <Separator />
+            <div className="space-y-4">
+              <p className="text-sm font-medium">Telegram</p>
+              <div className="space-y-2">
+                <Label htmlFor="telegramToken">Bot Token</Label>
+                <Input
+                  id="telegramToken"
+                  type="password"
+                  placeholder="123456:ABCdef..."
+                  value={formData.telegramBotToken}
+                  onChange={(e) => setFormData({ ...formData, telegramBotToken: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="telegramChat">Chat ID</Label>
+                <Input
+                  id="telegramChat"
+                  placeholder="-100123456789"
+                  value={formData.telegramChatId}
+                  onChange={(e) => setFormData({ ...formData, telegramChatId: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">Use @userinfobot no Telegram para descobrir seu Chat ID.</p>
+              </div>
+            </div>
+            <Separator />
+            <div className="space-y-2">
+              <Label htmlFor="anthropicKey">Anthropic API Key (para Briefing por IA)</Label>
+              <Input
+                id="anthropicKey"
+                type="password"
+                placeholder="sk-ant-..."
+                value={formData.anthropicApiKey}
+                onChange={(e) => setFormData({ ...formData, anthropicApiKey: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">Necessária para o Briefing Automático Mensal em /insights.</p>
             </div>
           </CardContent>
         </Card>

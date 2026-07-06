@@ -24,21 +24,22 @@ import {
   getSpendingByCategoryMetrics,
   getSpendingByMerchantMetrics,
   getSpendingTrendsMetrics,
-  getBillsSummaryMetrics,
   getCryptoPortfolioMetrics,
   getCryptoAssetMetrics,
 } from "../lib/domain/analytics.js";
+import { getCardStatementsSummaryMetrics } from "../lib/domain/billing.js";
 import {
   getRecurringPayload,
+  getProjectionPayload,
 } from "../lib/domain/derived.js";
 import {
   getDomainTransactions,
   getDomainAccounts,
-  getDomainBills,
   getDomainInvestments,
   getDomainGoals,
   getDomainScenarios,
   getUserSettings,
+  getGoalHistory,
 } from "../lib/domain/queries.js";
 import {
   completeMonthlyClose,
@@ -630,6 +631,31 @@ const TOOLS: Tool[] = [
       },
     },
   },
+  {
+    name: "simulate_purchase_impact",
+    description: "Simula o impacto de uma compra no fluxo de caixa projetado sem salvar nada no banco. Retorna o baseline e a projeção modificada com os deltas de saldo.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        amount: { type: "number", description: "Valor da compra em BRL (positivo)" },
+        target_month: { type: "string", description: "Mês alvo no formato YYYY-MM (default: mês atual)" },
+        description: { type: "string", description: "Descrição opcional da compra" },
+      },
+      required: ["amount"],
+    },
+  },
+  {
+    name: "get_goal_history",
+    description: "Retorna a série histórica mensal do progresso de uma meta. Disponível apenas para metas com auto-tracking (matchCategorySlug ou matchKeyword configurados).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        goal_id: { type: "string", description: "ID da meta" },
+        months: { type: "number", description: "Janela de meses para lookback (default: 12)", default: 12 },
+      },
+      required: ["goal_id"],
+    },
+  },
 ];
 
 
@@ -686,13 +712,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       }
       case "get_bills": {
-        const month = params.get("month") || new Date().toISOString().slice(0, 7);
-        const billParams = new URLSearchParams({ month });
-        const [bills, summary] = await Promise.all([
-          getDomainBills(billParams),
-          getBillsSummaryMetrics(billParams),
-        ]);
-        result = { bills: bills.results, summary };
+        const summary = await getCardStatementsSummaryMetrics();
+        result = {
+          counts: summary.counts,
+          overdueAmount: summary.overdueAmount,
+          openAmount: summary.openAmount,
+          dueIn7DaysAmount: summary.dueIn7DaysAmount,
+          statements: summary.statements,
+        };
         break;
       }
       case "get_investments":
@@ -1450,6 +1477,68 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             dashboardConfigJson: updatedConfigJson,
           },
         });
+        break;
+      }
+      case "simulate_purchase_impact": {
+        const amount = Number(args?.amount);
+        if (!amount || amount <= 0) throw new Error("amount deve ser um número positivo");
+        const description = args?.description ? String(args.description) : undefined;
+        const now = new Date();
+        const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        const targetMonth = args?.target_month ? String(args.target_month) : defaultMonth;
+        if (!/^\d{4}-\d{2}$/.test(targetMonth)) throw new Error("target_month deve estar no formato YYYY-MM");
+
+        const projection = await getProjectionPayload();
+        if (!projection || !projection.months || projection.months.length === 0) {
+          throw new Error("Não foi possível calcular a projeção base");
+        }
+
+        const monthIndex = projection.months.findIndex((m: { label: string }) => m.label === targetMonth);
+        if (monthIndex === -1) {
+          throw new Error(`Mês ${targetMonth} não encontrado na projeção (horizonte: ${projection.months[0].label} a ${projection.months[projection.months.length - 1].label})`);
+        }
+
+        const simulatedMonths = projection.months.map((m: { projected: number; balance: number }, i: number) => {
+          if (i < monthIndex) return m;
+          return {
+            ...m,
+            projected: i === monthIndex ? m.projected - amount : m.projected,
+            balance: m.balance - amount,
+          };
+        });
+
+        const baselineBalance = projection.months[projection.months.length - 1].balance as number;
+        const simulatedBalance = simulatedMonths[simulatedMonths.length - 1].balance as number;
+        const firstNegativeBaseline = (projection.months as Array<{ balance: number; label: string }>).find((m) => m.balance < 0)?.label ?? null;
+        const firstNegativeSimulated = (simulatedMonths as unknown as Array<{ balance: number; label: string }>).find((m) => m.balance < 0)?.label ?? null;
+
+        result = {
+          amount,
+          targetMonth,
+          description,
+          baseline: {
+            summary: projection.summary,
+            finalBalance: baselineBalance,
+            firstNegativeMonth: firstNegativeBaseline,
+          },
+          simulated: {
+            months: simulatedMonths,
+            finalBalance: simulatedBalance,
+            firstNegativeMonth: firstNegativeSimulated,
+          },
+          impact: {
+            balanceDelta: simulatedBalance - baselineBalance,
+            newNegativeMonthIntroduced: firstNegativeSimulated !== null && firstNegativeSimulated !== firstNegativeBaseline,
+            targetMonthBalance: simulatedMonths[monthIndex].balance,
+          },
+        };
+        break;
+      }
+      case "get_goal_history": {
+        const goalId = args?.goal_id ? String(args.goal_id) : null;
+        if (!goalId) throw new Error("goal_id é obrigatório");
+        const months = args?.months ? Math.max(1, Math.min(60, Number(args.months))) : 12;
+        result = await getGoalHistory(goalId, months);
         break;
       }
       default:

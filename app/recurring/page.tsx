@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Repeat, CreditCard, LayoutList } from "lucide-react";
+import { Repeat, CreditCard, LayoutList, Tv2 } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import { useCurrency } from "@/lib/currency-context";
 import { LogoImage } from "@/components/logo-image";
@@ -59,6 +59,29 @@ export default function RecurringPage() {
     year: String(year),
     month: String(month),
   });
+
+  const SUBSCRIPTION_CATEGORY_SLUGS = new Set([
+    "assinaturas", "streaming", "serviços digitais", "servicos digitais",
+    "serviços", "servicos",
+  ]);
+
+  const subscriptionItems = useMemo(
+    () =>
+      data?.rules.filter(
+        (r) =>
+          r.type === "EXPENSE" &&
+          !r.isInstallment &&
+          !/(\d+)\/(\d+)/.test(r.description) &&
+          r.category != null &&
+          SUBSCRIPTION_CATEGORY_SLUGS.has(r.category.toLowerCase()),
+      ) ?? [],
+    [data], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  const subscriptionMonthly = subscriptionItems.reduce(
+    (sum, r) => sum + Math.abs(Number(r.amount)),
+    0,
+  );
 
   const fixedExpenses = useMemo(
     () =>
@@ -186,6 +209,48 @@ export default function RecurringPage() {
           </p>
         </div>
       </div>
+
+      {/* Subscriptions section */}
+      {subscriptionItems.length > 0 && (
+        <div className="rounded-xl border bg-card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Tv2 className="size-4 text-violet-400" />
+              <h3 className="font-semibold">Assinaturas e Serviços</h3>
+              <span className="text-xs text-muted-foreground">{subscriptionItems.length}</span>
+            </div>
+            <span className="text-sm font-semibold tabular-nums text-violet-400">
+              {format(subscriptionMonthly)}<span className="text-xs text-muted-foreground font-normal">/mês</span>
+            </span>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {subscriptionItems.map((rule) => (
+              <button
+                key={rule.id}
+                type="button"
+                className="flex w-full items-center justify-between rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-left hover:bg-muted/40 transition-colors cursor-pointer"
+                onClick={() => { setSelectedRule({ ...rule, _kind: "fixed" }); setSheetOpen(true); }}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  {rule.logoUrl ? (
+                    <div className="shrink-0 size-7 rounded-md border border-border/40 bg-white p-0.5 flex items-center justify-center overflow-hidden">
+                      <LogoImage src={rule.logoUrl} alt={rule.description} className="size-full object-contain" />
+                    </div>
+                  ) : (
+                    <div className="shrink-0 size-7 rounded-md border border-border/40 bg-muted/50 flex items-center justify-center text-sm">
+                      {getCategoryEmoji(rule.category || "")}
+                    </div>
+                  )}
+                  <span className="text-sm truncate">{rule.description}</span>
+                </div>
+                <span className="text-sm font-medium tabular-nums text-foreground shrink-0 ml-2">
+                  {format(Math.abs(Number(rule.amount)))}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Two columns: Fixed & Installments */}
       <div className="grid gap-6 lg:grid-cols-2">

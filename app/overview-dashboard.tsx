@@ -450,13 +450,13 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
       {/* KPI tiles */}
       <p className="sr-only">Resultado do período</p>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatTile label="Patrimônio Líquido" value={format(overview.fiat.netWorth)}
-          icon={Wallet} hint="Consolidado: Ativos - Passivos" tone="neutral" />
+        <StatTile label="Saldo em Conta" value={format(overview.fiat.liquid)}
+          icon={Wallet} hint="Saldo líquido em contas correntes e poupança" tone="neutral" />
         <StatTile label="Entradas" value={format(overview.inflow)}
           icon={ArrowUpRight} tone="positive" hint="Incluindo salário configurado" />
         <StatTile label="Saídas" value={format(overview.outflow)}
           icon={ArrowDownLeft} tone="negative" hint="Total de gastos do período" />
-        <StatTile label="Investimentos" value={format(overview.fiat.investments)}
+        <StatTile label="Patrimônio Líquido" value={format(overview.fiat.netWorth)}
           icon={TrendingUp} hint={`Total em ativos: ${format(overview.fiat.assets)}`} tone="neutral" />
       </div>
 

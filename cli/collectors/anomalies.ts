@@ -1,4 +1,5 @@
-import { getBillsSummaryMetrics, getCryptoAssetMetrics, getOverviewMetrics } from "@/lib/domain/analytics"
+import { getCryptoAssetMetrics, getOverviewMetrics } from "@/lib/domain/analytics"
+import { getCardStatementsSummaryMetrics } from "@/lib/domain/billing"
 import { getDomainTransactions, getDomainAccounts } from "@/lib/domain/queries"
 
 export interface Anomaly {
@@ -11,13 +12,13 @@ export interface Anomaly {
 export async function collectAnomalies(params: URLSearchParams): Promise<Anomaly[]> {
   const anomalies: Anomaly[] = []
 
-  const bills = await getBillsSummaryMetrics(params)
+  const bills = await getCardStatementsSummaryMetrics()
   if (bills.counts.overdue > 0) {
     anomalies.push({
       type: "OVERDUE_BILLS",
       severity: "high",
       description: `${bills.counts.overdue} faturas em atraso.`,
-      metadata: { totalOverdue: Number(bills.overdueAmount) },
+      metadata: { totalOverdue: bills.overdueAmount },
     })
   }
 

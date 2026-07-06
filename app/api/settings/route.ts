@@ -149,17 +149,21 @@ export async function GET() {
 
 export async function PATCH(request: Request) {
   const body = await request.json()
-  const { 
-    monthlySalary, 
-    showFutureSalary, 
-    showFutureAccounts, 
-    syncIntervalHours, 
+  const {
+    monthlySalary,
+    showFutureSalary,
+    showFutureAccounts,
+    syncIntervalHours,
     syncLookbackDays,
     dashboardConfigJson,
     salaryPatterns,
     vaultEnabled,
     vaultMasterPassword,
-    vaultInactivityMin 
+    vaultInactivityMin,
+    notificationWebhookUrl,
+    telegramBotToken,
+    telegramChatId,
+    anthropicApiKey,
   } = body
 
   let updatedConfigJson = dashboardConfigJson
@@ -215,6 +219,10 @@ export async function PATCH(request: Request) {
       vaultEnabled: vaultEnabled !== undefined ? vaultEnabled : undefined,
       vaultMasterPassword: vaultMasterPassword !== undefined ? vaultMasterPassword : undefined,
       vaultInactivityMin: vaultInactivityMin !== undefined ? vaultInactivityMin : undefined,
+      notificationWebhookUrl: notificationWebhookUrl !== undefined ? (notificationWebhookUrl || null) : undefined,
+      telegramBotToken: telegramBotToken !== undefined ? (telegramBotToken || null) : undefined,
+      telegramChatId: telegramChatId !== undefined ? (telegramChatId || null) : undefined,
+      anthropicApiKey: anthropicApiKey !== undefined ? (anthropicApiKey || null) : undefined,
     },
   })
 

@@ -157,18 +157,44 @@ async function buildActions(): Promise<InsightAction[]> {
   return actions.sort((a, b) => order[a.severity] - order[b.severity])
 }
 
+async function buildTaxLossHarvestingAlerts(): Promise<InsightAction[]> {
+  const positions = await prisma.domainCryptoPosition.findMany({
+    where: { pnlUnrealized: { lt: 0 } },
+    select: { asset: true, costBasis: true, pnlUnrealized: true },
+  })
+
+  const alerts: InsightAction[] = []
+  for (const pos of positions) {
+    const unrealized = Math.abs(Number(pos.pnlUnrealized))
+    const cost = Number(pos.costBasis)
+    if (cost > 0 && unrealized / cost > 0.10) {
+      const pct = ((unrealized / cost) * 100).toFixed(0)
+      alerts.push({
+        id: `tax-harvest:${pos.asset}`,
+        severity: "info",
+        title: `Tax Loss Harvesting: ${pos.asset} com -${pct}%`,
+        message: `Prejuízo não realizado de R$ ${unrealized.toFixed(2)}. Vender e recomprar pode gerar crédito fiscal para abater ganhos futuros.`,
+        href: `/crypto/${pos.asset.toLowerCase()}`,
+        hrefLabel: `Ver ${pos.asset}`,
+      })
+    }
+  }
+  return alerts
+}
+
 export async function GET() {
-  const [nudges, benford, hiddenSubs, actions, behavior] = await Promise.all([
+  const [nudges, benford, hiddenSubs, actions, behavior, taxHarvest] = await Promise.all([
     getBehavioralNudges(),
     checkBenfordsLaw(),
     detectHiddenSubscriptions(),
     buildActions(),
     getBehaviorProfile(),
+    buildTaxLossHarvestingAlerts(),
   ])
 
   return NextResponse.json(serializeForJson({
     nudges,
-    actions,
+    actions: [...actions, ...taxHarvest],
     behavior,
     forensics: {
       benford,

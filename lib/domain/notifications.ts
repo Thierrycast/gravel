@@ -14,8 +14,8 @@ function ensureLogDir() {
 }
 
 /**
- * Trigger base de entrega de notificacoes.
- * Atualmente grava no log local e no console. Pronto para ser estendido para Slack/Telegram.
+ * Trigger de entrega de notificacoes.
+ * Grava localmente e envia via webhook Slack-compatible e/ou Telegram se configurado.
  */
 export async function triggerNotificationDelivery(
   title: string,
@@ -25,19 +25,34 @@ export async function triggerNotificationDelivery(
 ) {
   ensureLogDir()
   const timestamp = new Date().toISOString()
-  const logEntry = JSON.stringify({
-    timestamp,
-    title,
-    message,
-    severity,
-    metadata,
-  })
-
-  // Grava no arquivo de logs de notificacoes
+  const logEntry = JSON.stringify({ timestamp, title, message, severity, metadata })
   fs.appendFileSync(LOG_FILE_PATH, logEntry + "\n", "utf8")
-
-  // Log no console/terminal do servidor
   console.log(`[NOTIFICATION-TRIGGER] [${severity.toUpperCase()}] ${title}: ${message}`)
+
+  try {
+    const settings = await prisma.userSetting.findUnique({ where: { id: "default" } })
+    if (!settings) return
+
+    const text = `[${severity.toUpperCase()}] *${title}*\n${message}`
+
+    if (settings.notificationWebhookUrl) {
+      await fetch(settings.notificationWebhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      }).catch((err) => console.error("[NOTIFICATION] Webhook delivery failed:", err))
+    }
+
+    if (settings.telegramBotToken && settings.telegramChatId) {
+      await fetch(`https://api.telegram.org/bot${settings.telegramBotToken}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: settings.telegramChatId, text, parse_mode: "Markdown" }),
+      }).catch((err) => console.error("[NOTIFICATION] Telegram delivery failed:", err))
+    }
+  } catch (err) {
+    console.error("[NOTIFICATION] Settings lookup failed:", err)
+  }
 }
 
 /**
