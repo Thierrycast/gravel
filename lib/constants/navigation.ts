@@ -8,6 +8,7 @@ import {
   Bitcoin,
   PieChart,
   Calendar,
+  CalendarCheck,
   FileText,
   Link as LinkIcon,
   Store,
@@ -19,6 +20,8 @@ import {
   Brain,
   Calculator,
   Users,
+  Inbox,
+  RefreshCw,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -30,6 +33,7 @@ export type NavItem = {
 
 export const NAV_MAIN: NavItem[] = [
   { title: "Visão Geral", href: "/", icon: LayoutDashboard },
+  { title: "Inbox", href: "/inbox", icon: Inbox },
   { title: "Transações", href: "/transactions", icon: ArrowLeftRight },
   { title: "Recorrências", href: "/recurring", icon: Calendar },
   { title: "Receitas", href: "/recurring/income", icon: ArrowUpRight },
@@ -39,6 +43,7 @@ export const NAV_MAIN: NavItem[] = [
 export const NAV_FINANCE: NavItem[] = [
   { title: "Contas", href: "/accounts", icon: Wallet },
   { title: "Faturas", href: "/bills", icon: Receipt },
+  { title: "Fechamento Mensal", href: "/monthly-close", icon: CalendarCheck },
   { title: "Categorias", href: "/categories", icon: Tags },
   { title: "Comerciantes", href: "/merchants", icon: Store },
 ];
@@ -58,4 +63,5 @@ export const NAV_PLANNING: NavItem[] = [
   { title: "Relatórios", href: "/reports", icon: FileText },
   { title: "Configurações", href: "/settings", icon: Settings2 },
   { title: "Conexões", href: "/connect", icon: LinkIcon },
+  { title: "Sincronização", href: "/sync", icon: RefreshCw },
 ];
