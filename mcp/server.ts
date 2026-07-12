@@ -240,7 +240,7 @@ const TOOLS: Tool[] = [
       type: "object",
       properties: {
         period1: { type: "string", default: "mtd" },
-        period2: { type: "string", default: "month" },
+        period2: { type: "string", default: "lastMonth" },
       },
     },
   },
@@ -784,7 +784,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       case "compare_periods": {
         const p1 = args?.period1 as string || "mtd";
-        const p2 = args?.period2 as string || "month";
+        const p2 = args?.period2 as string || "lastMonth";
         const [m1, m2, c1, c2] = await Promise.all([
           getOverviewMetrics(new URLSearchParams({ period: p1 })),
           getOverviewMetrics(new URLSearchParams({ period: p2 })),
@@ -798,6 +798,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       }
       case "project_future_cashflow": {
+        const projection = await getProjectionPayload(
+          new URLSearchParams("months=6"),
+        );
         const rules = await getRecurringPayload();
         const settings = await getUserSettings();
         const monthlySalary = settings.monthlySalary;
@@ -807,7 +810,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           totalMonthlyIncome: rules.filter(r => r.type === "INCOME").reduce((sum, r) => sum + Number(r.amount || 0), 0),
         };
         result = {
+          // Campo legado (mantido para compatibilidade).
           salary: monthlySalary,
+          // Composição auditável do salário e da projeção mês a mês.
+          salaryBreakdown: projection.summary.salary,
+          summary: projection.summary,
+          months: projection.months,
           recurring: recurringSummary,
           rules,
         };

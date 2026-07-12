@@ -34,7 +34,8 @@ export async function getNetWorthMetrics(searchParams?: URLSearchParams) {
     ]);
 
   const rate = new Prisma.Decimal(usdBrl);
-  const cryptoAssets = overview.cryptoTotal.mul(rate);
+  // overview.cryptoTotal já vem convertido para BRL pelo getOverviewMetrics.
+  const cryptoAssets = overview.cryptoTotal;
 
   const totalPendingLends = sumDecimals(pendingLends.map((lend) => lend.amount));
 

@@ -13,6 +13,7 @@ import {
   buildTransactionWhere,
   classifyCashFlowTransaction,
   decimal,
+  detectInternalTransferPairIds,
   isActiveInvestmentPosition,
   isOutstandingBill,
   percentOf,
@@ -83,7 +84,12 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
   let outflow = ZERO;
   let operatingTransactionCount = 0;
 
+  // Pares de auto-transferência (mesmo valor, mesmo contraparte) não entram em
+  // receita nem despesa reais.
+  const internalTransferPairIds = detectInternalTransferPairIds(transactions);
+
   for (const transaction of transactions) {
+    if (internalTransferPairIds.has(transaction.id)) continue;
     const category = transaction.domainCategoryId
       ? categoryMap.get(transaction.domainCategoryId)
       : null;
@@ -148,7 +154,12 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
     (item) => item.currencyCode,
     usdBrlRate,
   );
-  const cryptoTotal = sumDecimals(cryptoAssets.map((item) => item.value));
+  // DomainCryptoAsset.value é cotado em USDT (~USD). Converter aqui garante
+  // que TODO consumidor (rota web, MCP, CLI, insights) receba BRL — antes cada
+  // wrapper convertia por conta própria e o MCP/CLI reportavam valores mistos.
+  const cryptoTotal = sumDecimals(cryptoAssets.map((item) => item.value)).mul(
+    new Prisma.Decimal(usdBrlRate),
+  );
 
   const creditAccountIds = new Set(creditAccounts.map((a) => a.id));
 
@@ -217,6 +228,7 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
     cryptoNetWorth,
     grossAssets: fiatAssets.plus(cryptoTotal),
     netWorth: fiatNetWorth.plus(cryptoNetWorth),
+    usdBrlRate: new Prisma.Decimal(usdBrlRate),
     monthlyInflow: inflow,
     monthlyOutflow: outflow,
     monthlyNet: inflow.minus(outflow),

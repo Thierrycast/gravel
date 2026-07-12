@@ -6,12 +6,10 @@ import {
 } from "@/lib/domain/analytics";
 import { getDashboardTransactions } from "@/lib/domain/queries";
 import { getDashboardRecurring } from "@/lib/domain/derived";
-import { getUsdBrlRate } from "@/lib/exchange-rate";
 import { ensurePrismaReady } from "@/lib/prisma";
 import { OverviewDashboard } from "./overview-dashboard";
 import { serializeDomain } from "@/lib/core/serialization";
 import { getMerchantLogo } from "@/lib/domain/utils";
-import { Prisma } from "@prisma/client";
 
 export default async function Page({
   searchParams,
@@ -42,7 +40,6 @@ export default async function Page({
     cashFlow,
     transactions,
     recurring,
-    usdBrlRate,
   ] = await Promise.all([
     getOverviewMetrics(urlParams),
     getSpendingByCategoryMetrics(urlParams),
@@ -50,11 +47,9 @@ export default async function Page({
     getCashFlowMetrics(cashFlowParams),
     getDashboardTransactions(urlParams),
     getDashboardRecurring(),
-    getUsdBrlRate(),
   ]);
-  const cryptoTotalBrl = overview.cryptoTotal.mul(
-    new Prisma.Decimal(usdBrlRate),
-  );
+  // getOverviewMetrics já converte cripto para BRL na fonte.
+  const cryptoTotalBrl = overview.cryptoTotal;
 
   const initialData = serializeDomain({
     overview: {

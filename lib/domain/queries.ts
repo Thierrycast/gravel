@@ -8,6 +8,7 @@ import {
   parseNumberParam,
 } from "@/lib/core/filters"
 import { isInternalAccountTransfer } from "@/lib/domain/analytics/shared"
+import { matchesSalaryPatternValues, salaryMonthKey } from "@/lib/domain/salary"
 import { buildTransactionDisplay } from "@/lib/domain/enrichment/display"
 import { deriveInstitutionFromNames, getInstitutionLogo } from "@/lib/domain/utils"
 import { prisma } from "@/lib/prisma"
@@ -26,6 +27,8 @@ function resolvePeriodFrom(period: string | null, to: Date): Date | undefined {
       const d = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1))
       return d
     }
+    case "lastMonth":
+      return new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1))
     case "ytd": return new Date(Date.UTC(to.getUTCFullYear(), 0, 1))
     case "all":
     default: return undefined
@@ -34,8 +37,14 @@ function resolvePeriodFrom(period: string | null, to: Date): Date | undefined {
 
 export function parseDomainQuery(searchParams: URLSearchParams) {
   const directionParam = searchParams.get("direction")?.trim().toUpperCase()
-  const to = parseDateParam(searchParams.get("to")) ?? new Date()
+  let to = parseDateParam(searchParams.get("to")) ?? new Date()
   const period = searchParams.get("period") ?? undefined
+
+  if (period === "lastMonth") {
+    const startOfCurrentMonth = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1))
+    to = new Date(startOfCurrentMonth.getTime() - 1)
+  }
+
   const from = parseDateParam(searchParams.get("from")) ?? resolvePeriodFrom(period ?? null, to)
 
   return {
@@ -932,35 +941,65 @@ export async function getUserSettings(searchParams?: URLSearchParams) {
     } catch {}
   }
 
-  let calculatedSalary = setting ? Number(setting.monthlySalary) : 0
+  const configuredSalary = setting ? Number(setting.monthlySalary) : 0
+  let calculatedSalary = configuredSalary
+  let salarySource: "configured" | "estimated" | "none" =
+    configuredSalary > 0 ? "configured" : "none"
 
   if (salaryPatterns.length > 0) {
-    let sum = 0
-    const cutoff = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000)
-    for (const pattern of salaryPatterns) {
-      const lastTx = await prisma.domainTransaction.findFirst({
-        where: {
-          direction: "INFLOW",
-          occurredAt: { gte: cutoff },
-          OR: [
-            { description: { contains: pattern } },
-            { merchantName: { contains: pattern } },
-          ],
-        },
-        orderBy: { occurredAt: "desc" },
-      })
+    // Estimativa robusta: em vez de `contains` case-sensitive (que falhava com
+    // acentos/caixa e somava várias pernas), usa o mesmo matcher normalizado da
+    // detecção de salário, pega a MAIOR entrada de cada mês (descarta
+    // auto-transferências menores que casam o mesmo padrão) e usa a mediana
+    // como salário mensal representativo. Janela de 120 dias sobrevive a um mês
+    // sem depósito.
+    const cutoff = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000)
+    const recentInflows = await prisma.domainTransaction.findMany({
+      where: {
+        direction: "INFLOW",
+        ignored: false,
+        occurredAt: { gte: cutoff },
+      },
+      select: {
+        amount: true,
+        description: true,
+        normalizedDescription: true,
+        merchantName: true,
+        occurredAt: true,
+      },
+    })
 
-      if (lastTx) {
-        sum += Number(lastTx.amount)
+    const largestByMonth = new Map<string, number>()
+    for (const tx of recentInflows) {
+      if (
+        !matchesSalaryPatternValues(
+          [tx.description, tx.normalizedDescription, tx.merchantName],
+          salaryPatterns,
+        )
+      ) {
+        continue
+      }
+      const key = salaryMonthKey(tx.occurredAt)
+      const value = Math.abs(Number(tx.amount))
+      if (value > (largestByMonth.get(key) ?? 0)) {
+        largestByMonth.set(key, value)
       }
     }
-    if (sum > 0) {
-      calculatedSalary = sum
+
+    if (largestByMonth.size > 0) {
+      const monthly = [...largestByMonth.values()].sort((a, b) => a - b)
+      const median = monthly[Math.floor(monthly.length / 2)]
+      if (median > 0) {
+        calculatedSalary = median
+        salarySource = "estimated"
+      }
     }
   }
 
   const base = {
     monthlySalary: calculatedSalary,
+    monthlySalaryConfigured: configuredSalary,
+    salarySource,
     showFutureSalary: setting ? setting.showFutureSalary : true,
     showFutureAccounts: setting ? setting.showFutureAccounts : true,
     salaryPatterns,

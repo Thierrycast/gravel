@@ -4,10 +4,12 @@ import { parseNumberParam } from "@/lib/core/filters";
 import { RECURRING_DETECTION, PROJECTION } from "@/lib/domain/constants";
 import {
   classifyCashFlowTransaction,
+  detectInternalTransferPairIds,
   getCashFlowMetrics,
   getCryptoPortfolioMetrics,
   getOverviewMetrics,
 } from "@/lib/domain/analytics";
+import { EXCLUDED_SPENDING_CATEGORIES } from "@/lib/domain/analytics/shared";
 import { getCardStatements } from "@/lib/domain/billing";
 import {
   occurrenceDatesInMonth,
@@ -189,11 +191,14 @@ export async function refreshRecurringDerived(options?: {
   const categoryMap = new Map<string, (typeof categories)[number]>(
     categories.map((category) => [category.id, category]),
   );
+  // Auto-transferências pareadas nunca formam recorrência (nem de renda).
+  const internalTransferPairIds = detectInternalTransferPairIds(transactions);
   const groups = new Map<string, typeof transactions>();
 
   for (const transaction of transactions) {
     if (transaction.installmentGroupId || transaction.installmentTotal)
       continue;
+    if (internalTransferPairIds.has(transaction.id)) continue;
     if (
       transaction.direction === DomainTransactionDirection.INFLOW &&
       transaction.domainAccountId &&
@@ -656,12 +661,9 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
       (pattern) => lookup.includes(pattern) || pattern.includes(lookup),
     );
   };
-  const EXCLUDED_SPENDING_CATEGORIES = new Set([
-    "pagamento de cartão de crédito",
-    "transferência mesma titularidade",
-    "transferência entre contas",
-    "pagamento de fatura",
-  ]);
+  const excludedSpendingSet = new Set(
+    EXCLUDED_SPENDING_CATEGORIES.map((cat) => cat.toLowerCase())
+  );
 
   const variableTransactions = pastTransactions.filter((tx) => {
     if (tx.direction !== DomainTransactionDirection.OUTFLOW) return false;
@@ -671,7 +673,7 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
       ? categoryMap.get(tx.domainCategoryId)
       : null;
     if (cat?.kind === "TRANSFER") return false;
-    if (cat?.name && EXCLUDED_SPENDING_CATEGORIES.has(cat.name.toLowerCase()))
+    if (cat?.name && excludedSpendingSet.has(cat.name.toLowerCase()))
       return false;
 
     const isRecurring = recurringRules.some((rule) => {
@@ -949,8 +951,11 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
 
   // Compute average monthly income from real past transaction inflows (3-month window)
   // so the summary card reflects actual income even when salary is not configured.
+  const pastInternalTransferPairIds =
+    detectInternalTransferPairIds(pastTransactions);
   const pastInflowTransactions = pastTransactions.filter((tx) => {
     if (tx.direction !== DomainTransactionDirection.INFLOW) return false;
+    if (pastInternalTransferPairIds.has(tx.id)) return false;
     const cat = tx.domainCategoryId ? categoryMap.get(tx.domainCategoryId) : null;
     const classification = classifyCashFlowTransaction(
       tx.direction,
@@ -993,6 +998,46 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
   const firstNegativeMonth =
     monthsData.find((month) => month.balance < 0) ?? null;
 
+  // ── Explicabilidade do salário na projeção ────────────────────────────────
+  // Torna auditável POR QUE o salário entrou (ou não) na projeção, evitando o
+  // "salário zerado" silencioso quando há padrões confiáveis.
+  const salaryRecurringRules = recurringRules.filter(
+    (rule) =>
+      rule.type === "INCOME" &&
+      ((rule.categoryId && salaryCategoryIds.has(rule.categoryId)) ||
+        matchesSalaryPattern(rule.title, rule.descriptionPattern)),
+  );
+  const recurringSalaryMonthly = safeNumber(
+    sumDecimals(salaryRecurringRules.map((rule) => decimal(rule.amount).abs())),
+  );
+  const estimatedSalaryTopUp = monthsData[0]?.estimatedSalary ?? 0;
+  const salaryIncludedInProjection =
+    salaryRecurringRules.length > 0 || estimatedSalaryTopUp > 0;
+
+  let salaryReason: string;
+  if (!settings.showFutureSalary) {
+    // O toggle desliga só o COMPLEMENTO estimado; recorrências de salário
+    // detectadas continuam na projeção como qualquer outra renda recorrente.
+    salaryReason =
+      salaryRecurringRules.length > 0
+        ? "Complemento de salário desativado (showFutureSalary=false); a recorrência de salário detectada segue na projeção."
+        : "Salário futuro desativado nas configurações (showFutureSalary=false).";
+  } else if (
+    settings.monthlySalary <= 0 &&
+    settings.salaryPatterns.length === 0
+  ) {
+    salaryReason =
+      "Nenhum salário informado e nenhum padrão de salário configurado.";
+  } else if (settings.monthlySalary <= 0) {
+    salaryReason =
+      "Padrões de salário configurados, mas nenhuma entrada correspondente nos últimos 120 dias.";
+  } else if (recurringSalaryMonthly > 0 && estimatedSalaryTopUp <= 0) {
+    salaryReason =
+      "Salário já contabilizado pelas recorrências detectadas; sem complemento estimado.";
+  } else {
+    salaryReason = `Salário mensal de ${settings.monthlySalary.toFixed(2)} aplicado à projeção (fonte: ${settings.salarySource}).`;
+  }
+
   return {
     summary: {
       averageMonthlyIncome,
@@ -1011,6 +1056,19 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
       // usados no insight de capacidade de poupança).
       goalCommitmentMonthly,
       goalCommitmentCount,
+      // Composição auditável do salário considerado na projeção.
+      salary: {
+        monthlyEffective: settings.monthlySalary,
+        monthlyConfigured: settings.monthlySalaryConfigured,
+        source: settings.salarySource,
+        patternsCount: settings.salaryPatterns.length,
+        showFutureSalary: settings.showFutureSalary,
+        recurringSalaryMonthly,
+        estimatedTopUpMonthly: estimatedSalaryTopUp,
+        includedInProjection: salaryIncludedInProjection,
+        reason: salaryReason,
+      },
+      nonOperationalFamilies: Array.from(excludedSpendingSet),
     },
     months: monthsData,
   };

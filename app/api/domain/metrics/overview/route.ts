@@ -1,32 +1,14 @@
-import { Prisma } from "@prisma/client"
-
 import { jsonError, jsonOk } from "@/lib/core/http"
 import { getOverviewMetrics } from "@/lib/domain/analytics"
-import { getUsdBrlRate } from "@/lib/exchange-rate"
 
 export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const [summaryRaw, usdBrl] = await Promise.all([
-      getOverviewMetrics(searchParams),
-      getUsdBrlRate(),
-    ])
-
-    // crypto is stored in USD — convert to BRL and propagate so all aggregates stay consistent
-    const rate = new Prisma.Decimal(usdBrl)
-    const cryptoTotalBrl = summaryRaw.cryptoTotal.mul(rate)
-    const cryptoNetWorthBrl = cryptoTotalBrl
-
-    const summary = {
-      ...summaryRaw,
-      cryptoTotal: cryptoTotalBrl,
-      cryptoNetWorth: cryptoNetWorthBrl,
-      grossAssets: summaryRaw.fiatAssets.plus(cryptoTotalBrl),
-      netWorth: summaryRaw.fiatNetWorth.plus(cryptoNetWorthBrl),
-      usdBrlRate: rate,
-    }
+    // getOverviewMetrics já entrega tudo em BRL (inclusive cripto) e expõe
+    // usdBrlRate — nenhuma conversão adicional aqui, senão dobra a cotação.
+    const summary = await getOverviewMetrics(searchParams)
 
     const prevParams = new URLSearchParams(searchParams)
     const now = new Date()
