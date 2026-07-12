@@ -88,7 +88,7 @@ export async function projectBinanceReadModels() {
 
       projected += 1;
     }
-  });
+  }, { maxWait: 15_000, timeout: 120_000 });
 
   await markDomainSyncState({
     stateKey: "domain:binance:crypto-assets",

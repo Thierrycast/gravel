@@ -437,7 +437,8 @@ async function syncBillEntity(
 async function syncTransactionEntity(
   itemId: string,
   accountId: string,
-  transaction: Record<string, unknown>
+  transaction: Record<string, unknown>,
+  accountCurrencyCode?: string | null
 ) {
   const externalId = toStringOrNull(transaction.id)
   if (!externalId) {
@@ -475,6 +476,18 @@ async function syncTransactionEntity(
     merchantName = toStringOrNull(paymentData.receiver.name)
   }
 
+  // Compras em moeda estrangeira: a Pluggy envia `amount` na moeda original
+  // (ex.: USD 21.24) e `amountInAccountCurrency` no valor realmente cobrado na
+  // conta (ex.: BRL 114.34). Armazenar o valor na moeda da conta mantém todos
+  // os somatórios (faturas, relatórios, KPIs) consistentes sem depender de
+  // conversão por cotação do dia.
+  const amountInAccountCurrency = toDecimal(transaction.amountInAccountCurrency)
+  const amount =
+    amountInAccountCurrency ?? toDecimal(transaction.amount) ?? undefined
+  const currencyCode = amountInAccountCurrency
+    ? (accountCurrencyCode ?? null)
+    : toStringOrNull(transaction.currencyCode)
+
 
   await prisma.pluggyTransactionRecord.upsert({
     where: { externalId },
@@ -483,8 +496,8 @@ async function syncTransactionEntity(
       accountExternalId: accountId,
       description: toStringOrNull(transaction.description),
       descriptionRaw: toStringOrNull(transaction.descriptionRaw),
-      currencyCode: toStringOrNull(transaction.currencyCode),
-      amount: toDecimal(transaction.amount) ?? undefined,
+      currencyCode: currencyCode,
+      amount: amount,
       date: toDate(transaction.date) ?? undefined,
       type: toStringOrNull(transaction.type),
       status: toStringOrNull(transaction.status),
@@ -502,8 +515,8 @@ async function syncTransactionEntity(
       accountExternalId: accountId,
       description: toStringOrNull(transaction.description),
       descriptionRaw: toStringOrNull(transaction.descriptionRaw),
-      currencyCode: toStringOrNull(transaction.currencyCode),
-      amount: toDecimal(transaction.amount) ?? undefined,
+      currencyCode: currencyCode,
+      amount: amount,
       date: toDate(transaction.date) ?? undefined,
       type: toStringOrNull(transaction.type),
       status: toStringOrNull(transaction.status),
@@ -759,7 +772,8 @@ export async function syncPluggyData(options: SyncOptions = {}) {
             const transactionResult = await syncTransactionEntity(
               itemId,
               accountId,
-              transaction as Record<string, unknown>
+              transaction as Record<string, unknown>,
+              toStringOrNull((account as Record<string, unknown>).currencyCode)
             )
 
             counters.transactions += transactionResult.inserted
