@@ -189,7 +189,7 @@ export async function projectPluggyCategories() {
         data: { parentId },
       });
     }
-  });
+  }, { maxWait: 15_000, timeout: 120_000 });
 
   await markDomainSyncState({
     stateKey: "domain:pluggy:categories",
@@ -275,7 +275,7 @@ export async function projectPluggyAccounts() {
 
       projected += 1;
     }
-  });
+  }, { maxWait: 15_000, timeout: 120_000 });
 
   await markDomainSyncState({
     stateKey: "domain:pluggy:accounts",
@@ -303,7 +303,7 @@ export async function projectPluggyMerchants() {
       );
       projected += 1;
     }
-  });
+  }, { maxWait: 15_000, timeout: 120_000 });
 
   await markDomainSyncState({
     stateKey: "domain:pluggy:merchants",
@@ -798,6 +798,11 @@ export async function projectPluggyTransactions() {
       for (const { id, data } of sourceUpdates) {
         await tx.domainTransactionSource.update({ where: { id }, data });
       }
+    }, {
+      // Lotes grandes fazem centenas de updates sequenciais; o timeout padrão
+      // de 5s derrubava o sync inteiro com P2028 ("Transaction not found").
+      maxWait: 15_000,
+      timeout: 120_000,
     });
 
     pendingMerchants.length = 0;
@@ -881,7 +886,7 @@ export async function projectPluggyBills() {
 
       projected += 1;
     }
-  });
+  }, { maxWait: 15_000, timeout: 120_000 });
 
   await markDomainSyncState({
     stateKey: "domain:pluggy:bills",
@@ -937,7 +942,7 @@ export async function projectPluggyInvestments() {
 
       projected += 1;
     }
-  });
+  }, { maxWait: 15_000, timeout: 120_000 });
 
   await markDomainSyncState({
     stateKey: "domain:pluggy:investments",
