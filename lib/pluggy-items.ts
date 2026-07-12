@@ -15,19 +15,38 @@ export async function listStoredPluggyItems() {
 }
 
 export async function savePluggyItem(input: SavePluggyItemInput) {
+  const current = await prisma.pluggyItem.findUnique({
+    where: { pluggyItemId: input.itemId },
+  })
+
+  let finalName = input.connectorName
+  let finalId = input.connectorId
+  let finalImageUrl = input.imageUrl
+
+  if (
+    finalName &&
+    ["Pluggy", "MeuPluggy", "PLUGGY"].includes(finalName) &&
+    current?.connectorName &&
+    !["Pluggy", "MeuPluggy", "PLUGGY"].includes(current.connectorName)
+  ) {
+    finalName = current.connectorName
+    finalId = current.connectorId
+    finalImageUrl = current.imageUrl
+  }
+
   await prisma.pluggyItem.upsert({
     where: { pluggyItemId: input.itemId },
     update: {
-      connectorId: input.connectorId ?? undefined,
-      connectorName: input.connectorName ?? undefined,
-      imageUrl: input.imageUrl ?? undefined,
+      connectorId: finalId ?? undefined,
+      connectorName: finalName ?? undefined,
+      imageUrl: finalImageUrl ?? undefined,
       status: input.status ?? undefined,
     },
     create: {
       pluggyItemId: input.itemId,
-      connectorId: input.connectorId ?? undefined,
-      connectorName: input.connectorName ?? undefined,
-      imageUrl: input.imageUrl ?? undefined,
+      connectorId: finalId ?? undefined,
+      connectorName: finalName ?? undefined,
+      imageUrl: finalImageUrl ?? undefined,
       status: input.status ?? undefined,
     },
   })
@@ -38,12 +57,31 @@ export async function savePluggyItem(input: SavePluggyItemInput) {
 }
 
 export async function updateStoredPluggyItem(input: SavePluggyItemInput) {
+  const current = await prisma.pluggyItem.findUnique({
+    where: { pluggyItemId: input.itemId },
+  })
+
+  let finalName = input.connectorName
+  let finalId = input.connectorId
+  let finalImageUrl = input.imageUrl
+
+  if (
+    finalName &&
+    ["Pluggy", "MeuPluggy", "PLUGGY"].includes(finalName) &&
+    current?.connectorName &&
+    !["Pluggy", "MeuPluggy", "PLUGGY"].includes(current.connectorName)
+  ) {
+    finalName = current.connectorName
+    finalId = current.connectorId
+    finalImageUrl = current.imageUrl
+  }
+
   return prisma.pluggyItem.update({
     where: { pluggyItemId: input.itemId },
     data: {
-      connectorId: input.connectorId ?? undefined,
-      connectorName: input.connectorName ?? undefined,
-      imageUrl: input.imageUrl ?? undefined,
+      connectorId: finalId ?? undefined,
+      connectorName: finalName ?? undefined,
+      imageUrl: finalImageUrl ?? undefined,
       status: input.status ?? undefined,
     },
   })
