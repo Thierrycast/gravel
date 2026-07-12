@@ -9,8 +9,12 @@ function normalizeSalaryLookup(value?: string | null) {
 }
 
 function splitPattern(pattern: string) {
+  // Divide apenas em quebras de linha: descrições bancárias reais contêm "|"
+  // e vírgulas (ex.: "Transferência Recebida|FULANO"), e dividir nelas
+  // transformava um padrão específico em termos genéricos — "transferencia
+  // recebida" sozinho fazia QUALQUER transferência virar salário.
   return pattern
-    .split(/[\n|,;]+/g)
+    .split(/[\n]+/g)
     .map((item) => normalizeSalaryLookup(item))
     .filter((item) => item.length > 0)
 }

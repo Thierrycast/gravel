@@ -1,5 +1,8 @@
 import { jsonError, jsonOk } from "@/lib/core/http";
-import { classifyCashFlowTransaction } from "@/lib/domain/analytics";
+import {
+  classifyCashFlowTransaction,
+  detectInternalTransferPairIds,
+} from "@/lib/domain/analytics";
 import { getCardStatements } from "@/lib/domain/billing";
 import { getRecurringPayload } from "@/lib/domain/derived";
 import { getUserSettings } from "@/lib/domain/queries";
@@ -45,10 +48,12 @@ export async function GET() {
           occurredAt: { gte: windowStart, lte: now },
         },
         select: {
+          id: true,
           occurredAt: true,
           amount: true,
           direction: true,
           description: true,
+          normalizedDescription: true,
           merchantName: true,
           domainCategoryId: true,
           domainAccountId: true,
@@ -91,7 +96,10 @@ export async function GET() {
       { current: number; previous: number }
     >();
 
+    const internalTransferPairIds = detectInternalTransferPairIds(transactions);
+
     for (const tx of transactions) {
+      if (internalTransferPairIds.has(tx.id)) continue;
       const category = tx.domainCategoryId
         ? categoryById.get(tx.domainCategoryId)
         : null;

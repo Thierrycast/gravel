@@ -78,6 +78,8 @@ export function resolvePeriodStart(period: string | null, to: Date) {
     case "mtd":
     case "month":
       return clampDateToPeriodStart(to);
+    case "lastMonth":
+      return new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1));
     case "ytd":
       return new Date(Date.UTC(to.getUTCFullYear(), 0, 1));
     case "all":
@@ -110,8 +112,14 @@ export function buildMetricFilters(
     limit?: number;
   },
 ) {
-  const to = parseDateParam(searchParams.get("to")) ?? new Date();
+  let to = parseDateParam(searchParams.get("to")) ?? new Date();
   const period = searchParams.get("period") ?? defaults?.period;
+
+  if (period === "lastMonth") {
+    const startOfCurrentMonth = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1));
+    to = new Date(startOfCurrentMonth.getTime() - 1);
+  }
+
   const from =
     parseDateParam(searchParams.get("from")) ??
     resolvePeriodStart(period ?? null, to);
@@ -210,6 +218,23 @@ const NON_INCOME_CATEGORY_TERMS = [
   "pagamento de cartao de credito",
   "pagamento de fatura",
   "fatura de cartao",
+  "pagamento recebido", // Ficha 1
+  "valor adicionado na conta por cartao de credito", // Ficha 2
+  "valor adicionado para pix no credito", // Ficha 2
+  // Ficha 3 revertida por regra de negócio do usuário: depósitos lançados pelo banco
+  // como "Depósito de dinheiro" devem contar como entrada nova no sistema rastreado,
+  // porque esse valor não é duplicado manualmente fora do banco.
+];
+
+// Saídas que são pagamento de fatura de cartão: o dinheiro sai da conta para
+// quitar o cartão, mas as compras do cartão já contam como despesa uma a uma.
+// Contar o pagamento também dobraria o gasto do mês.
+const CARD_PAYMENT_OUTFLOW_TERMS = [
+  "pagamento de fatura",
+  "pagamento fatura",
+  "pagto fatura",
+  "pagto. fatura",
+  "pagamento de cartao de credito",
 ];
 
 const INACTIVE_INVESTMENT_STATUSES = new Set([
@@ -232,9 +257,9 @@ function normalizePolicyText(value?: string | null) {
 
 export function isInternalTransfer(
   categoryName?: string | null,
-  categoryKind?: string | null,
+  _categoryKind?: string | null,
 ) {
-  if (categoryKind === "TRANSFER") return true;
+  void _categoryKind;
   if (!categoryName) return false;
   const lower = normalizePolicyText(categoryName);
   return EXCLUDED_SPENDING_CATEGORIES.some((excluded) =>
@@ -261,6 +286,140 @@ export function isInternalAccountTransfer(categoryName?: string | null) {
   return INTERNAL_ACCOUNT_TRANSFER_TERMS.some((term) => value.includes(term));
 }
 
+// Frases que denunciam uma transferência bancária (PIX/TED/DOC). Usadas para
+// extrair o nome do contraparte e parear as duas pernas de uma movimentação
+// entre contas próprias.
+const TRANSFER_PHRASE_TERMS = [
+  "pix enviado",
+  "pix recebido",
+  "transferencia recebida",
+  "transferencia enviada",
+  "transferencia pix",
+  "ted recebida",
+  "ted enviada",
+  "doc recebido",
+  "doc enviado",
+  "transferencia",
+];
+
+// Extrai o nome do contraparte de uma descrição de transferência. Ex.:
+//   "Transferência Recebida|THIERRY BARRETO DE CASTRO" -> "thierry barreto de castro"
+//   "Pix enviado - Thierry Barreto De Castro"          -> "thierry barreto de castro"
+//   "Transferência Recebida|67.037.195 THIERRY ..."    -> "thierry ..."
+// Retorna null quando a descrição não é uma transferência ou não tem um nome
+// com pelo menos dois tokens (evita casar termos genéricos).
+export function extractTransferCounterparty(
+  description?: string | null,
+): string | null {
+  const normalized = normalizePolicyText(description);
+  if (!normalized) return null;
+  if (!TRANSFER_PHRASE_TERMS.some((term) => normalized.includes(term))) {
+    return null;
+  }
+
+  const raw = description ?? "";
+  let namePart = "";
+  if (raw.includes("|")) {
+    namePart = raw.slice(raw.indexOf("|") + 1);
+  } else if (/ - /.test(raw)) {
+    namePart = raw.slice(raw.indexOf(" - ") + 3);
+  } else {
+    let rest = normalized;
+    for (const term of TRANSFER_PHRASE_TERMS) {
+      if (rest.startsWith(term)) {
+        rest = rest.slice(term.length);
+        break;
+      }
+    }
+    namePart = rest;
+  }
+
+  const cleaned = normalizePolicyText(namePart)
+    .replace(/[^a-z\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const tokens = cleaned.split(" ").filter((token) => token.length > 1);
+  if (tokens.length < 2) return null;
+  return tokens.join(" ");
+}
+
+type InternalTransferPairInput = {
+  id: string;
+  direction: DomainTransactionDirection | string;
+  amount: Prisma.Decimal;
+  occurredAt: Date;
+  description?: string | null;
+  normalizedDescription?: string | null;
+  merchantName?: string | null;
+};
+
+// Detecta pares de transferência entre contas próprias: uma saída e uma entrada
+// de MESMO valor e MESMO contraparte, ocorridas dentro de uma janela curta.
+// Ambas as pernas são devolvidas para serem excluídas de receita/despesa —
+// isso resolve as auto-transferências ("Pix enviado Thierry" ↔ "Transferência
+// Recebida|THIERRY") que hoje inflam a receita por não terem categoria de
+// "mesma titularidade". É deliberadamente conservador: exige valor idêntico ao
+// centavo e nome de contraparte igual, então só casa lavagens reais.
+export function detectInternalTransferPairIds(
+  transactions: InternalTransferPairInput[],
+  options?: { windowMs?: number },
+): Set<string> {
+  const windowMs = options?.windowMs ?? 3 * DAY_MS;
+  const paired = new Set<string>();
+
+  type Leg = { id: string; time: number; used: boolean };
+  const inflows = new Map<string, Leg[]>();
+  const outflows = new Map<string, Leg[]>();
+
+  for (const tx of transactions) {
+    if (
+      tx.direction !== DomainTransactionDirection.INFLOW &&
+      tx.direction !== DomainTransactionDirection.OUTFLOW
+    ) {
+      continue;
+    }
+    const name =
+      extractTransferCounterparty(tx.description ?? tx.normalizedDescription) ??
+      extractTransferCounterparty(tx.merchantName);
+    if (!name) continue;
+    const cents = decimal(tx.amount).abs().toFixed(2);
+    if (cents === "0.00") continue;
+    const key = `${name}|${cents}`;
+    const leg: Leg = { id: tx.id, time: tx.occurredAt.getTime(), used: false };
+    const bucket =
+      tx.direction === DomainTransactionDirection.INFLOW ? inflows : outflows;
+    const list = bucket.get(key) ?? [];
+    list.push(leg);
+    bucket.set(key, list);
+  }
+
+  for (const [key, outs] of outflows.entries()) {
+    const ins = inflows.get(key);
+    if (!ins) continue;
+    for (const out of outs) {
+      if (out.used) continue;
+      let best: Leg | null = null;
+      let bestDelta = Infinity;
+      for (const inLeg of ins) {
+        if (inLeg.used) continue;
+        const delta = Math.abs(inLeg.time - out.time);
+        if (delta <= windowMs && delta < bestDelta) {
+          best = inLeg;
+          bestDelta = delta;
+        }
+      }
+      if (best) {
+        out.used = true;
+        best.used = true;
+        paired.add(out.id);
+        paired.add(best.id);
+      }
+    }
+  }
+
+  return paired;
+}
+
 export type CashFlowClassification =
   | "income"
   | "expense"
@@ -285,10 +444,11 @@ export function classifyCashFlowTransaction(
 
   if (direction === DomainTransactionDirection.INFLOW) {
     const category = normalizePolicyText(categoryName);
+    const desc = normalizePolicyText(description);
     // Pagamento de fatura nunca é renda — nem quando um padrão de salário
     // genérico ("Pagamento recebido") casa a descrição. Este check vem antes
     // da precedência de salário de propósito.
-    if (NON_INCOME_CATEGORY_TERMS.some((term) => category.includes(term))) {
+    if (NON_INCOME_CATEGORY_TERMS.some((term) => category.includes(term) || desc.includes(term))) {
       return "excluded";
     }
     // Entradas marcadas como salário têm precedência sobre a exclusão de
@@ -308,6 +468,12 @@ export function classifyCashFlowTransaction(
   }
 
   if (direction === DomainTransactionDirection.OUTFLOW) {
+    // Pagamento de fatura (ex.: "Pagamento de fatura" saindo da conta para o
+    // cartão) nunca é despesa — as compras do cartão já contam individualmente.
+    const desc = normalizePolicyText(description);
+    if (CARD_PAYMENT_OUTFLOW_TERMS.some((term) => desc.includes(term))) {
+      return "excluded";
+    }
     return isInternalTransfer(categoryName, categoryKind)
       ? "excluded"
       : "expense";
@@ -340,6 +506,10 @@ export function startOfLocalDay(date: Date) {
   return copy;
 }
 
+// Faturas com saldo absoluto abaixo deste limiar são resíduo de reconciliação
+// da Pluggy (ex.: 0.0039, -0.0029) e nunca devem virar OVERDUE/OPEN.
+export const BILL_NOISE_THRESHOLD = 0.01;
+
 export function normalizeBillStatus(
   status: string | null | undefined,
   dueDate: Date | null | undefined,
@@ -350,6 +520,8 @@ export function normalizeBillStatus(
   const total = decimal(totalAmount);
 
   if (normalized === "PAID" || normalized === "SETTLED") return "PAID";
+  // Resíduo microscópico (positivo ou negativo) conta como fatura fechada.
+  if (total.abs().lessThan(BILL_NOISE_THRESHOLD)) return "CLOSED";
   if (total.lessThanOrEqualTo(0)) return "CLOSED";
   if (!dueDate) return normalized === "CLOSED" ? "CLOSED" : "OPEN";
 

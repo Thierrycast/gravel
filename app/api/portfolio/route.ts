@@ -34,7 +34,10 @@ export async function GET() {
     )
   }
 
-  const cryptoTotalBrl = Number(payload.summary.crypto.toString()) * usdBrl
+  // payload.summary.crypto já vem em BRL (getOverviewMetrics converte na
+  // fonte); as alocações individuais abaixo continuam em USDT e são
+  // convertidas uma a uma.
+  const cryptoTotalBrl = Number(payload.summary.crypto.toString())
   const fiatLiquidNum = Number(payload.summary.liquidAssets.toString())
   const fiatInvestmentsNum = Number(payload.summary.investments.toString())
   const fiatAssetsNum = fiatLiquidNum + fiatInvestmentsNum

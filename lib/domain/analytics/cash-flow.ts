@@ -1,10 +1,13 @@
-import { DomainTransactionDirection } from "@prisma/client";
+import { DomainTransactionDirection, Prisma } from "@prisma/client";
+import { isBrlCurrency } from "@/lib/domain/currency";
+import { getUsdBrlRate } from "@/lib/exchange-rate";
 import { prisma } from "@/lib/prisma";
 import { getUserSettings } from "../queries";
 import {
   buildMetricFilters,
   buildTransactionWhere,
   classifyCashFlowTransaction,
+  detectInternalTransferPairIds,
   formatBucket,
   ZERO,
 } from "./shared";
@@ -15,13 +18,14 @@ export async function getCashFlowMetrics(searchParams: URLSearchParams) {
     groupBy: "month",
   });
 
-  const [transactions, categories, settings] = await Promise.all([
+  const [transactions, categories, settings, usdBrlRate] = await Promise.all([
     prisma.domainTransaction.findMany({
       where: buildTransactionWhere(filters),
       orderBy: { occurredAt: "asc" },
     }),
     prisma.domainCategory.findMany(),
     getUserSettings(searchParams),
+    getUsdBrlRate(),
   ]);
 
   const categoryMap = new Map(
@@ -39,7 +43,10 @@ export async function getCashFlowMetrics(searchParams: URLSearchParams) {
     }
   >();
 
+  const internalTransferPairIds = detectInternalTransferPairIds(transactions);
+
   for (const transaction of transactions) {
+    if (internalTransferPairIds.has(transaction.id)) continue;
     const key = formatBucket(transaction.occurredAt, filters.groupBy);
     const current = buckets.get(key) ?? {
       inflow: ZERO,
@@ -62,11 +69,18 @@ export async function getCashFlowMetrics(searchParams: URLSearchParams) {
       },
     );
 
+    // Converte para BRL como o overview faz, para os buckets do fluxo de
+    // caixa baterem com os KPIs da visão geral.
+    let amount = transaction.amount.abs();
+    if (transaction.currencyCode && !isBrlCurrency(transaction.currencyCode)) {
+      amount = amount.mul(new Prisma.Decimal(usdBrlRate));
+    }
+
     if (classification === "investment") {
       current.investments =
         transaction.direction === DomainTransactionDirection.OUTFLOW
-          ? current.investments.plus(transaction.amount.abs())
-          : current.investments.minus(transaction.amount.abs());
+          ? current.investments.plus(amount)
+          : current.investments.minus(amount);
       current.transactions += 1;
       current.net = current.inflow
         .minus(current.outflow)
@@ -78,9 +92,9 @@ export async function getCashFlowMetrics(searchParams: URLSearchParams) {
     if (classification === "excluded") continue;
 
     if (classification === "income") {
-      current.inflow = current.inflow.plus(transaction.amount.abs());
+      current.inflow = current.inflow.plus(amount);
     } else if (classification === "expense") {
-      current.outflow = current.outflow.plus(transaction.amount.abs());
+      current.outflow = current.outflow.plus(amount);
     }
 
     current.transactions += 1;

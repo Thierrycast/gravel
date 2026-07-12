@@ -1,11 +1,13 @@
-import { DomainTransactionDirection } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import { isBrlCurrency } from "@/lib/domain/currency";
+import { getUsdBrlRate } from "@/lib/exchange-rate";
 import { prisma } from "@/lib/prisma";
 import {
   buildMetricFilters,
   buildTransactionWhere,
+  classifyCashFlowTransaction,
   decimal,
-  EXCLUDED_SPENDING_CATEGORIES,
-  INVESTMENT_TRANSFER_TERMS,
+  detectInternalTransferPairIds,
   normalizeBillStatus,
   percentOf,
   startOfLocalDay,
@@ -116,73 +118,61 @@ export async function getSpendingByCategoryMetrics(
     period: "mtd",
     limit: 20,
   });
-  const excludedCategories = await prisma.domainCategory.findMany({
-    where: {
-      OR: [
-        { kind: "TRANSFER" },
-        ...EXCLUDED_SPENDING_CATEGORIES.map((name) => ({
-          name: { contains: name },
-        })),
-      ],
-    },
-    select: { id: true },
-  });
-  const excludedIds = excludedCategories.map((category) => category.id);
 
-  // Exclude investment/transfer transactions by description, mirroring the
-  // classifyCashFlowTransaction logic used by the overview API so KPI totals
-  // and Sankey category sums share the same transaction set.
-  const investmentDescriptionFilter = INVESTMENT_TRANSFER_TERMS.flatMap(
-    (term) => [
-      { description: { contains: term } },
-      {
-        normalizedDescription: {
-          contains: term,
-        },
-      },
-    ],
-  );
+  const [allTxs, usdBrlRate] = await Promise.all([
+    prisma.domainTransaction.findMany({
+      where: buildTransactionWhere(filters),
+      include: {
+        domainCategory: { select: { name: true, kind: true } }
+      }
+    }),
+    getUsdBrlRate(),
+  ]);
 
-  const grouped = await prisma.domainTransaction.groupBy({
-    by: ["domainCategoryId"],
-    where: {
-      ...buildTransactionWhere(filters),
-      direction: DomainTransactionDirection.OUTFLOW,
-      domainCategoryId: { notIn: excludedIds },
-      NOT: { OR: investmentDescriptionFilter },
-    },
-    _sum: { amount: true },
-    _count: true,
-  });
+  const internalTransferPairIds = detectInternalTransferPairIds(allTxs);
 
-  const categoryIds = grouped
-    .map((group) => group.domainCategoryId)
-    .filter((id): id is string => Boolean(id));
+  const groups = new Map<string, {
+    categoryId: string | null;
+    name: string;
+    amount: import("@prisma/client").Prisma.Decimal;
+    count: number;
+    averageAmount: import("@prisma/client").Prisma.Decimal;
+  }>();
 
-  const categoryDetails = await prisma.domainCategory.findMany({
-    where: { id: { in: categoryIds } },
-  });
-  const categoryMap = new Map(
-    categoryDetails.map((category) => [category.id, category]),
-  );
+  for (const tx of allTxs) {
+    if (internalTransferPairIds.has(tx.id)) continue;
+    const classification = classifyCashFlowTransaction(
+      tx.direction,
+      tx.domainCategory?.name,
+      tx.domainCategory?.kind,
+      tx.description ?? tx.normalizedDescription,
+    );
 
-  const groups = grouped.map((group) => {
-    const category = group.domainCategoryId
-      ? categoryMap.get(group.domainCategoryId)
-      : null;
-    const amount = decimal(group._sum?.amount).abs();
+    if (classification === "expense") {
+      const key = tx.domainCategoryId ?? "unknown";
+      const current = groups.get(key) ?? {
+        categoryId: tx.domainCategoryId,
+        name: tx.domainCategory?.name ?? "Sem categoria",
+        amount: ZERO,
+        count: 0,
+        averageAmount: ZERO,
+      };
 
-    return {
-      categoryId: group.domainCategoryId,
-      name: category?.name ?? "Sem categoria",
-      amount,
-      count: Number(group._count) || 0,
-      averageAmount: group._count ? amount.div(Number(group._count)) : ZERO,
-    };
-  });
+      let amount = decimal(tx.amount).abs();
+      if (tx.currencyCode && !isBrlCurrency(tx.currencyCode)) {
+        amount = amount.mul(new Prisma.Decimal(usdBrlRate));
+      }
+      current.amount = current.amount.plus(amount);
+      current.count += 1;
+      current.averageAmount = current.amount.div(current.count);
+      groups.set(key, current);
+    }
+  }
 
-  const total = sumDecimals(groups.map((group) => group.amount));
-  const results = groups
+  const groupsArray = Array.from(groups.values());
+
+  const total = sumDecimals(groupsArray.map((group) => group.amount));
+  const results = groupsArray
     .map((group) => ({
       ...group,
       sharePercent: percentOf(group.amount, total),
@@ -210,41 +200,28 @@ export async function getSpendingByMerchantMetrics(
     limit: 12,
   });
 
-  // Apply the same category exclusions used by getSpendingByCategoryMetrics so
-  // the merchant totals are consistent with the category/KPI totals (no
-  // transfers or investment transactions inflating the numbers).
-  const excludedCategories = await prisma.domainCategory.findMany({
-    where: {
-      OR: [
-        { kind: "TRANSFER" },
-        ...EXCLUDED_SPENDING_CATEGORIES.map((name) => ({
-          name: { contains: name },
-        })),
-      ],
-    },
-    select: { id: true },
-  });
-  const excludedCategoryIds = excludedCategories.map((c) => c.id);
-
-  const investmentDescriptionFilter = INVESTMENT_TRANSFER_TERMS.flatMap(
-    (term) => [
-      { description: { contains: term } },
-      {
-        normalizedDescription: {
-          contains: term,
-        },
+  const [allTxs, usdBrlRate] = await Promise.all([
+    prisma.domainTransaction.findMany({
+      where: buildTransactionWhere(filters),
+      include: {
+        domainCategory: { select: { name: true, kind: true } }
       },
-    ],
-  );
+      orderBy: [{ occurredAt: "desc" }]
+    }),
+    getUsdBrlRate(),
+  ]);
 
-  const transactions = await prisma.domainTransaction.findMany({
-    where: {
-      ...buildTransactionWhere(filters),
-      direction: DomainTransactionDirection.OUTFLOW,
-      domainCategoryId: { notIn: excludedCategoryIds },
-      NOT: { OR: investmentDescriptionFilter },
-    },
-    orderBy: [{ occurredAt: "desc" }],
+  const internalTransferPairIds = detectInternalTransferPairIds(allTxs);
+
+  const transactions = allTxs.filter((tx) => {
+    if (internalTransferPairIds.has(tx.id)) return false;
+    const classification = classifyCashFlowTransaction(
+      tx.direction,
+      tx.domainCategory?.name,
+      tx.domainCategory?.kind,
+      tx.description ?? tx.normalizedDescription,
+    );
+    return classification === "expense";
   });
 
   const merchants = await prisma.domainMerchant.findMany();
@@ -279,7 +256,11 @@ export async function getSpendingByMerchantMetrics(
       averageAmount: ZERO,
     };
 
-    current.amount = current.amount.plus(transaction.amount.abs());
+    let amount = transaction.amount.abs();
+    if (transaction.currencyCode && !isBrlCurrency(transaction.currencyCode)) {
+      amount = amount.mul(new Prisma.Decimal(usdBrlRate));
+    }
+    current.amount = current.amount.plus(amount);
     current.count += 1;
     current.averageAmount = current.amount.div(current.count);
     groups.set(key, current);
@@ -311,29 +292,39 @@ export async function getSpendingByMerchantMetrics(
 export async function getSpendingTrendsMetrics(searchParams: URLSearchParams) {
   const filters = buildMetricFilters(searchParams, { period: "12m" });
 
-  const [transactions, categories] = await Promise.all([
+  const [allTxs, usdBrlRate] = await Promise.all([
     prisma.domainTransaction.findMany({
-      where: {
-        ...buildTransactionWhere(filters),
-        direction: DomainTransactionDirection.OUTFLOW,
-        ignored: false,
-      },
-      select: { amount: true, occurredAt: true, domainCategoryId: true },
+      where: buildTransactionWhere(filters),
+      include: {
+        domainCategory: { select: { name: true, kind: true } }
+      }
     }),
-    prisma.domainCategory.findMany({ select: { id: true, name: true } }),
+    getUsdBrlRate(),
   ]);
-
-  const catMap = new Map(categories.map((c) => [c.id, c.name]));
+  const internalTransferPairIds = detectInternalTransferPairIds(allTxs);
 
   const buckets = new Map<string, Map<string, number>>();
 
-  for (const tx of transactions) {
-    const catName = (tx.domainCategoryId ? catMap.get(tx.domainCategoryId) : null) ?? "Sem categoria";
-    if (EXCLUDED_SPENDING_CATEGORIES.some((ex) => catName.toLowerCase().includes(ex))) continue;
-    const monthKey = `${tx.occurredAt.getUTCFullYear()}-${String(tx.occurredAt.getUTCMonth() + 1).padStart(2, "0")}`;
-    const monthly = buckets.get(catName) ?? new Map<string, number>();
-    monthly.set(monthKey, (monthly.get(monthKey) ?? 0) + Math.abs(Number(tx.amount)));
-    buckets.set(catName, monthly);
+  for (const tx of allTxs) {
+    if (internalTransferPairIds.has(tx.id)) continue;
+    const classification = classifyCashFlowTransaction(
+      tx.direction,
+      tx.domainCategory?.name,
+      tx.domainCategory?.kind,
+      tx.description ?? tx.normalizedDescription,
+    );
+
+    if (classification === "expense") {
+      const catName = tx.domainCategory?.name ?? "Sem categoria";
+      const monthKey = `${tx.occurredAt.getUTCFullYear()}-${String(tx.occurredAt.getUTCMonth() + 1).padStart(2, "0")}`;
+      const monthly = buckets.get(catName) ?? new Map<string, number>();
+      let amount = Math.abs(Number(tx.amount));
+      if (tx.currencyCode && !isBrlCurrency(tx.currencyCode)) {
+        amount *= usdBrlRate;
+      }
+      monthly.set(monthKey, (monthly.get(monthKey) ?? 0) + amount);
+      buckets.set(catName, monthly);
+    }
   }
 
   const rangeFrom = filters.from ?? new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
