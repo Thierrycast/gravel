@@ -144,6 +144,11 @@ pnpm db:push        # cria o SQLite local
 pnpm dev            # http://localhost:3000
 ```
 
+> **Alternativa ao `.env`:** as credenciais também podem ser salvas
+> criptografadas no banco pela UI (`/settings` → Segurança), protegidas por
+> senha mestre. Para isso, defina `APP_SECRETS_ENCRYPTION_KEY` no ambiente
+> (`openssl rand -hex 32`). Sem valor no banco, vale o `.env`.
+
 ## 5. Conectar e sincronizar no Gravel
 
 1. Abra **`/connect`** e vincule o MeuPluggy (Passo 3, se ainda não fez).
