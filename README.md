@@ -65,6 +65,11 @@ BINANCE_API_SECRET=
 INTERNAL_API_KEY=
 ```
 
+> Não sabe de onde vêm as credenciais da Pluggy? O guia
+> [Configuração: Pluggy + MeuPluggy](docs/meu-pluggy-setup.md) explica o fluxo
+> completo: conta no MeuPluggy, conta de dev no Dashboard, `client_id`/
+> `client_secret` e autorização dos bancos.
+
 ---
 
 ## 📜 Comandos Disponíveis
@@ -88,8 +93,9 @@ INTERNAL_API_KEY=
 - 🌟 [Funcionalidades](docs/features.md) — Visão detalhada de todas as telas e recursos.
 - 🏗️ [Arquitetura](docs/architecture.md) — Camadas, esquema de dados e fluxo da aplicação.
 - 📖 [API Reference](docs/api-reference.md) — Endpoints e exemplos de requisição.
-- 🔌 [Integração Pluggy](docs/pluggy.md) — Detalhes do Open Finance.
-- 🧪 [Pluggy Trial e Sandbox](docs/pluggy-trial-guide.md) — Como testar sem plano pago.
+- 🔑 [Configuração: Pluggy + MeuPluggy](docs/meu-pluggy-setup.md) — Como criar as contas, obter as credenciais e autorizar o acesso aos bancos.
+- 🔌 [Integração Pluggy](docs/pluggy.md) — Arquitetura da integração e pipeline de dados do Open Finance.
+- 🧪 [Pluggy Trial e Sandbox](docs/pluggy-trial-guide.md) — Resumo rápido para testar sem plano pago.
 - 🪙 [Integração Binance](docs/binance.md) — Detalhes da sincronização de criptomoedas.
 - 🖥️ [CLI](docs/cli.md) — Guia da linha de comando do Gravel.
 - 🤖 [MCP Server](docs/mcp.md) — Guia do servidor Model Context Protocol do Gravel.
