@@ -160,6 +160,18 @@ Se precisar trocar a porta externa, altere apenas o lado esquerdo do mapeamento 
 
 > **Dica de Permissões:** Caso opte por um bind mount local (`-v ./data:/app/data`), certifique-se de que o diretório pertence ao usuário de ID `1001` (aplicando um `chmod`), uma vez que o container roda usando um usuário não-root por segurança.
 
+### Backup do banco
+
+`scripts/backup-db.sh` faz backup consistente do SQLite de produção usando o
+Online Backup API (`.backup`) num container descartável — sem parar o app e sem
+root. Verifica integridade, comprime e mantém os 14 mais recentes (configurável
+via `GRAVEL_DB_VOLUME`, `GRAVEL_BACKUP_DIR`, `GRAVEL_BACKUP_KEEP`). Agende no
+cron:
+
+```cron
+15 3 * * * /caminho/do/repo/scripts/backup-db.sh >> ~/backups/gravel/backup.log 2>&1
+```
+
 ---
 
 ## 📈 Status de Validação

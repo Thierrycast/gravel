@@ -120,6 +120,26 @@ força a re-detecção de recorrências.
 - `POST /api/sync/trigger` — aceita `{ refresh: true|false }` (default true) para
   disparar PATCH do item antes de reler.
 
+## Webhook Pluggy
+
+`POST /api/webhooks/pluggy`
+
+Recebe eventos da Pluggy e reprojeta o item afetado. Body mínimo:
+`{ "event": "item/updated", "id": "evt-...", "itemId": "..." }`.
+Se `PLUGGY_WEBHOOK_SECRET` estiver definido, exige o header
+`X-Webhook-Secret` (401 sem ele). Idempotente por `id` de evento
+(claim atômica em `DomainSyncState` — retries não reprocessam).
+
+## Segredos gerenciados
+
+`PATCH /api/settings/secrets`
+
+Salva credenciais (Pluggy, Binance, Logo.dev) criptografadas no banco
+(AES-256-GCM). Body: `{ "masterPassword": "...", "secrets": { "PLUGGY_CLIENT_ID": "..." } }`.
+Requer senha mestre definida em `/settings` (409 sem ela; 401 se incorreta)
+e `APP_SECRETS_ENCRYPTION_KEY` no ambiente. Valor `null` remove o segredo;
+sem valor no banco, o fallback é a variável de ambiente.
+
 ## Inbox
 
 `GET /api/inbox`

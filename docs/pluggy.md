@@ -58,6 +58,19 @@ Cada conexão autorizada vira um **Item** na Pluggy. A sincronização
   (MFA ou novo consentimento).
 - `LOGIN_ERROR`/`ERROR`: reconexão recomendada.
 
+## Webhook (opcional)
+
+`POST /api/webhooks/pluggy` recebe eventos da Pluggy (ex.: `item/updated`) e
+reprojeta o item correspondente sem esperar o próximo sync manual.
+
+- Configure a URL do webhook no Dashboard da Pluggy apontando para
+  `https://SEU_HOST/api/webhooks/pluggy`.
+- Defina `PLUGGY_WEBHOOK_SECRET` no `.env`; o endpoint exige o header
+  `X-Webhook-Secret` com o mesmo valor (comparação em tempo constante). Sem a
+  variável, o endpoint aceita qualquer chamada — não deixe assim em produção.
+- Idempotente por evento: o `id` do evento vira uma claim atômica em
+  `DomainSyncState`, então retries da Pluggy não reprocessam o mesmo evento.
+
 ## Observações sobre os dados
 
 - A categorização automática da Pluggy erra com frequência; o Gravel aplica a
