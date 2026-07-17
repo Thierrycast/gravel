@@ -8,6 +8,8 @@ services:
     container_name: gravel
     init: true
     restart: unless-stopped
+    # Guardrail: bounds page cache and protects the host if something leaks.
+    mem_limit: 320m
     ports:
       - "8421:3000"
       - "8422:3001"
@@ -19,6 +21,8 @@ services:
       - PORT=3000
       - HOSTNAME=0.0.0.0
       - TZ=America/Sao_Paulo
+      # Cap V8 heap so idle RSS doesn't ratchet up to the largest historical peak.
+      - NODE_OPTIONS=--max-old-space-size=192
       - PLUGGY_CLIENT_ID=30c57a86-9336-46fa-a3fa-6149454c772d
       - PLUGGY_CLIENT_SECRET=***PLUGGY_CLIENT_SECRET_REMOVIDO***
       - PLUGGY_API_BASE=https://api.pluggy.ai

@@ -21,7 +21,12 @@ const buildCpus = Number(process.env.NEXT_BUILD_CPUS ?? "")
 const nextConfig: NextConfig = {
   output: "standalone",
   devIndicators: false,
-  experimental: Number.isFinite(buildCpus) && buildCpus > 0 ? { cpus: buildCpus } : undefined,
+  experimental: {
+    // Load route modules on demand instead of preloading every entry at boot —
+    // cuts idle RSS significantly; first hit per route pays a one-time cost.
+    preloadEntriesOnStart: false,
+    ...(Number.isFinite(buildCpus) && buildCpus > 0 ? { cpus: buildCpus } : {}),
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "img.logo.dev" },
