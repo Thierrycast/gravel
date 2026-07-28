@@ -158,6 +158,17 @@ docker run -p 8421:3000 \
 
 Se precisar trocar a porta externa, altere apenas o lado esquerdo do mapeamento (`HOST:CONTAINER`). Evite `3000` e `3001` no host para não colidir com ambientes de desenvolvimento locais.
 
+> **Reserva de porta no host do CasaOS (<servidor>):** `8422` é do Gravel (MCP server,
+> container `3001`) — não reatribuir a outro app. Em 2026-07, o Vigor foi reinstalado
+> apontando também para `8422`, e toda vez que o CasaOS tentava religar o Gravel o bind
+> falhava ("port is already allocated"); depois de falhas repetidas o CasaOS perdeu o
+> registro do app compose (retornava 404) e um cleanup posterior (`docker image prune`)
+> removeu a imagem `gravel:0.1.0` órfã — daí o app "sumir" do painel. Fix: Vigor movido
+> para `8424` (`/var/lib/casaos/apps/vigor/docker-compose.yml`), Gravel reconstruído
+> (`docker build -t gravel:0.1.0 .`) e reinstalado via `casaos-cli app-management install
+> -f docker-compose.yml`. Dados (`gravel_gravel_data`) nunca foram afetados.
+> *Documentado por: Claude Code (claude-sonnet-5) — 2026-07-17.*
+
 > **Dica de Permissões:** Caso opte por um bind mount local (`-v ./data:/app/data`), certifique-se de que o diretório pertence ao usuário de ID `1001` (aplicando um `chmod`), uma vez que o container roda usando um usuário não-root por segurança.
 
 ### Backup do banco
