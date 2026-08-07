@@ -670,9 +670,15 @@ export async function projectPluggyTransactions() {
 
       const existingTxId = existingEntry?.id;
       let occurredAt = record.date ?? record.createdAt;
-      const installment = detectExplicitInstallment(
-        record.description ?? record.descriptionRaw,
-      );
+      // O `creditCardMetadata` da Pluggy é a fonte preferida do parcelamento:
+      // vem da própria instituição. A heurística sobre a descrição ("3/12")
+      // continua como fallback para conectores que não mandam o metadado.
+      const installment =
+        record.installmentNumber !== null && record.totalInstallments !== null
+          ? { current: record.installmentNumber, total: record.totalInstallments }
+          : detectExplicitInstallment(
+              record.description ?? record.descriptionRaw,
+            );
 
       if (overrides.occurredAt) {
         occurredAt = new Date(overrides.occurredAt);

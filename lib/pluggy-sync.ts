@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto"
 
-import { Prisma } from "@prisma/client"
+import { Prisma, SourceProvider } from "@prisma/client"
 
+import { updateCheckpoint } from "@/lib/admin/ops"
 import {
   fetchAccountBalance,
   fetchAccounts,
@@ -10,9 +11,11 @@ import {
   fetchInvestments,
   fetchItem,
   fetchLoans,
-  fetchMerchants,
-  fetchTransactions,
+  fetchMerchantsByCnpjList,
+  fetchTransactionsByCursor,
+  maxMerchantCnpjsPerRequest,
 } from "@/lib/integrations/pluggy"
+import { resolveTransactionWindow } from "@/lib/ingestion/transaction-window"
 import { resolveStoredPluggyItemIds, updateStoredPluggyItem } from "@/lib/pluggy-items"
 import { prisma } from "@/lib/prisma"
 
@@ -34,6 +37,12 @@ type SyncOptions = {
   // Quando true, dispara PATCH /items/{id} e aguarda a sincronização na
   // instituição antes de reler os dados (refresh de verdade, não só GET).
   refresh?: boolean
+  // Quando true, ignora o checkpoint de cada conta e relê 12 meses de
+  // transações (backfill/reconciliação). Por padrão o sync é incremental.
+  full?: boolean
+  // Janela em dias usada quando a conta ainda não tem checkpoint. Padrão: o
+  // `syncLookbackDays` do UserSetting.
+  lookbackDays?: number
 }
 
 type SyncCounters = Record<SyncResource, number>
@@ -125,6 +134,17 @@ function toDecimal(value: unknown) {
 
 function toStringOrNull(value: unknown) {
   return typeof value === "string" && value.length > 0 ? value : null
+}
+
+function toInt(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value)
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value, 10)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
 }
 
 function serializePayload(payload: unknown) {
@@ -221,27 +241,22 @@ async function syncCategories(pageSize: number) {
       payload: currentCategory,
     })
 
-    inserted += await createIfMissing(
-      async () =>
-        Boolean(
-          await prisma.pluggyCategoryRecord.findUnique({
-            where: { externalId },
-            select: { id: true },
-          })
-        ),
-      () =>
-        prisma.pluggyCategoryRecord.create({
-          data: {
-            externalId,
-            description: toStringOrNull(currentCategory.description),
-            descriptionTranslated: toStringOrNull(
-              currentCategory.descriptionTranslated
-            ),
-            parentId: toStringOrNull(currentCategory.parentId),
-            parentDescription: toStringOrNull(currentCategory.parentDescription),
-          },
-        })
-    )
+    // Upsert (não create-if-missing): a Pluggy renomeia e reorganiza categorias,
+    // e um registro criado uma vez só nunca acompanharia isso.
+    const categoryData = {
+      description: toStringOrNull(currentCategory.description),
+      descriptionTranslated: toStringOrNull(
+        currentCategory.descriptionTranslated
+      ),
+      parentId: toStringOrNull(currentCategory.parentId),
+      parentDescription: toStringOrNull(currentCategory.parentDescription),
+    }
+    await prisma.pluggyCategoryRecord.upsert({
+      where: { externalId },
+      update: categoryData,
+      create: { externalId, ...categoryData },
+    })
+    inserted += 1
   }
 
   return {
@@ -488,46 +503,45 @@ async function syncTransactionEntity(
     ? (accountCurrencyCode ?? null)
     : toStringOrNull(transaction.currencyCode)
 
+  // `creditCardMetadata` traz o parcelamento informado pela instituição —
+  // mais confiável que inferir "3/12" da descrição.
+  const cardMeta = transaction.creditCardMetadata as Record<
+    string,
+    unknown
+  > | null
+
+  const transactionData = {
+    itemExternalId: itemId,
+    accountExternalId: accountId,
+    description: toStringOrNull(transaction.description),
+    descriptionRaw: toStringOrNull(transaction.descriptionRaw),
+    currencyCode: currencyCode,
+    amount: amount,
+    date: toDate(transaction.date) ?? undefined,
+    type: toStringOrNull(transaction.type),
+    status: toStringOrNull(transaction.status),
+    categoryId: toStringOrNull(transaction.categoryId),
+    category: toStringOrNull(transaction.category),
+    providerCode: toStringOrNull(transaction.providerCode),
+    providerId: toStringOrNull(transaction.providerId),
+    merchantCnpj,
+    merchantName,
+    installmentNumber: toInt(cardMeta?.installmentNumber),
+    totalInstallments: toInt(cardMeta?.totalInstallments),
+    totalAmount: toDecimal(cardMeta?.totalAmount) ?? undefined,
+    payeeMFN: toStringOrNull(cardMeta?.payeeMFN),
+    cardNumber: toStringOrNull(cardMeta?.cardNumber),
+    billId: toStringOrNull(cardMeta?.billId),
+    providerUpdatedAt: toDate(transaction.updatedAt) ?? undefined,
+  }
 
   await prisma.pluggyTransactionRecord.upsert({
     where: { externalId },
-    update: {
-      itemExternalId: itemId,
-      accountExternalId: accountId,
-      description: toStringOrNull(transaction.description),
-      descriptionRaw: toStringOrNull(transaction.descriptionRaw),
-      currencyCode: currencyCode,
-      amount: amount,
-      date: toDate(transaction.date) ?? undefined,
-      type: toStringOrNull(transaction.type),
-      status: toStringOrNull(transaction.status),
-      categoryId: toStringOrNull(transaction.categoryId),
-      category: toStringOrNull(transaction.category),
-      providerCode: toStringOrNull(transaction.providerCode),
-      providerId: toStringOrNull(transaction.providerId),
-      merchantCnpj,
-      merchantName,
-      providerUpdatedAt: toDate(transaction.updatedAt) ?? undefined,
-    },
+    update: transactionData,
     create: {
       externalId,
-      itemExternalId: itemId,
-      accountExternalId: accountId,
-      description: toStringOrNull(transaction.description),
-      descriptionRaw: toStringOrNull(transaction.descriptionRaw),
-      currencyCode: currencyCode,
-      amount: amount,
-      date: toDate(transaction.date) ?? undefined,
-      type: toStringOrNull(transaction.type),
-      status: toStringOrNull(transaction.status),
-      categoryId: toStringOrNull(transaction.categoryId),
-      category: toStringOrNull(transaction.category),
-      providerCode: toStringOrNull(transaction.providerCode),
-      providerId: toStringOrNull(transaction.providerId),
-      merchantCnpj,
-      merchantName,
+      ...transactionData,
       providerCreatedAt: toDate(transaction.createdAt) ?? undefined,
-      providerUpdatedAt: toDate(transaction.updatedAt) ?? undefined,
     },
   })
   inserted += 1
@@ -535,6 +549,151 @@ async function syncTransactionEntity(
   return {
     inserted,
     merchantCnpj,
+  }
+}
+
+// ── Transações: ingestão e sincronização incremental por cursor ─────────────
+
+export type TransactionIngestResult = {
+  /** Escritas efetivas (snapshots + upserts). */
+  inserted: number
+  /** Transações vistas no payload. */
+  processed: number
+  merchantCnpjs: string[]
+}
+
+/**
+ * Persiste uma lista de payloads de transação já obtida da Pluggy. Usado tanto
+ * pelo sync completo quanto pelo webhook (`transactions/created` e
+ * `transactions/updated`), que recebem lotes prontos e não precisam paginar.
+ */
+export async function ingestTransactionPayloads(input: {
+  itemId: string
+  accountId: string
+  accountCurrencyCode?: string | null
+  transactions: Record<string, unknown>[]
+}): Promise<TransactionIngestResult> {
+  const merchantCnpjs = new Set<string>()
+  let inserted = 0
+
+  for (const transaction of input.transactions) {
+    const result = await syncTransactionEntity(
+      input.itemId,
+      input.accountId,
+      transaction,
+      input.accountCurrencyCode,
+    )
+    inserted += result.inserted
+    if (result.merchantCnpj) {
+      merchantCnpjs.add(result.merchantCnpj)
+    }
+  }
+
+  return {
+    inserted,
+    processed: input.transactions.length,
+    merchantCnpjs: [...merchantCnpjs],
+  }
+}
+
+const TRANSACTIONS_CHECKPOINT_RESOURCE = "transactions"
+
+export async function getAccountTransactionsWatermark(accountId: string) {
+  const checkpoint = await prisma.opsSyncCheckpoint.findUnique({
+    where: {
+      provider_resource_cursorKey: {
+        provider: SourceProvider.PLUGGY,
+        resource: TRANSACTIONS_CHECKPOINT_RESOURCE,
+        cursorKey: accountId,
+      },
+    },
+  })
+  if (!checkpoint?.value) return null
+  const parsed = new Date(checkpoint.value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+async function setAccountTransactionsWatermark(
+  accountId: string,
+  at: Date,
+  meta?: unknown,
+) {
+  await updateCheckpoint({
+    provider: SourceProvider.PLUGGY,
+    resource: TRANSACTIONS_CHECKPOINT_RESOURCE,
+    cursorKey: accountId,
+    value: at.toISOString(),
+    meta,
+  })
+}
+
+/**
+ * Lê as transações de uma conta pelo `GET /v2/transactions` (cursor, 500 por
+ * página) e persiste. Três modos:
+ *
+ * - **incremental** (padrão, quando há checkpoint): `createdAtFrom` a partir do
+ *   watermark menos a sobreposição — só o que a Pluggy criou desde a última vez;
+ * - **janela** (sem checkpoint, ou `lookbackDays`): `dateFrom` nos últimos N dias;
+ * - **backfill** (`full: true`): `dateFrom` nos últimos 12 meses.
+ *
+ * `createdAtFrom` e `dateFrom` são mutuamente exclusivos na API — nunca são
+ * enviados juntos.
+ */
+export async function syncAccountTransactions(input: {
+  itemId: string
+  accountId: string
+  accountCurrencyCode?: string | null
+  full?: boolean
+  lookbackDays?: number
+  /** Sobrescreve o cálculo do checkpoint (usado pelo webhook). */
+  createdAtFrom?: string | null
+}): Promise<TransactionIngestResult & { mode: string; watermark: Date }> {
+  const startedAt = new Date()
+  // A escolha entre `createdAtFrom` e `dateFrom` (mutuamente exclusivos na API)
+  // é pura e vive em `transaction-window.ts`.
+  const { mode, ...window } = resolveTransactionWindow({
+    createdAtFrom: input.createdAtFrom,
+    full: input.full,
+    watermark: input.createdAtFrom
+      ? null
+      : await getAccountTransactionsWatermark(input.accountId),
+    lookbackDays: input.lookbackDays,
+  })
+  const query = { accountId: input.accountId, ...window }
+
+  const merchantCnpjs = new Set<string>()
+  let inserted = 0
+  let processed = 0
+  let after: string | null = null
+
+  do {
+    const page = await fetchTransactionsByCursor({ ...query, after })
+    const result = await ingestTransactionPayloads({
+      itemId: input.itemId,
+      accountId: input.accountId,
+      accountCurrencyCode: input.accountCurrencyCode,
+      transactions: page.results,
+    })
+    inserted += result.inserted
+    processed += result.processed
+    for (const cnpj of result.merchantCnpjs) merchantCnpjs.add(cnpj)
+    after = page.next
+  } while (after)
+
+  // O watermark é o instante em que a leitura começou: qualquer transação
+  // criada durante o sync entra na próxima janela (com a sobreposição).
+  await setAccountTransactionsWatermark(input.accountId, startedAt, {
+    mode,
+    processed,
+    inserted,
+  })
+
+  return {
+    inserted,
+    processed,
+    merchantCnpjs: [...merchantCnpjs],
+    mode,
+    watermark: startedAt,
   }
 }
 
@@ -552,32 +711,30 @@ async function syncInvestmentEntity(itemId: string, investment: Record<string, u
     sourceUpdatedAt: toDate(investment.updatedAt),
   })
 
-  inserted += await createIfMissing(
-    async () =>
-      Boolean(
-        await prisma.pluggyInvestmentRecord.findUnique({
-          where: { externalId },
-          select: { id: true },
-        })
-      ),
-    () =>
-      prisma.pluggyInvestmentRecord.create({
-        data: {
-          externalId,
-          itemExternalId: itemId,
-          name: toStringOrNull(investment.name),
-          type: toStringOrNull(investment.type),
-          subtype: toStringOrNull(investment.subtype),
-          status: toStringOrNull(investment.status),
-          currencyCode: toStringOrNull(investment.currencyCode),
-          balance: toDecimal(investment.balance) ?? undefined,
-          amountOriginal: toDecimal(investment.amountOriginal) ?? undefined,
-          amountProfit: toDecimal(investment.amountProfit) ?? undefined,
-          providerCreatedAt: toDate(investment.createdAt) ?? undefined,
-          providerUpdatedAt: toDate(investment.updatedAt) ?? undefined,
-        },
-      })
-  )
+  // Upsert: o saldo/rendimento de um investimento muda todo dia. Com
+  // create-if-missing o valor congelava no primeiro sync.
+  const investmentData = {
+    itemExternalId: itemId,
+    name: toStringOrNull(investment.name),
+    type: toStringOrNull(investment.type),
+    subtype: toStringOrNull(investment.subtype),
+    status: toStringOrNull(investment.status),
+    currencyCode: toStringOrNull(investment.currencyCode),
+    balance: toDecimal(investment.balance) ?? undefined,
+    amountOriginal: toDecimal(investment.amountOriginal) ?? undefined,
+    amountProfit: toDecimal(investment.amountProfit) ?? undefined,
+    providerUpdatedAt: toDate(investment.updatedAt) ?? undefined,
+  }
+  await prisma.pluggyInvestmentRecord.upsert({
+    where: { externalId },
+    update: investmentData,
+    create: {
+      externalId,
+      ...investmentData,
+      providerCreatedAt: toDate(investment.createdAt) ?? undefined,
+    },
+  })
+  inserted += 1
 
   return inserted
 }
@@ -596,86 +753,102 @@ async function syncLoanEntity(itemId: string, loan: Record<string, unknown>) {
     sourceUpdatedAt: toDate(loan.updatedAt),
   })
 
-  inserted += await createIfMissing(
-    async () =>
-      Boolean(
-        await prisma.pluggyLoanRecord.findUnique({
-          where: { externalId },
-          select: { id: true },
-        })
-      ),
-    () =>
-      prisma.pluggyLoanRecord.create({
-        data: {
-          externalId,
-          itemExternalId: itemId,
-          contractNumber: toStringOrNull(loan.contractNumber),
-          productName: toStringOrNull(loan.productName),
-          contractAmount: toDecimal(loan.contractAmount) ?? undefined,
-          currencyCode: toStringOrNull(loan.currencyCode),
-          dueDate: toDate(loan.dueDate) ?? undefined,
-          installmentPeriodicity: toStringOrNull(loan.installmentPeriodicity),
-          status: toStringOrNull(loan.status),
-          providerCreatedAt: toDate(loan.createdAt) ?? undefined,
-          providerUpdatedAt: toDate(loan.updatedAt) ?? undefined,
-        },
-      })
-  )
+  // Upsert: saldo devedor e status do contrato mudam a cada parcela paga.
+  const loanData = {
+    itemExternalId: itemId,
+    contractNumber: toStringOrNull(loan.contractNumber),
+    productName: toStringOrNull(loan.productName),
+    contractAmount: toDecimal(loan.contractAmount) ?? undefined,
+    currencyCode: toStringOrNull(loan.currencyCode),
+    dueDate: toDate(loan.dueDate) ?? undefined,
+    installmentPeriodicity: toStringOrNull(loan.installmentPeriodicity),
+    status: toStringOrNull(loan.status),
+    providerUpdatedAt: toDate(loan.updatedAt) ?? undefined,
+  }
+  await prisma.pluggyLoanRecord.upsert({
+    where: { externalId },
+    update: loanData,
+    create: {
+      externalId,
+      ...loanData,
+      providerCreatedAt: toDate(loan.createdAt) ?? undefined,
+    },
+  })
+  inserted += 1
 
   return inserted
 }
 
-async function syncMerchantEntity(cnpj: string) {
-  const existing = await prisma.pluggyMerchantRecord.findUnique({
-    where: { cnpj },
-    select: { id: true },
+/**
+ * Resolve merchants a partir de uma lista de CNPJs. O `GET /merchants` aceita
+ * vários por chamada, então lotes de 100 substituem uma requisição por CNPJ.
+ * Só consulta os que ainda não estão no banco (o dado cadastral é estável).
+ */
+async function syncMerchantEntities(cnpjs: string[]) {
+  if (cnpjs.length === 0) return 0
+
+  const known = await prisma.pluggyMerchantRecord.findMany({
+    where: { cnpj: { in: cnpjs } },
+    select: { cnpj: true },
   })
-
-  if (existing) {
-    return 0
-  }
-
-  const response = await fetchMerchants({ cnpj })
-  const merchants = Array.isArray(response?.foundMerchants)
-    ? response.foundMerchants
-    : []
+  const knownSet = new Set(known.map((record) => record.cnpj))
+  const missing = cnpjs.filter((cnpj) => !knownSet.has(cnpj))
 
   let inserted = 0
 
-  for (const merchant of merchants) {
-    const merchantCnpj = toStringOrNull(merchant?.cnpj) ?? cnpj
+  for (let index = 0; index < missing.length; index += maxMerchantCnpjsPerRequest) {
+    const batch = missing.slice(index, index + maxMerchantCnpjsPerRequest)
+    const response = await fetchMerchantsByCnpjList(batch)
+    const merchants = Array.isArray(response?.foundMerchants)
+      ? response.foundMerchants
+      : []
 
-    inserted += await savePayloadSnapshot({
-      resourceType: "merchant",
-      externalId: merchantCnpj,
-      payload: merchant,
-      parentExternalId: merchantCnpj,
-    })
+    for (const merchant of merchants) {
+      const merchantCnpj = toStringOrNull(merchant?.cnpj)
+      if (!merchantCnpj) continue
 
-    inserted += await createIfMissing(
-      async () =>
-        Boolean(
-          await prisma.pluggyMerchantRecord.findUnique({
-            where: { cnpj: merchantCnpj },
-            select: { id: true },
-          })
-        ),
-      () =>
-        prisma.pluggyMerchantRecord.create({
-          data: {
-            cnpj: merchantCnpj,
-            externalId: toStringOrNull(merchant?.id),
-            name: toStringOrNull(merchant?.name),
-            businessName: toStringOrNull(merchant?.businessName),
-            category: toStringOrNull(merchant?.category),
-            cnae: toStringOrNull(merchant?.cnae),
-          },
-        })
-    )
+      inserted += await savePayloadSnapshot({
+        resourceType: "merchant",
+        externalId: merchantCnpj,
+        payload: merchant,
+        parentExternalId: merchantCnpj,
+      })
+
+      const merchantData = {
+        externalId: toStringOrNull(merchant?.id),
+        name: toStringOrNull(merchant?.name),
+        businessName: toStringOrNull(merchant?.businessName),
+        category: toStringOrNull(merchant?.category),
+        cnae: toStringOrNull(merchant?.cnae),
+      }
+      await prisma.pluggyMerchantRecord.upsert({
+        where: { cnpj: merchantCnpj },
+        update: merchantData,
+        create: { cnpj: merchantCnpj, ...merchantData },
+      })
+      inserted += 1
+    }
   }
 
   return inserted
 }
+
+/**
+ * MeuPluggy (conector 200) é um proxy: o `PATCH /items/{id}` responde
+ * "MeuPluggy item cant be updated". A informação chega de duas formas — pelo
+ * `connectorId` gravado ou pelo `syncError` de uma tentativa anterior.
+ */
+async function isRefreshUnsupported(itemId: string) {
+  const item = await prisma.pluggyItem.findUnique({
+    where: { pluggyItemId: itemId },
+    select: { connectorId: true, syncError: true },
+  })
+  if (!item) return false
+  if (item.connectorId === MEU_PLUGGY_CONNECTOR_ID) return true
+  return Boolean(item.syncError?.includes("cant be updated"))
+}
+
+const MEU_PLUGGY_CONNECTOR_ID = 200
 
 export async function syncPluggyData(options: SyncOptions = {}) {
   const resources = options.resources?.length
@@ -684,6 +857,14 @@ export async function syncPluggyData(options: SyncOptions = {}) {
   const pageSize = options.pageSize && options.pageSize > 0 ? options.pageSize : 200
   const counters = createEmptyCounters()
   const before = await getPluggyPersistenceSummary()
+
+  // `syncLookbackDays` do UserSetting só era exibido na tela — agora define de
+  // fato a janela de contas sem checkpoint.
+  const lookbackDays =
+    options.lookbackDays ??
+    (await prisma.userSetting.findFirst({ select: { syncLookbackDays: true } }))
+      ?.syncLookbackDays ??
+    30
 
   const run = await prisma.pluggySyncRun.create({
     data: {
@@ -705,7 +886,10 @@ export async function syncPluggyData(options: SyncOptions = {}) {
     for (const itemId of itemIds) {
       // Refresh de verdade: pede à instituição uma nova sincronização e
       // aguarda terminar antes de reler. Sem isso o sync só lia dados antigos.
-      if (options.refresh) {
+      // Items via MeuPluggy não aceitam PATCH ("MeuPluggy item cant be
+      // updated") — para eles o dado fresco vem do auto-sync da Pluggy, então
+      // tentar o refresh só gastaria requisição e sujaria `syncError`.
+      if (options.refresh && !(await isRefreshUnsupported(itemId))) {
         const { triggerAndPollItem } = await import("@/lib/pluggy-item-refresh")
         await triggerAndPollItem(itemId).catch((error) => {
           console.warn(
@@ -758,29 +942,20 @@ export async function syncPluggyData(options: SyncOptions = {}) {
         }
 
         if (resources.includes("transactions")) {
-          const transactions = iterateAllPages(
-            (page, currentPageSize) =>
-              fetchTransactions({
-                accountId,
-                page,
-                pageSize: currentPageSize,
-              }),
-            pageSize
-          )
+          const transactionResult = await syncAccountTransactions({
+            itemId,
+            accountId,
+            accountCurrencyCode: toStringOrNull(
+              (account as Record<string, unknown>).currencyCode,
+            ),
+            full: options.full,
+            lookbackDays,
+          })
 
-          for await (const transaction of transactions) {
-            const transactionResult = await syncTransactionEntity(
-              itemId,
-              accountId,
-              transaction as Record<string, unknown>,
-              toStringOrNull((account as Record<string, unknown>).currencyCode)
-            )
+          counters.transactions += transactionResult.inserted
 
-            counters.transactions += transactionResult.inserted
-
-            if (transactionResult.merchantCnpj) {
-              merchantCnpjs.add(transactionResult.merchantCnpj)
-            }
+          for (const cnpj of transactionResult.merchantCnpjs) {
+            merchantCnpjs.add(cnpj)
           }
         }
       }
@@ -817,9 +992,7 @@ export async function syncPluggyData(options: SyncOptions = {}) {
     }
 
     if (resources.includes("merchants")) {
-      for (const cnpj of merchantCnpjs) {
-        counters.merchants += await syncMerchantEntity(cnpj)
-      }
+      counters.merchants += await syncMerchantEntities([...merchantCnpjs])
     }
 
     const after = await getPluggyPersistenceSummary()

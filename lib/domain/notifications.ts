@@ -80,6 +80,30 @@ export async function triggerNotificationDelivery(
 }
 
 /**
+ * Avisa que uma conexão precisa de atenção (MFA, credencial expirada, erro na
+ * instituição, consentimento vencendo). Chamado pelo webhook e pelo scheduler —
+ * é o único caminho em que o app descobre o problema sem o usuário abrir a tela.
+ */
+export async function notifyPluggyItemProblem(
+  itemId: string,
+  message: string,
+  severity: "warning" | "critical" = "warning",
+) {
+  const item = await prisma.pluggyItem.findUnique({
+    where: { pluggyItemId: itemId },
+    select: { connectorName: true },
+  })
+  const institution = item?.connectorName ?? "Instituição"
+
+  await triggerNotificationDelivery(
+    `${institution}: conexão precisa de atenção`,
+    message,
+    severity,
+    { itemId },
+  )
+}
+
+/**
  * Verifica desvios de orcamento por categoria e riscos de fluxo de caixa futuro.
  * Retorna itens que serao integrados na Inbox Financeira.
  */

@@ -154,6 +154,7 @@ export async function PATCH(request: Request) {
     showFutureSalary,
     showFutureAccounts,
     syncIntervalHours,
+    syncIntervalMinutes,
     syncLookbackDays,
     dashboardConfigJson,
     salaryPatterns,
@@ -214,6 +215,10 @@ export async function PATCH(request: Request) {
       showFutureSalary: showFutureSalary !== undefined ? showFutureSalary : undefined,
       showFutureAccounts: showFutureAccounts !== undefined ? showFutureAccounts : undefined,
       syncIntervalHours: syncIntervalHours !== undefined ? syncIntervalHours : undefined,
+      syncIntervalMinutes:
+        syncIntervalMinutes !== undefined
+          ? Math.max(1, Number(syncIntervalMinutes))
+          : undefined,
       syncLookbackDays: syncLookbackDays !== undefined ? syncLookbackDays : undefined,
       dashboardConfigJson: updatedConfigJson !== undefined ? updatedConfigJson : undefined,
       vaultEnabled: vaultEnabled !== undefined ? vaultEnabled : undefined,

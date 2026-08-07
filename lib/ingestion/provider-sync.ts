@@ -30,6 +30,11 @@ export async function runPluggySync(input: {
   resources?: PluggySyncResource[]
   pageSize?: number
   refresh?: boolean
+  /** Ignora o checkpoint por conta e relê 12 meses (reconciliação/backfill). */
+  full?: boolean
+  lookbackDays?: number
+  /** Origem do run (`manual`, `scheduler`, `webhook`) — vai para o OpsSyncRun. */
+  trigger?: string
 }) {
   const lockKey = `pluggy:${input.resource}:${input.itemId ?? "all"}`
   const owner = await acquireSyncLock(lockKey)
@@ -37,6 +42,7 @@ export async function runPluggySync(input: {
     provider: SourceProvider.PLUGGY,
     scope: input.scope,
     resource: input.resource,
+    trigger: input.trigger,
     requestJson: JSON.stringify(input),
   })
 
@@ -46,6 +52,8 @@ export async function runPluggySync(input: {
       resources: input.resources,
       pageSize: input.pageSize,
       refresh: input.refresh,
+      full: input.full,
+      lookbackDays: input.lookbackDays,
     })
 
     await projectPluggyReadModels()

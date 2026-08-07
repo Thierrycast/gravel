@@ -190,3 +190,123 @@ syncCommand
 
     console.log(table.toString())
   })
+
+syncCommand
+  .command("webhook")
+  .description("Estado do webhook da Pluggy (o caminho pelo qual o dado chega sozinho)")
+  .option("--register", "Registra/reconcilia o webhook na Pluggy")
+  .option("--force", "Apaga e recria (necessário ao rotar o PLUGGY_WEBHOOK_SECRET)")
+  .action(async (options) => {
+    const { describePluggyWebhooks, reconcilePluggyWebhook } = await import(
+      "../../lib/ingestion/webhook-registry.js"
+    )
+
+    if (options.register || options.force) {
+      try {
+        const result = await reconcilePluggyWebhook({ force: Boolean(options.force) })
+        log.success(`Webhook ${result.reason}: ${result.url}`)
+        if (result.removed.length > 0) {
+          log.info(`Removidos ${result.removed.length} webhook(s) obsoleto(s).`)
+        }
+      } catch (error) {
+        log.error(error instanceof Error ? error.message : String(error))
+        process.exitCode = 1
+        return
+      }
+    }
+
+    const state = await describePluggyWebhooks()
+
+    log.heading("Webhook Pluggy")
+    const table = new Table({
+      head: [chalk.bold("Atributo"), chalk.bold("Valor")],
+      colWidths: [24, 62],
+      style: { head: [], border: [] },
+    })
+    table.push(["URL esperada", state.expectedUrl ?? chalk.red("PLUGGY_WEBHOOK_URL não definida")])
+    table.push(["Secret configurado", state.secretConfigured ? chalk.green("sim") : chalk.red("não")])
+    table.push([
+      "Registrados na Pluggy",
+      state.webhooks.length === 0 ? chalk.red("0 — nenhum evento chega") : String(state.webhooks.length),
+    ])
+    table.push([
+      "Casando com a URL",
+      state.matching > 0 ? chalk.green(String(state.matching)) : chalk.red("0"),
+    ])
+    table.push([
+      "Pronto para receber",
+      state.healthy ? chalk.green("sim") : chalk.red("NÃO"),
+    ])
+    console.log(table.toString())
+
+    for (const webhook of state.webhooks) {
+      const secretNote =
+        webhook.secretMatches === false ? chalk.red(" [secret divergente]") : ""
+      console.log(
+        `  ${webhook.disabledAt ? chalk.red("✗") : chalk.green("✓")} ${webhook.event} → ${webhook.url}${secretNote}`,
+      )
+    }
+
+    const { prisma } = await import("../../lib/prisma.js")
+    const recent = await prisma.pluggyWebhookEvent.findMany({
+      orderBy: { receivedAt: "desc" },
+      take: 10,
+    })
+
+    if (recent.length === 0) {
+      log.warn("Nenhum evento recebido ainda.")
+      return
+    }
+
+    log.heading("Últimos eventos recebidos")
+    const events = new Table({
+      head: [chalk.bold("Evento"), chalk.bold("Status"), chalk.bold("Tent."), chalk.bold("Recebido")],
+      colWidths: [30, 12, 8, 26],
+      style: { head: [], border: [] },
+    })
+    for (const event of recent) {
+      const color =
+        event.status === "SUCCESS" ? chalk.green : event.status === "RUNNING" ? chalk.cyan : chalk.red
+      events.push([
+        event.event,
+        color(event.status),
+        String(event.attempts),
+        event.receivedAt.toISOString(),
+      ])
+    }
+    console.log(events.toString())
+  })
+
+syncCommand
+  .command("tick")
+  .description("Roda um ciclo do agendador agora (watchdog + dreno de webhooks + sync se vencido)")
+  .option("--force-sync", "Ignora a cadência configurada e sincroniza já")
+  .option("--watchdog-only", "Só libera runs/locks órfãos")
+  .action(async (options) => {
+    const { runSchedulerTick, runWatchdog } = await import(
+      "../../lib/ingestion/scheduler.js"
+    )
+
+    if (options.watchdogOnly) {
+      const result = await runWatchdog()
+      log.success(
+        `Watchdog: ${result.staleRuns} run(s) e ${result.staleLocks} lock(s) liberados.`,
+      )
+      return
+    }
+
+    const result = await runSchedulerTick(
+      options.forceSync ? { force: ["incremental-sync"] } : undefined,
+    )
+
+    if (result.skipped) {
+      log.warn(`Ciclo ignorado: ${JSON.stringify(result.detail)}`)
+      return
+    }
+
+    log.success(`Tarefas executadas: ${result.ran.join(", ") || "nenhuma vencida"}`)
+    for (const error of result.errors) {
+      log.error(`${error.task}: ${error.message}`)
+    }
+    console.log(JSON.stringify(result.detail, null, 2))
+  })

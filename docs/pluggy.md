@@ -27,7 +27,9 @@ Cada conexão autorizada vira um **Item** na Pluggy. A sincronização
 
 1. Dispara `PATCH /items/{id}` para pedir dados frescos à instituição e
    acompanha o `executionStatus` (com lock por item, timeout e tratamento de
-   MFA/reconexão/rate limit);
+   MFA/reconexão/rate limit). **Items via MeuPluggy não aceitam `PATCH`**
+   (respondem `MeuPluggy item cant be updated`); para eles o passo é pulado e o
+   dado fresco vem do auto-sync da Pluggy;
 2. Grava os payloads brutos (`PluggyPayloadSnapshot`) e os registros
    normalizados (`Pluggy*Record`);
 3. Projeta os read models de domínio (`DomainAccount`, `DomainTransaction`,
@@ -58,18 +60,107 @@ Cada conexão autorizada vira um **Item** na Pluggy. A sincronização
   (MFA ou novo consentimento).
 - `LOGIN_ERROR`/`ERROR`: reconexão recomendada.
 
-## Webhook (opcional)
+## Webhook (o caminho principal de atualização)
 
-`POST /api/webhooks/pluggy` recebe eventos da Pluggy (ex.: `item/updated`) e
-reprojeta o item correspondente sem esperar o próximo sync manual.
+O webhook **não é opcional na prática**: é por ele que o dado chega em segundos.
+A Pluggy roda auto-sync a cada 24/12/8h (conforme o plano) e, ao terminar,
+dispara `item/updated` + `transactions/created`. Sem webhook registrado, o app
+só vê dado novo quando o agendador interno passar — ver [Sincronização](sync.md).
 
-- Configure a URL do webhook no Dashboard da Pluggy apontando para
-  `https://SEU_HOST/api/webhooks/pluggy`.
-- Defina `PLUGGY_WEBHOOK_SECRET` no `.env`; o endpoint exige o header
-  `X-Webhook-Secret` com o mesmo valor (comparação em tempo constante). Sem a
-  variável, o endpoint aceita qualquer chamada — não deixe assim em produção.
-- Idempotente por evento: o `id` do evento vira uma claim atômica em
-  `DomainSyncState`, então retries da Pluggy não reprocessam o mesmo evento.
+`POST /api/webhooks/pluggy` autentica, grava o evento na fila
+(`PluggyWebhookEvent`) e **responde 2XX em milissegundos**; o processamento roda
+depois, via `after()`. Isso é requisito da Pluggy: ela espera resposta em menos
+de **5 segundos**, senão trata como falha e reenvia o evento **até 9 vezes**
+(3 imediatas, 3 após 15 min, 3 após 2 h).
+
+### Registro
+
+```bash
+pnpm gravel sync webhook              # mostra o estado atual
+pnpm gravel sync webhook --register   # cria/reconcilia
+pnpm gravel sync webhook --register --force   # recria (rotação de secret)
+```
+
+O registro é feito por API (`POST /webhooks`) com `event: "all"` e o header
+`X-Webhook-Secret` — headers só podem ser configurados por API, não pelo
+Dashboard. O agendador reconcilia sozinho no boot, então em geral não é preciso
+rodar nada à mão. Variáveis:
+
+- `PLUGGY_WEBHOOK_URL` — URL pública HTTPS (a Pluggy rejeita http e localhost).
+- `PLUGGY_WEBHOOK_SECRET` — 32 bytes (`openssl rand -hex 32`). Também pode ser
+  gravado no cofre em `/settings → Segurança` em vez do `.env`.
+
+Trocar o secret exige reregistrar com `--force`; o reconciliador detecta
+divergência (o `GET /webhooks` devolve os headers gravados) e recria sozinho, mas
+só quando roda.
+
+### Eventos tratados
+
+| Evento | O que o Gravel faz |
+|---|---|
+| `item/created`, `item/updated` | `GET /items/{id}`, sync incremental do item, reprojeção |
+| `item/login_succeeded` | atualiza estado; não relê (a coleta ainda está em curso) |
+| `item/error` | grava o motivo em `PluggyItem.syncError` e notifica |
+| `item/waiting_user_input` / `waiting_user_action` | marca "precisa reconectar" e notifica |
+| `item/deleted` | marca a conexão como removida (mantém o histórico já ingerido) |
+| `transactions/created` | busca **só o lote novo** via `createdAtFrom` do próprio evento |
+| `transactions/updated` | relê por `ids` (lotes de 500) e faz upsert |
+| `transactions/deleted` | apaga os registros e os read models correspondentes |
+| `connector/status_updated` | grava ONLINE/UNSTABLE/OFFLINE para a UI avisar |
+
+Eventos de pagamento (`payment_intent/*`, `smart_transfer_*`) são recebidos e
+ignorados de propósito — registramos `all` para não perder evento novo.
+
+### Idempotência e diagnóstico
+
+O `eventId` é único em `PluggyWebhookEvent`, então reenvio da Pluggy responde
+`{ ok: true, skipped: true }` sem reprocessar. Um evento que falhe fica na fila e
+o agendador tenta de novo (até 5 tentativas).
+
+`GET /api/webhooks/pluggy` (na LAN) lista os últimos eventos e o estado de cada
+um — é o primeiro lugar a olhar quando "o dado não atualiza".
+
+### Exposição no lab (Tailscale Funnel + Traefik)
+
+A única porta pública é o Tailscale Funnel, compartilhada por vários serviços;
+o webhook entra como sub-rota:
+
+```
+https://<host-publico>/hooks/pluggy   (só POST)
+   → Traefik (entrypoint funnel) → replacePath → /api/webhooks/pluggy
+```
+
+Configurado em `<appdata>/traefik-v3/config/dynamic/funnel-routes.yml`, com
+rate limit e limite de corpo. `Path` exato + `Method(POST)`: nada mais do Gravel
+fica exposto (o `GET` de diagnóstico só responde em `<host>.lab.home`).
+
+> **Filtrar pelo IP da Pluggy (52.67.145.81) não é possível aqui.** O tailscaled
+> entrega no loopback e não repassa o IP do cliente — o Traefik vê sempre
+> `127.0.0.1`. Medido em 2026-08-07. O controle de acesso é o secret no header.
+
+## Endpoints da Pluggy usados (e prazos)
+
+| Uso | Endpoint |
+|---|---|
+| Auth / connect token | `POST /auth`, `POST /connect_token` (com `webhookUrl`) |
+| Items | `GET /items/{id}`, `PATCH /items/{id}`, `DELETE /items/{id}` |
+| Contas e saldo | `GET /accounts`, `GET /accounts/{id}/balance` (tempo real) |
+| **Transações** | **`GET /v2/transactions`** — cursor `after`, 500/página, filtros `createdAtFrom` \| `dateFrom`/`dateTo`, `ids` (máx. 500) |
+| Faturas, investimentos, empréstimos | `GET /bills`, `GET /investments`, `GET /loans` |
+| Categorias | `GET /categories`, `PATCH /transactions/{id}` (devolve a correção) |
+| Merchants | `GET /merchants?cnpj=a,b,c` (lote) |
+| Perfil | `GET /identity`, `GET /consents` |
+| Webhooks | `GET/POST/PATCH/DELETE /webhooks` |
+| Enriquecimento | `POST /recurring-payments`, `POST /behavior-analysis` (enrichment-api) |
+| Renda (opcional) | `POST /income` (insights-api) — pode não estar habilitado no plano |
+
+> ⚠️ **`GET /transactions` (paginado por página) foi descontinuado e será
+> removido em 2026-12-31.** O Gravel já usa `GET /v2/transactions`; a função
+> antiga (`fetchTransactions`) permanece marcada como deprecada só para
+> comparação durante a migração.
+>
+> `createdAtFrom` e `dateFrom` são **mutuamente exclusivos** — a escolha entre os
+> dois é feita em `lib/ingestion/transaction-window.ts`.
 
 ## Observações sobre os dados
 

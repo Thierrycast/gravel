@@ -5,8 +5,13 @@ import { useRouter } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
-const POLL_INTERVAL_MS = 5_000
-const MAX_POLLS = 60
+import { useSyncStream } from "@/hooks/use-sync-stream"
+
+// O caminho normal de conclusão é o evento `sync:done` do SSE. O polling ficou
+// como rede de segurança para quando o stream não está disponível (proxy
+// bufferizando, aba restaurada sem conexão), então pode ser mais espaçado.
+const POLL_INTERVAL_MS = 8_000
+const MAX_POLLS = 45
 export const SYNC_TOAST_ID = "gravel-sync"
 
 export type SyncTriggerStatus = "idle" | "syncing" | "done" | "error"
@@ -25,6 +30,8 @@ const pollState = {
   active: false,
   timer: null as ReturnType<typeof setTimeout> | null,
   subscribers: new Set<(status: SyncTriggerStatus) => void>(),
+  /** Definido enquanto um sync está em voo, para o SSE poder encerrá-lo. */
+  finish: null as ((next: "done" | "error", message: string) => void) | null,
 }
 
 function broadcast(status: SyncTriggerStatus) {
@@ -38,6 +45,7 @@ export function useSyncTrigger() {
     pollState.active ? "syncing" : "idle",
   )
   const mountedRef = useRef(true)
+  const { lastEvent } = useSyncStream()
 
   useEffect(() => {
     const onChange = (next: SyncTriggerStatus) => {
@@ -49,6 +57,17 @@ export function useSyncTrigger() {
       pollState.subscribers.delete(onChange)
     }
   }, [])
+
+  // Conclusão pelo stream: o servidor avisa no instante em que termina, em vez
+  // de esperarmos o próximo poll.
+  useEffect(() => {
+    if (!lastEvent || !pollState.active || !pollState.finish) return
+    if (lastEvent.type === "sync:done") {
+      pollState.finish("done", "Sincronização concluída.")
+    } else if (lastEvent.type === "sync:error") {
+      pollState.finish("error", lastEvent.message ?? "A sincronização falhou.")
+    }
+  }, [lastEvent])
 
   const trigger = useCallback(
     async ({ full = false }: TriggerOpts = {}) => {
@@ -63,11 +82,13 @@ export function useSyncTrigger() {
       })
 
       const finish = (next: "done" | "error", message: string) => {
+        if (!pollState.active) return
         if (pollState.timer) {
           clearTimeout(pollState.timer)
           pollState.timer = null
         }
         pollState.active = false
+        pollState.finish = null
         broadcast(next)
         if (next === "done") {
           toast.success(message, { id: SYNC_TOAST_ID, duration: 4_000 })
@@ -78,6 +99,8 @@ export function useSyncTrigger() {
         }
         setTimeout(() => broadcast("idle"), 3_000)
       }
+
+      pollState.finish = finish
 
       try {
         const res = await fetch("/api/sync/trigger", {

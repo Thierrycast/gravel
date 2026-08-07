@@ -335,6 +335,12 @@ export async function fetchAccountBalance(accountId: string) {
   return pluggyRequest(`/accounts/${accountId}/balance`)
 }
 
+/**
+ * @deprecated `GET /transactions` (paginado por página) foi descontinuado pela
+ * Pluggy e será **removido em 2026-12-31**. Use
+ * {@link fetchTransactionsByCursor} (`GET /v2/transactions`). Mantido só para
+ * comparação/backfill durante a migração.
+ */
 export async function fetchTransactions(
   params: {
     accountId: string
@@ -346,6 +352,88 @@ export async function fetchTransactions(
 ) {
   return pluggyRequest("/transactions", {
     query: params,
+  })
+}
+
+export type CursorPage<T> = {
+  results: T[]
+  /** Querystring pronta para a próxima página, ou null no fim. */
+  next: string | null
+}
+
+/**
+ * `GET /v2/transactions` — paginação por cursor, 500 registros por página
+ * (tamanho fixo: a v2 rejeita `pageSize`). Filtros disponíveis:
+ * `createdAtFrom` (incremental), `dateFrom`/`dateTo` (janela por data de
+ * lançamento) e `ids` (máx. 500 por chamada).
+ *
+ * `createdAtFrom` e `dateFrom` são **mutuamente exclusivos** na API.
+ * `after` vem do campo `next` da resposta anterior — pode ser a querystring
+ * inteira devolvida pela Pluggy ou só o cursor; ambos são aceitos aqui.
+ */
+export async function fetchTransactionsByCursor(params: {
+  accountId: string
+  createdAtFrom?: string
+  dateFrom?: string
+  dateTo?: string
+  ids?: string[]
+  after?: string | null
+}): Promise<CursorPage<Record<string, unknown>>> {
+  const { ids, after, ...rest } = params
+  const query: Record<string, string | undefined> = { ...rest }
+
+  if (ids?.length) {
+    if (ids.length > maxTransactionIdsPerRequest) {
+      throw new Error(
+        `fetchTransactionsByCursor: máximo de ${maxTransactionIdsPerRequest} ids por chamada`,
+      )
+    }
+    query.ids = ids.join(",")
+  }
+
+  const cursor = extractCursor(after)
+  if (cursor) {
+    query.after = cursor
+  }
+
+  const payload = (await pluggyRequest("/v2/transactions", { query })) as {
+    results?: Record<string, unknown>[]
+    next?: string | null
+  } | null
+
+  return {
+    results: Array.isArray(payload?.results) ? payload.results : [],
+    next: payload?.next ?? null,
+  }
+}
+
+export const maxTransactionIdsPerRequest = 500
+
+/**
+ * O campo `next` da v2 vem como querystring completa
+ * (`?accountId=…&after=<cursor>`). Aceita também um cursor cru.
+ *
+ * Exportado para teste: errar aqui faz o laço de paginação repetir a primeira
+ * página para sempre ou parar cedo, e nenhum dos dois dá erro visível.
+ */
+export function extractCursor(next?: string | null): string | null {
+  if (!next) return null
+  if (!next.includes("=")) return next
+  const query = next.startsWith("?") ? next.slice(1) : next
+  return new URLSearchParams(query).get("after")
+}
+
+/**
+ * PATCH /transactions/{id} — devolve a categoria corrigida para a Pluggy, o que
+ * melhora a categorização automática dos próximos lançamentos.
+ */
+export async function updateTransactionCategory(
+  transactionId: string,
+  categoryId: string,
+) {
+  return pluggyRequest(`/transactions/${transactionId}`, {
+    method: "PATCH",
+    body: { categoryId },
   })
 }
 
@@ -423,6 +511,37 @@ export async function fetchMerchants(params: {
   })
 }
 
+export const maxMerchantCnpjsPerRequest = 100
+
+/**
+ * `GET /merchants` aceita uma lista de CNPJs separados por vírgula — uma
+ * chamada em vez de N. Devolve `foundMerchants`, `notFoundCnpjs` e
+ * `invalidCnpjs`.
+ */
+export async function fetchMerchantsByCnpjList(cnpjs: string[]) {
+  return pluggyRequest("/merchants", {
+    query: { cnpj: cnpjs.join(",") },
+  }) as Promise<{
+    foundMerchants?: Record<string, unknown>[]
+    notFoundCnpjs?: string[]
+    invalidCnpjs?: string[]
+  } | null>
+}
+
+/** `GET /identity?itemId=` — identidade do titular, quando o conector oferece. */
+export async function fetchIdentity(itemId: string) {
+  return pluggyRequest("/identity", { query: { itemId } })
+}
+
+/** `GET /consents?itemId=` — consentimentos do Open Finance e suas validades. */
+export async function fetchConsents(params: {
+  itemId: string
+  page?: number
+  pageSize?: number
+}) {
+  return pluggyRequest("/consents", { query: params })
+}
+
 export async function fetchConnectors(params?: {
   name?: string
   countries?: string
@@ -434,14 +553,26 @@ export async function fetchConnectors(params?: {
   })
 }
 
-export async function createConnectToken(apiKey?: string) {
-  const key = apiKey ?? (await getApiKey())
+export async function createConnectToken(options?: {
+  apiKey?: string
+  /**
+   * URL de webhook por token: todos os items criados com este connect token
+   * notificam nela, além do webhook global da aplicação.
+   */
+  webhookUrl?: string
+}) {
+  const key = options?.apiKey ?? (await getApiKey())
+  const body = options?.webhookUrl
+    ? JSON.stringify({ options: { webhookUrl: options.webhookUrl } })
+    : undefined
+
   const response = await fetch(`${getBaseUrl()}${getConnectTokenPath()}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       [getHeaderName()]: key,
     },
+    body,
     cache: "no-store",
   })
 
@@ -451,4 +582,77 @@ export async function createConnectToken(apiKey?: string) {
   }
 
   return response.json()
+}
+
+// ── Webhooks ────────────────────────────────────────────────────────────────
+
+export type PluggyWebhook = {
+  id: string
+  url: string
+  event: string
+  createdAt?: string
+  updatedAt?: string
+  disabledAt?: string | null
+  /**
+   * Headers configurados no registro. A documentação diz que não são expostos,
+   * mas o `GET /webhooks` **devolve** (verificado em 2026-08-07) — o que permite
+   * detectar secret divergente sem apagar e recriar às cegas.
+   */
+  headers?: Record<string, string> | null
+}
+
+/**
+ * Eventos de dados que o Gravel sabe tratar. Registramos `all` na Pluggy (é o
+ * único jeito de não perder evento novo), e esta lista documenta a cobertura
+ * real do despachante em `lib/ingestion/webhook-events.ts`.
+ */
+export const handledPluggyEvents = [
+  "item/created",
+  "item/updated",
+  "item/error",
+  "item/deleted",
+  "item/waiting_user_input",
+  "item/waiting_user_action",
+  "item/login_succeeded",
+  "connector/status_updated",
+  "transactions/created",
+  "transactions/updated",
+  "transactions/deleted",
+] as const
+
+export async function listWebhooks() {
+  const payload = (await pluggyRequest("/webhooks")) as {
+    results?: PluggyWebhook[]
+  } | null
+  return Array.isArray(payload?.results) ? payload.results : []
+}
+
+/**
+ * `headers` só pode ser configurado via API (a Pluggy não expõe no Dashboard
+ * porque pode conter segredo) e **não volta** no GET — para rotar o secret é
+ * preciso apagar e recriar o webhook.
+ */
+export async function createWebhook(input: {
+  url: string
+  event: string
+  headers?: Record<string, string>
+}) {
+  return pluggyRequest("/webhooks", {
+    method: "POST",
+    body: input,
+  }) as Promise<PluggyWebhook>
+}
+
+export async function updateWebhook(
+  webhookId: string,
+  input: { url?: string; event?: string; headers?: Record<string, string> },
+) {
+  return pluggyRequest(`/webhooks/${webhookId}`, {
+    method: "PATCH",
+    body: input,
+  }) as Promise<PluggyWebhook>
+}
+
+export async function deleteWebhook(webhookId: string) {
+  return pluggyRequest(`/webhooks/${webhookId}`, { method: "DELETE" })
 }

@@ -95,6 +95,7 @@ INTERNAL_API_KEY=
 - 📖 [API Reference](docs/api-reference.md) — Endpoints e exemplos de requisição.
 - 🔑 [Configuração: Pluggy + MeuPluggy](docs/meu-pluggy-setup.md) — Como criar as contas, obter as credenciais e autorizar o acesso aos bancos.
 - 🔌 [Integração Pluggy](docs/pluggy.md) — Arquitetura da integração e pipeline de dados do Open Finance.
+- 🔄 [Sincronização](docs/sync.md) — Como o dado chega (webhook, agendador, reconciliação) e como diagnosticar quando para.
 - 🧪 [Pluggy Trial e Sandbox](docs/pluggy-trial-guide.md) — Resumo rápido para testar sem plano pago.
 - 🪙 [Integração Binance](docs/binance.md) — Detalhes da sincronização de criptomoedas.
 - 🖥️ [CLI](docs/cli.md) — Guia da linha de comando do Gravel.

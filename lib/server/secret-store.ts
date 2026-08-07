@@ -25,6 +25,13 @@ const secretDefinitions = [
     description: "Segredo usado para autenticar chamadas server-side no Pluggy.",
   },
   {
+    key: "PLUGGY_WEBHOOK_SECRET",
+    provider: "Pluggy",
+    label: "Webhook Secret",
+    description:
+      "Valor exigido no header X-Webhook-Secret dos eventos que a Pluggy envia.",
+  },
+  {
     key: "BINANCE_API_KEY",
     provider: "Binance",
     label: "API Key",

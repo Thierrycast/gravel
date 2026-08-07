@@ -90,27 +90,21 @@ import { AppToaster } from "@/components/app-toaster";
 import { ModeToggle } from "@/components/mode-toggle";
 import { MobileToolbox } from "@/components/mobile-toolbox";
 import { PullToRefresh } from "@/components/pull-to-refresh";
+import { ConnectionAlertsBanner } from "@/components/connection-alerts-banner";
 import { SyncFailureBanner } from "@/components/sync-failure-banner";
+import { SyncStreamListener } from "@/components/sync-stream-listener";
 import { VaultProvider } from "@/components/vault-provider";
 import { AppQueryProvider } from "@/app/providers";
 import { NEXT_THEMES_REGISTRY } from "@/lib/theme";
-import { checkAndTriggerAutoSync } from "@/lib/ingestion/auto-sync";
 
+// O disparo periódico de sincronização vive em `instrumentation.ts` (agendador
+// in-process). Antes era feito daqui, o que só funcionava quando alguém abria o
+// app — e, com o app fechado, o dado envelhecia indefinidamente.
 export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const shouldRunAutoSync =
-    process.env.npm_lifecycle_event !== "build" &&
-    process.env.NEXT_PHASE !== "phase-production-build";
-
-  if (shouldRunAutoSync) {
-    checkAndTriggerAutoSync().catch((err) =>
-      console.error("[layout] auto-sync check failed", err)
-    );
-  }
-
   return (
     <ViewTransitions>
     <html
@@ -157,6 +151,7 @@ export default async function RootLayout({
                       <MobileToolbox />
                     </header>
                     <div className="page-container px-4 md:px-6 xl:px-12 2xl:px-16 xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto w-full py-5 pb-[5.25rem] md:pb-8 md:py-6 lg:py-8">
+                      <ConnectionAlertsBanner />
                       <SyncFailureBanner />
                       <Suspense fallback={<div className="flex min-h-[40vh] w-full items-center justify-center p-8"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
                         {children}
@@ -168,6 +163,7 @@ export default async function RootLayout({
               </SidebarProvider>
               </TooltipProvider>
             </VaultProvider>
+            <SyncStreamListener />
             <AppToaster />
           </CurrencyProvider>
           </AppQueryProvider>

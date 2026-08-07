@@ -8,6 +8,7 @@ import {
   savePluggyItem,
   updateStoredPluggyItem,
 } from "@/lib/pluggy-items"
+import { prisma } from "@/lib/prisma"
 
 export const dynamic = "force-dynamic"
 
@@ -24,6 +25,35 @@ function extractAccountNames(payload: unknown) {
 
 export async function GET() {
   const items = await listStoredPluggyItems()
+
+  // Titular, consentimento e saúde do conector: contexto que a tela /connect
+  // precisa para explicar por que uma conexão está atrasada sem o usuário ter de
+  // adivinhar.
+  const [identities, consents, connectorStatuses] = await Promise.all([
+    prisma.pluggyIdentityRecord.findMany({
+      select: { itemExternalId: true, fullName: true, documentNumber: true },
+    }),
+    prisma.pluggyConsentRecord.findMany({
+      where: { expiresAt: { not: null } },
+      orderBy: { expiresAt: "asc" },
+      select: { itemExternalId: true, status: true, expiresAt: true },
+    }),
+    prisma.pluggyConnectorStatus.findMany(),
+  ])
+
+  const identityByItem = new Map(
+    identities.map((identity) => [identity.itemExternalId, identity]),
+  )
+  // `orderBy` crescente + primeiro a vencer ganha.
+  const consentByItem = new Map<string, (typeof consents)[number]>()
+  for (const consent of consents) {
+    if (!consentByItem.has(consent.itemExternalId)) {
+      consentByItem.set(consent.itemExternalId, consent)
+    }
+  }
+  const statusByConnector = new Map(
+    connectorStatuses.map((status) => [status.connectorId, status]),
+  )
 
   const enrichedItems = await Promise.all(
     items.map(async (item) => {
@@ -57,15 +87,30 @@ export async function GET() {
           imageUrl: imageUrl ?? null,
         })
 
+        const effectiveConnectorId = connectorId ?? item.connectorId
+
         return {
           ...item,
-          connectorId: connectorId ?? item.connectorId,
+          connectorId: effectiveConnectorId,
           connectorName: connectorName ?? item.connectorName,
           status: liveItem?.status ?? item.status,
           // executionStatus vivo (SUCCESS/PARTIAL_SUCCESS/ERROR/null=em curso)
           // e horário da última atualização do item na instituição.
           executionStatus: liveItem?.executionStatus ?? item.executionStatus,
           lastUpdatedAt: liveItem?.lastUpdatedAt ?? liveItem?.updatedAt ?? null,
+          // `nextAutoSyncAt` é o auto-sync da própria Pluggy: o momento mínimo em
+          // que ela buscará dado novo e disparará o webhook.
+          nextAutoSyncAt: liveItem?.nextAutoSyncAt ?? item.nextAutoSyncAt,
+          consentExpiresAt:
+            liveItem?.consentExpiresAt ??
+            consentByItem.get(item.pluggyItemId)?.expiresAt ??
+            item.consentExpiresAt,
+          consentStatus: consentByItem.get(item.pluggyItemId)?.status ?? null,
+          owner: identityByItem.get(item.pluggyItemId) ?? null,
+          connectorStatus:
+            effectiveConnectorId !== null
+              ? (statusByConnector.get(effectiveConnectorId)?.status ?? null)
+              : null,
           syncError: item.syncError,
           lastSyncedAt: item.lastSyncedAt,
           imageUrl: imageUrl ?? item.imageUrl,

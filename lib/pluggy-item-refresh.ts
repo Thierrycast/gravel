@@ -80,7 +80,12 @@ function parseItemDate(value: unknown): Date | undefined {
   return Number.isNaN(parsed.getTime()) ? undefined : parsed
 }
 
-async function persistItemState(
+/**
+ * Espelha o estado do item da Pluggy no `PluggyItem` local (status, execução,
+ * expiração de consentimento, próximo auto-sync, erro humano). Exportado para o
+ * despachante de webhooks usar o mesmo caminho do refresh manual.
+ */
+export async function persistPluggyItemState(
   itemId: string,
   item: Record<string, unknown> | null,
   extra: { syncError?: string | null; triggered?: boolean; completed?: boolean },
@@ -151,14 +156,14 @@ export async function triggerAndPollItem(
           string,
           unknown
         > | null
-        await persistItemState(itemId, current, {
+        await persistPluggyItemState(itemId, current, {
           syncError:
             "Atualização muito frequente. Tente novamente em instantes.",
         })
         return { item: current, outcome: "RATE_LIMITED", message: error.message }
       }
       // 400 credenciais/MFA, 403 consentimento → precisa reconectar.
-      await persistItemState(itemId, null, { syncError: error.message })
+      await persistPluggyItemState(itemId, null, { syncError: error.message })
       return {
         item: null,
         outcome: error.statusCode === 400 ? "MFA_REQUIRED" : "NEEDS_ACTION",
@@ -168,7 +173,7 @@ export async function triggerAndPollItem(
     throw error
   }
 
-  await persistItemState(itemId, item, { triggered: true, syncError: null })
+  await persistPluggyItemState(itemId, item, { triggered: true, syncError: null })
 
   const deadline = Date.now() + timeoutMs
   let classification = classifyItem(item)
@@ -182,16 +187,16 @@ export async function triggerAndPollItem(
   }
 
   if (classification.outcome === "MFA_REQUIRED") {
-    await persistItemState(itemId, item, {
+    await persistPluggyItemState(itemId, item, {
       syncError:
         "O banco pediu autenticação adicional. Reconecte para continuar.",
     })
   } else if (classification.outcome === "NEEDS_ACTION") {
-    await persistItemState(itemId, item, {
+    await persistPluggyItemState(itemId, item, {
       syncError: "As credenciais expiraram. Reconecte a instituição.",
     })
   } else if (classification.outcome === "ERROR") {
-    await persistItemState(itemId, item, {
+    await persistPluggyItemState(itemId, item, {
       syncError: "A sincronização falhou na instituição.",
     })
   }
@@ -236,7 +241,7 @@ export async function refreshPluggyItemAndWait(
       const { syncPluggyItem } = await import("@/lib/pluggy-sync")
       await syncPluggyItem(itemId)
       reprojected = true
-      await persistItemState(itemId, item, { completed: true, syncError: null })
+      await persistPluggyItemState(itemId, item, { completed: true, syncError: null })
 
       // Enriquecimento por item (recorrências + comportamento) em background —
       // best-effort, não trava o refresh.

@@ -29,7 +29,7 @@ settingsCommand
     table.push(["Salário Base", s.monthlySalary ? Number(s.monthlySalary).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "N/A"])
     table.push(["Exibir Salário Futuro", s.showFutureSalary ? chalk.green("sim") : chalk.red("não")])
     table.push(["Exibir Contas Futuras", s.showFutureAccounts ? chalk.green("sim") : chalk.red("não")])
-    table.push(["Intervalo Auto-Sync (Horas)", String(s.syncIntervalHours)])
+    table.push(["Intervalo Auto-Sync (Minutos)", String(s.syncIntervalMinutes)])
     table.push(["Dias de Lookback do Sync", String(s.syncLookbackDays)])
     table.push(["Vault Ativo", s.vaultEnabled ? chalk.green("sim") : chalk.red("não")])
     table.push(["Senha do Vault configurada", s.vaultMasterPassword ? chalk.green("sim") : chalk.red("não")])
@@ -43,7 +43,7 @@ settingsCommand
   .option("--salary <val>", "Salário mensal base")
   .option("--show-future-salary <bool>", "Exibir salário futuro projetado (true|false)")
   .option("--show-future-accounts <bool>", "Exibir contas futuras projetadas (true|false)")
-  .option("--sync-hours <n>", "Intervalo de sincronização automática em horas")
+  .option("--sync-minutes <n>", "Intervalo de sincronização automática em minutos")
   .option("--sync-lookback <n>", "Dias de lookback para buscas nas APIs")
   .option("--patterns <patterns>", "Padrões textuais de identificação de salário (separados por vírgula)")
   .action(async (options) => {
@@ -54,7 +54,7 @@ settingsCommand
     if (options.salary) data.monthlySalary = new Prisma.Decimal(Number(options.salary))
     if (options.showFutureSalary) data.showFutureSalary = options.showFutureSalary === "true"
     if (options.showFutureAccounts) data.showFutureAccounts = options.showFutureAccounts === "true"
-    if (options.syncHours) data.syncIntervalHours = Number(options.syncHours)
+    if (options.syncMinutes) data.syncIntervalMinutes = Math.max(1, Number(options.syncMinutes))
     if (options.syncLookback) data.syncLookbackDays = Number(options.syncLookback)
 
     if (options.patterns) {

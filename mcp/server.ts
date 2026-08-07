@@ -625,7 +625,7 @@ const TOOLS: Tool[] = [
         monthlySalary: { type: "number", description: "Salário base do usuário" },
         showFutureSalary: { type: "boolean", description: "Exibir salário futuro projetado" },
         showFutureAccounts: { type: "boolean", description: "Exibir contas futuras projetadas" },
-        syncIntervalHours: { type: "number", description: "Intervalo de auto-sync em horas" },
+        syncIntervalMinutes: { type: "number", description: "Intervalo de auto-sync em minutos (padrão 30)" },
         syncLookbackDays: { type: "number", description: "Dias de lookback do sync" },
         salaryPatterns: { type: "array", items: { type: "string" }, description: "Padrões textuais de identificação de salário" },
       },
@@ -1428,7 +1428,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           monthlySalary,
           showFutureSalary,
           showFutureAccounts,
-          syncIntervalHours,
+          syncIntervalMinutes,
           syncLookbackDays,
           salaryPatterns,
         } = args ?? {};
@@ -1480,7 +1480,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             monthlySalary: monthlySalary !== undefined ? new Prisma.Decimal(Number(monthlySalary)) : undefined,
             showFutureSalary: showFutureSalary !== undefined ? Boolean(showFutureSalary) : undefined,
             showFutureAccounts: showFutureAccounts !== undefined ? Boolean(showFutureAccounts) : undefined,
-            syncIntervalHours: syncIntervalHours !== undefined ? Number(syncIntervalHours) : undefined,
+            syncIntervalMinutes:
+              syncIntervalMinutes !== undefined
+                ? Math.max(1, Number(syncIntervalMinutes))
+                : undefined,
             syncLookbackDays: syncLookbackDays !== undefined ? Number(syncLookbackDays) : undefined,
             dashboardConfigJson: updatedConfigJson,
           },

@@ -77,6 +77,50 @@ async function findOrCreateInvestmentCategory() {
   });
 }
 
+/**
+ * Envia a categoria escolhida pelo usuário de volta à Pluggy
+ * (`PATCH /transactions/{id}`), para o motor de categorização dela aprender.
+ *
+ * Só faz sentido quando os dois lados têm identificador: a transação precisa vir
+ * da Pluggy e a categoria de destino precisa ser uma categoria da Pluggy
+ * (`sourceExternalId`). Categoria criada manualmente no Gravel não tem par lá.
+ * Best-effort: nunca falha a requisição do usuário.
+ */
+async function pushCategoryToPluggy(
+  domainTransactionId: string,
+  domainCategoryId: string,
+) {
+  const [source, category] = await Promise.all([
+    prisma.domainTransactionSource.findFirst({
+      where: {
+        domainTransactionId,
+        sourceProvider: SourceProvider.PLUGGY,
+      },
+      select: { sourceExternalId: true },
+    }),
+    prisma.domainCategory.findUnique({
+      where: { id: domainCategoryId },
+      select: { sourceProvider: true, sourceExternalId: true },
+    }),
+  ]);
+
+  if (!source?.sourceExternalId) return { pushed: false, reason: "not-pluggy" };
+  if (
+    category?.sourceProvider !== SourceProvider.PLUGGY ||
+    !category.sourceExternalId
+  ) {
+    return { pushed: false, reason: "no-pluggy-category" };
+  }
+
+  const { updateTransactionCategory } = await import("@/lib/integrations/pluggy");
+  await updateTransactionCategory(
+    source.sourceExternalId,
+    category.sourceExternalId,
+  );
+
+  return { pushed: true };
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ transactionId: string }> },
@@ -329,6 +373,19 @@ export async function PUT(
       // Novo padrão de salário: re-detecta recorrências para a renda aparecer
       // em receitas recorrentes e na projeção sem esperar o throttle.
       await ensureRecurringDerivedFresh({ force: true });
+    }
+
+    if ("domainCategoryId" in updateData && updateData.domainCategoryId) {
+      // Devolve a correção para a Pluggy: a categorização automática dela
+      // aprende, e os próximos lançamentos parecidos já chegam certos.
+      void pushCategoryToPluggy(
+        transactionId,
+        String(updateData.domainCategoryId),
+      ).catch((error) =>
+        console.warn(
+          `[transactions] categoria não devolvida à Pluggy: ${error instanceof Error ? error.message : error}`,
+        ),
+      );
     }
 
     return jsonOk({

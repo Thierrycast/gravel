@@ -390,7 +390,12 @@ model UserSetting {
   monthlySalary       Decimal  @default(0)
   showFutureSalary    Boolean  @default(false)
   showFutureAccounts  Boolean  @default(true)
+  /// @deprecated Substituído por `syncIntervalMinutes` (é semeado a partir
+  /// deste valor na primeira execução). Mantido para não perder o dado.
   syncIntervalHours   Int      @default(6)
+  /// Cadência do sync incremental automático, em minutos. Editável em
+  /// /settings → Sincronização.
+  syncIntervalMinutes Int      @default(30)
   syncLookbackDays    Int      @default(30)
   dashboardConfigJson String?
   vaultEnabled            Boolean  @default(false)
@@ -656,8 +661,83 @@ model PluggyItem {
   // Momento em que disparamos o PATCH e em que o sync concluiu.
   lastSyncTriggeredAt DateTime?
   lastSyncedAt        DateTime?
+  // Preenchido ao receber `item/deleted`: o item deixou de existir na Pluggy,
+  // mas os dados históricos já ingeridos continuam válidos.
+  deletedAt           DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+/// Fila durável de eventos de webhook da Pluggy. O handler HTTP só grava aqui e
+/// responde 2XX (a Pluggy exige resposta em <5s, senão repete até 9x); o
+/// processamento acontece depois, e o scheduler redrena o que ficou pendente.
+model PluggyWebhookEvent {
+  id          String       @id @default(cuid())
+  /// `eventId` da Pluggy — mesma chave em todos os reenvios do mesmo evento.
+  eventId     String       @unique
+  event       String
+  itemId      String?
+  accountId   String?
+  connectorId String?
+  triggeredBy String?
+  payloadJson String
+  status      OpsRunStatus @default(RUNNING)
+  attempts    Int          @default(0)
+  error       String?
+  receivedAt  DateTime     @default(now())
+  processedAt DateTime?
+  updatedAt   DateTime     @updatedAt
+
+  @@index([status, receivedAt])
+  @@index([event, receivedAt])
+  @@index([itemId])
+}
+
+/// Estado operacional de um conector (instituição), alimentado pelo evento
+/// `connector/status_updated`. Serve para a UI não culpar o app quando o banco
+/// está instável ou fora do ar.
+model PluggyConnectorStatus {
+  connectorId Int      @id
+  name        String?
+  status      String
+  observedAt  DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// Identidade do titular do item (`GET /identity`). Um registro por item.
+model PluggyIdentityRecord {
+  id                String    @id @default(cuid())
+  externalId        String    @unique
+  itemExternalId    String    @unique
+  fullName          String?
+  documentNumber    String?
+  document          String?
+  documentType      String?
+  birthDate         DateTime?
+  email             String?
+  phoneNumber       String?
+  payloadJson       String
+  providerUpdatedAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+/// Consentimentos do Open Finance (`GET /consents`). A data de expiração é o
+/// que dispara o aviso de "reconecte antes de perder o acesso".
+model PluggyConsentRecord {
+  id              String    @id @default(cuid())
+  externalId      String    @unique
+  itemExternalId  String
+  status          String?
+  expiresAt       DateTime?
+  createdAtSource DateTime?
+  products        String?
+  payloadJson     String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([itemExternalId])
+  @@index([expiresAt])
 }
 
 model PluggySyncRun {
@@ -740,6 +820,14 @@ model PluggyTransactionRecord {
   providerId        String?
   merchantCnpj      String?
   merchantName      String?
+  // `creditCardMetadata` da Pluggy: parcelamento informado pela própria
+  // instituição, mais confiável que a heurística de `lib/domain/installments.ts`.
+  installmentNumber Int?
+  totalInstallments Int?
+  totalAmount       Decimal?
+  payeeMFN          String?
+  cardNumber        String?
+  billId            String?
   providerCreatedAt DateTime?
   providerUpdatedAt DateTime?
   createdAt         DateTime  @default(now())

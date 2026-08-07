@@ -48,6 +48,7 @@ type SettingsFormData = {
   showFutureSalary: boolean
   showFutureAccounts: boolean
   syncIntervalHours: number
+  syncIntervalMinutes: number
   syncLookbackDays: number
   vaultEnabled: boolean
   vaultMasterPassword: string
@@ -336,6 +337,7 @@ function SettingsContent() {
     showFutureSalary: false,
     showFutureAccounts: true,
     syncIntervalHours: 6,
+    syncIntervalMinutes: 30,
     syncLookbackDays: 30,
     vaultEnabled: false,
     vaultMasterPassword: "",
@@ -358,6 +360,7 @@ function SettingsContent() {
         showFutureSalary: settings.showFutureSalary,
         showFutureAccounts: settings.showFutureAccounts,
         syncIntervalHours: settings.syncIntervalHours,
+        syncIntervalMinutes: settings.syncIntervalMinutes ?? 30,
         syncLookbackDays: settings.syncLookbackDays,
         vaultEnabled: settings.vaultEnabled,
         vaultMasterPassword: settings.vaultMasterPassword || "",
@@ -817,15 +820,24 @@ function SettingsContent() {
                   <Input
                     id="syncInterval"
                     type="number"
-                    min="1"
+                    min="5"
+                    max="1440"
+                    step="5"
                     className="max-w-24"
-                    value={formData.syncIntervalHours}
-                    onChange={(e) => setFormData({ ...formData, syncIntervalHours: parseInt(e.target.value) || 6 })}
+                    value={formData.syncIntervalMinutes}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        syncIntervalMinutes: parseInt(e.target.value) || 30,
+                      })
+                    }
                   />
-                  <span className="text-sm text-muted-foreground">horas</span>
+                  <span className="text-sm text-muted-foreground">minutos</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  O app revisita suas contas e busca transações novas a cada X horas.
+                  Rede de segurança: o app revisita suas contas a cada X minutos.
+                  O normal é o dado chegar antes disso, por webhook, assim que a
+                  instituição sincroniza.
                 </p>
               </div>
               <div className="space-y-2">
