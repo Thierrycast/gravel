@@ -33,11 +33,16 @@ Construído com **Next.js 16**, **React 19**, **Prisma** e **SQLite** — uma ar
    pnpm install
    ```
 
-2. **Configure o banco local:**
+2. **Configure os segredos** (fora do repositório, de propósito):
    ```bash
-   cp .env.example .env   # preencha as variáveis necessárias
+   mkdir -p ~/.config/gravel && chmod 700 ~/.config/gravel
+   cp .env.example ~/.config/gravel/secrets.env
+   chmod 600 ~/.config/gravel/secrets.env
+   ln -s ~/.config/gravel/secrets.env .env   # dev e produção, uma só fonte
+   $EDITOR .env                              # preencha as credenciais
    pnpm db:push
    ```
+   Por que assim e como rotacionar: [Segredos e credenciais](docs/security.md).
 
 3. **Inicie o servidor de desenvolvimento:**
    ```bash
@@ -48,22 +53,20 @@ Construído com **Next.js 16**, **React 19**, **Prisma** e **SQLite** — uma ar
 
 ## ⚙️ Variáveis de Ambiente
 
-Consulte o arquivo `.env.example`. Um resumo das principais configurações:
+**Nenhum segredo entra neste repositório.** Todos vivem em
+`~/.config/gravel/secrets.env` (`chmod 600`), e o `docker-compose.yml` aponta
+para ele com `env_file:` — por isso o compose versionado não contém valor
+sensível, placeholder nem interpolação a preencher.
 
-```env
-DATABASE_URL="file:./dev.db"
+O modelo comentado está em `.env.example`. As duas chaves que costumam confundir:
 
-# Pluggy (Open Finance)
-PLUGGY_CLIENT_ID=
-PLUGGY_CLIENT_SECRET=
+| Variável | O que faz |
+|---|---|
+| `APP_SECRETS_ENCRYPTION_KEY` | **Criptografa** o cofre de segredos (AES-256-GCM). Perdê-la torna o cofre irrecuperável |
+| `INTERNAL_API_KEY` | **Não criptografa nada** — é a senha do header `X-INTERNAL-API-KEY` que libera 22 rotas de operação |
 
-# Binance
-BINANCE_API_KEY=
-BINANCE_API_SECRET=
-
-# Protege os endpoints internos em /api/admin/*
-INTERNAL_API_KEY=
-```
+Detalhes, modelo de ameaça e procedimento de rotação com verificação:
+[Segredos e credenciais](docs/security.md).
 
 > Não sabe de onde vêm as credenciais da Pluggy? O guia
 > [Configuração: Pluggy + MeuPluggy](docs/meu-pluggy-setup.md) explica o fluxo
@@ -96,6 +99,7 @@ INTERNAL_API_KEY=
 - 🔑 [Configuração: Pluggy + MeuPluggy](docs/meu-pluggy-setup.md) — Como criar as contas, obter as credenciais e autorizar o acesso aos bancos.
 - 🔌 [Integração Pluggy](docs/pluggy.md) — Arquitetura da integração e pipeline de dados do Open Finance.
 - 🔄 [Sincronização](docs/sync.md) — Como o dado chega (webhook, agendador, reconciliação) e como diagnosticar quando para.
+- 🔐 [Segredos e credenciais](docs/security.md) — onde as credenciais ficam, por que fora do git, e como rotacionar com verificação.
 - 🧪 [Pluggy Trial e Sandbox](docs/pluggy-trial-guide.md) — Resumo rápido para testar sem plano pago.
 - 🪙 [Integração Binance](docs/binance.md) — Detalhes da sincronização de criptomoedas.
 - 🖥️ [CLI](docs/cli.md) — Guia da linha de comando do Gravel.

@@ -15,12 +15,21 @@ services:
       - "8422:3001"
     volumes:
       - gravel_data:/app/data
-    # ⚠️ NENHUM SEGREDO LITERAL NESTE ARQUIVO. Ele é versionado num repositório
-    # público — todo valor sensível entra por interpolação a partir do `.env`
-    # (que é ignorado pelo git). Copie `.env.example` para `.env` e preencha.
-    # O compose implantado no CasaOS
-    # (/var/lib/casaos/apps/gravel/docker-compose.yml) é outro arquivo, fora do
-    # git, e é lá que os valores reais ficam.
+    # Todo segredo vem deste arquivo, que vive FORA do repositório. Por isso
+    # este compose pode ser versionado num repo público como está: não há valor
+    # sensível, nem placeholder, nem interpolação a preencher.
+    #
+    # Crie-o a partir de `.env.example`:
+    #   mkdir -p ~/.config/gravel && chmod 700 ~/.config/gravel
+    #   $EDITOR ~/.config/gravel/secrets.env && chmod 600 ~/.config/gravel/secrets.env
+    #
+    # O destino é que só duas variáveis auto-geradas fiquem aqui
+    # (APP_SECRETS_ENCRYPTION_KEY e INTERNAL_API_KEY) e as credenciais de
+    # terceiros vivam criptografadas no banco, geridas em /settings → Segurança.
+    env_file:
+      - ${GRAVEL_SECRETS_FILE:-~/.config/gravel/secrets.env}
+
+    # Só valores públicos abaixo — nada aqui é segredo.
     environment:
       - DATABASE_URL=file:/app/data/prod.db
       - NODE_ENV=production
@@ -29,31 +38,13 @@ services:
       - TZ=America/Sao_Paulo
       # Cap V8 heap so idle RSS doesn't ratchet up to the largest historical peak.
       - NODE_OPTIONS=--max-old-space-size=192
-      - PLUGGY_CLIENT_ID=${PLUGGY_CLIENT_ID:?defina no .env}
-      - PLUGGY_CLIENT_SECRET=${PLUGGY_CLIENT_SECRET:?defina no .env}
       - PLUGGY_API_BASE=https://api.pluggy.ai
       - PLUGGY_API_KEY_HEADER=X-API-KEY
       - PLUGGY_AUTH_PATH=/auth
       - PLUGGY_CONNECT_TOKEN_PATH=/connect_token
       - PLUGGY_API_KEY_TTL_SECONDS=7200
-      # Webhook da Pluggy: é por aqui que o dado chega em segundos, em vez de
-      # esperar o sync periódico. A URL é a sub-rota do Tailscale Funnel, que o
-      # Traefik reescreve para /api/webhooks/pluggy (só POST é exposto).
-      # O secret vai no header X-Webhook-Secret, configurado no registro do
-      # webhook via API (`pnpm gravel sync webhook --register`).
-      # Trocar o secret exige reregistrar: `... --register --force`.
-      - PLUGGY_WEBHOOK_URL=${PLUGGY_WEBHOOK_URL:-}
-      - PLUGGY_WEBHOOK_SECRET=${PLUGGY_WEBHOOK_SECRET:-}
-      - BINANCE_API_KEY=${BINANCE_API_KEY:-}
-      - BINANCE_API_SECRET=${BINANCE_API_SECRET:-}
       - BINANCE_API_BASE=https://api.binance.com
       - BINANCE_RECV_WINDOW=5000
-      - INTERNAL_API_KEY=${INTERNAL_API_KEY:?defina no .env}
-      - LOGO_DEV_PUBLISHABLE_KEY=${LOGO_DEV_PUBLISHABLE_KEY:-}
-      - LOGO_DEV_SECRET_KEY=${LOGO_DEV_SECRET_KEY:-}
-      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}
-      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY:-}
-      - NEXT_PUBLIC_VAPID_PUBLIC_KEY=${NEXT_PUBLIC_VAPID_PUBLIC_KEY:-}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health/ready"]
       interval: 30s
