@@ -74,6 +74,26 @@ Risco medido na época: a chave da Binance era **somente leitura**
 saldo, não de saque. O grave era o `PLUGGY_CLIENT_SECRET`, que dá leitura de
 extratos e faturas de todas as conexões de Open Finance.
 
+## O guard-rail
+
+`scripts/secret-scan.sh` barra commit com segredo em arquivo versionado. Sanear o
+compose conserta o passado; este hook é o que evita repetir.
+
+```bash
+ln -sf ../../scripts/secret-scan.sh .git/hooks/pre-commit   # instalar
+./scripts/secret-scan.sh                                    # varrer tudo agora
+```
+
+Duas checagens: padrões de credencial de provedor (`sk_`, `ghp_`, `AKIA`,
+chave privada PEM…) e valor literal em variável sensível. Passa em vazio,
+`${INTERPOLACAO}` e placeholders; ignora `process.env.X = y` (código lendo a env)
+e exige mistura de letra e dígito, o que descarta identificadores como
+`originalKey` sem enfraquecer a detecção — valores com prefixo conhecido caem na
+primeira checagem de qualquer forma.
+
+Deliberadamente **não** usa detector de entropia genérico: ele dispara em hash de
+lockfile, e um hook que grita à toa é um hook que se aprende a ignorar.
+
 ## Rotacionar uma credencial
 
 1. Gere a nova no provedor (ou `openssl rand -hex 32` para as auto-geradas).
