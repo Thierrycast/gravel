@@ -363,7 +363,9 @@ function SettingsContent() {
         syncIntervalMinutes: settings.syncIntervalMinutes ?? 30,
         syncLookbackDays: settings.syncLookbackDays,
         vaultEnabled: settings.vaultEnabled,
-        vaultMasterPassword: settings.vaultMasterPassword || "",
+        // A senha nunca volta do servidor; o campo começa vazio e só é enviado
+        // quando o usuário digita algo novo.
+        vaultMasterPassword: "",
         vaultInactivityMin: settings.vaultInactivityMin,
         notificationWebhookUrl: settings.notificationWebhookUrl || "",
         telegramBotToken: settings.telegramBotToken || "",

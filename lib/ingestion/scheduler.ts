@@ -362,6 +362,20 @@ export async function runSchedulerTick(options?: {
     const cadence = await resolveSyncCadence()
     detail.cadence = cadence
 
+    // Primeiro boot ou instalação nova: sem credencial da Pluggy não há o que
+    // sincronizar. Isso é estado de setup, não falha — o log fica limpo e a UI
+    // pede a configuração. Sem esta guarda, cada tick lançaria exceção.
+    const { isPluggyConfigured } = await import("@/lib/integrations/pluggy")
+    if (!(await isPluggyConfigured())) {
+      detail.pluggy = "not-configured"
+      // O dreno de webhooks ainda roda: eventos podem estar enfileirados de uma
+      // configuração anterior, e o watchdog acima já rodou.
+      await runTask("webhook-drain", TICK_INTERVAL_MS, async () => {
+        detail.webhookDrain = await drainPendingWebhookEvents()
+      })
+      return { ran, skipped: false, errors, detail }
+    }
+
     // Eventos de webhook que ficaram pendentes (processo morreu entre o 200 e o
     // processamento) ou falharam. Vem primeiro: é o caminho mais fresco.
     await runTask("webhook-drain", TICK_INTERVAL_MS, async () => {

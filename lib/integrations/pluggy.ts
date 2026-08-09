@@ -84,12 +84,44 @@ function normalizeApiKeyResponse(data: ApiKeyResponse) {
   return { apiKey, expiresAt }
 }
 
+/**
+ * Erro de "ainda não configurado" — distinto de falha real. O agendador e o
+ * webhook usam isto para ficarem em silêncio no primeiro boot, em vez de
+ * encherem o log de exceções enquanto o usuário não cadastrou as credenciais.
+ */
+export class PluggyNotConfiguredError extends Error {
+  constructor() {
+    super(
+      "Pluggy não configurado. Cadastre as credenciais em /settings → Segurança.",
+    )
+    this.name = "PluggyNotConfiguredError"
+  }
+}
+
+/**
+ * Credenciais vêm do cofre criptografado (banco) e, na ausência, do ambiente —
+ * `getManagedSecretValue` já resolve nessa ordem. Isso é o que permite cadastrar
+ * tudo pela tela, sem o usuário editar arquivo.
+ */
+async function getPluggyCredentials() {
+  const { getManagedSecretValue } = await import("@/lib/server/secret-store")
+  const [id, secret] = await Promise.all([
+    getManagedSecretValue("PLUGGY_CLIENT_ID"),
+    getManagedSecretValue("PLUGGY_CLIENT_SECRET"),
+  ])
+  return { clientId: id.value, clientSecret: secret.value }
+}
+
+export async function isPluggyConfigured() {
+  const { clientId, clientSecret } = await getPluggyCredentials()
+  return Boolean(clientId && clientSecret)
+}
+
 export async function createApiKey() {
-  const clientId = getEnv("PLUGGY_CLIENT_ID")
-  const clientSecret = getEnv("PLUGGY_CLIENT_SECRET")
+  const { clientId, clientSecret } = await getPluggyCredentials()
 
   if (!clientId || !clientSecret) {
-    throw new Error("Pluggy não configurado. Verifique as credenciais no arquivo .env")
+    throw new PluggyNotConfiguredError()
   }
 
   const response = await fetch(`${getBaseUrl()}${getAuthPath()}`, {

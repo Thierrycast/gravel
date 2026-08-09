@@ -25,6 +25,13 @@ export async function register() {
     return
   }
 
+  // Gera (ou carrega) a chave do cofre e o token interno antes de qualquer coisa
+  // usá-los. Num produto o usuário não inventa esses valores: são infraestrutura,
+  // e a chave do cofre não poderia vir da tela porque a tela precisa dela para
+  // criptografar o que você digita.
+  const { bootstrapVaultKeys } = await import("@/lib/server/vault-key")
+  bootstrapVaultKeys()
+
   const { startScheduler } = await import("@/lib/ingestion/scheduler")
   startScheduler()
 }

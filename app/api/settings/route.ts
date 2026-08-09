@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { serializeForJson } from "@/lib/core/http"
+import { hashMasterPassword } from "@/lib/server/secret-store"
+import { storeVaultKeyRecovery } from "@/lib/server/vault-key"
 import { ensureRecurringDerivedFresh } from "@/lib/domain/derived"
 import { getUserSettings } from "@/lib/domain/queries"
 
@@ -138,6 +140,11 @@ export async function GET() {
 
   const serialized = {
     ...serializeForJson(settings),
+    // A senha mestre (hash) NUNCA sai do servidor. Antes disto o spread acima a
+    // enviava ao cliente em toda visita à tela de configurações, e o formulário
+    // a carregava num input. O cliente só precisa saber se ela existe.
+    vaultMasterPassword: undefined,
+    hasVaultMasterPassword: Boolean(settings.vaultMasterPassword),
     salaryPatterns,
     salarySources,
     salarySuggestions,
@@ -222,7 +229,14 @@ export async function PATCH(request: Request) {
       syncLookbackDays: syncLookbackDays !== undefined ? syncLookbackDays : undefined,
       dashboardConfigJson: updatedConfigJson !== undefined ? updatedConfigJson : undefined,
       vaultEnabled: vaultEnabled !== undefined ? vaultEnabled : undefined,
-      vaultMasterPassword: vaultMasterPassword !== undefined ? vaultMasterPassword : undefined,
+      // A senha mestre é gravada como hash scrypt, nunca em texto. Antes disto o
+      // valor do formulário ia cru para o banco — e o banco vai para backup.
+      vaultMasterPassword:
+        vaultMasterPassword !== undefined
+          ? vaultMasterPassword
+            ? await hashMasterPassword(String(vaultMasterPassword))
+            : null
+          : undefined,
       vaultInactivityMin: vaultInactivityMin !== undefined ? vaultInactivityMin : undefined,
       notificationWebhookUrl: notificationWebhookUrl !== undefined ? (notificationWebhookUrl || null) : undefined,
       telegramBotToken: telegramBotToken !== undefined ? (telegramBotToken || null) : undefined,
@@ -231,11 +245,27 @@ export async function PATCH(request: Request) {
     },
   })
 
+  // Senha mestre definida/trocada: reembrulha a chave do cofre sob ela, para que
+  // um restore do backup (que só contém o banco) recupere os segredos numa
+  // máquina nova, sem enfraquecer o backup contra roubo.
+  if (vaultMasterPassword) {
+    await storeVaultKeyRecovery(String(vaultMasterPassword)).catch((error) =>
+      console.error("[settings] falha ao guardar recuperação da chave:", error),
+    )
+  }
+
   // Padrões de salário afetam a classificação de renda: re-detecta as
   // recorrências imediatamente para o salário aparecer em receitas/projeção.
   if (salaryPatterns !== undefined) {
     await ensureRecurringDerivedFresh({ force: true })
   }
 
-  return NextResponse.json(serializeForJson(settings))
+  return NextResponse.json(
+    serializeForJson({
+      ...settings,
+      // Idem GET: o hash não volta para o cliente.
+      vaultMasterPassword: undefined,
+      hasVaultMasterPassword: Boolean(settings.vaultMasterPassword),
+    }),
+  )
 }

@@ -5,6 +5,8 @@ import { Prisma } from "@prisma/client"
 
 import { prisma } from "@/lib/prisma"
 
+import { resolveVaultKey } from "./vault-key"
+
 const scrypt = promisify(scryptCallback)
 const MASTER_PASSWORD_PREFIX = "scrypt"
 const SECRET_ALGORITHM = "aes-256-gcm"
@@ -103,7 +105,13 @@ function normalizeSecretValue(value?: string | null) {
 }
 
 function getEncryptionPassphrase() {
-  return normalizeSecretValue(process.env.APP_SECRETS_ENCRYPTION_KEY)
+  // `resolveVaultKey` usa a env quando existe e, na ausência dela, o arquivo
+  // autogerado no volume de dados — o usuário nunca precisa criar essa chave.
+  try {
+    return normalizeSecretValue(resolveVaultKey())
+  } catch {
+    return normalizeSecretValue(process.env.APP_SECRETS_ENCRYPTION_KEY)
+  }
 }
 
 const KDF_SALT = Buffer.from("gravel-app-secrets-kdf-v1", "utf8")
@@ -112,7 +120,7 @@ function getEncryptionKey(legacy = false) {
   const passphrase = getEncryptionPassphrase()
   if (!passphrase) {
     throw new Error(
-      "APP_SECRETS_ENCRYPTION_KEY nao configurada. Defina essa chave no ambiente para persistir segredos no banco."
+      "Chave do cofre indisponível. Ela é gerada automaticamente no primeiro boot; verifique se o diretório de dados é gravável."
     )
   }
   if (legacy) {

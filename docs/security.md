@@ -4,37 +4,55 @@ Como o Gravel guarda credenciais, por que assim, e o que fazer quando uma vaza.
 
 ## Regra única
 
-**Nenhum segredo entra no repositório.** Nem literal, nem placeholder, nem
-interpolação a preencher. O `docker-compose.yml` versionado pode ficar num
-repositório público exatamente como está.
-
-Todos os valores sensíveis vivem em **um arquivo fora do git**:
+**Nenhum segredo entra no repositório, e nenhum exige editar arquivo.** Quem
+conecta um banco não abre terminal — credencial de provedor se cadastra na tela.
 
 ```
-~/.config/gravel/secrets.env      chmod 600, diretório 700
+Primeiro boot (automático, o usuário não vê)
+  <dir do banco>/secret.key           0600  → chave AES-256-GCM do cofre
+  <dir do banco>/internal-token.key   0600  → token das rotas internas
+
+Usuário, em /settings → Segurança
+  1. cria a senha mestre         (portão da UI, hash scrypt)
+  2. cadastra Pluggy/Binance/…   (criptografado em AppSecret)
 ```
 
-- O compose aponta para ele com `env_file:`.
-- O `.env` do projeto é um **link simbólico** para esse arquivo, então
-  desenvolvimento (`pnpm dev`, CLI, MCP) e produção leem a mesma fonte — sem
-  valores duplicados que saem de sincronia.
-- O compose sobrescreve `DATABASE_URL` (`environment:` tem precedência sobre
-  `env_file:`), então o mesmo arquivo serve para o banco de dev e o de produção.
+As duas chaves de infraestrutura são **geradas pelo app**, não pelo usuário:
+são infraestrutura, não configuração. E a chave do cofre não poderia vir da
+tela — a tela precisa dela para criptografar o que você digita.
 
-## As duas camadas
+Variáveis de ambiente continuam funcionando como **override opcional**
+(`getManagedSecretValue` resolve banco primeiro, ambiente depois), para quem faz
+deploy declarativo. Mas nada exige que existam.
 
-| Camada | O que guarda | Por quê |
-|---|---|---|
-| `secrets.env` (arquivo, 600) | `APP_SECRETS_ENCRYPTION_KEY`, `INTERNAL_API_KEY` | São **auto-gerados**, sem terceiros, e um deles é necessário para abrir o cofre — não podem depender dele |
-| `AppSecret` (SQLite, AES-256-GCM) | credenciais de Pluggy, Binance e Logo.dev | Geridas em `/settings → Segurança`; nunca aparecem em `docker inspect` |
+## Por que a senha mestre não é a chave de criptografia
 
-O cofre é `lib/server/secret-store.ts`: AES-256-GCM, chave derivada de
-`APP_SECRETS_ENCRYPTION_KEY`, resolução **banco primeiro, ambiente como
-fallback** (`getManagedSecretValue`). O fallback é o que permite migrar sem
-downtime: a credencial funciona vindo do arquivo até ser gravada no cofre.
+Tentador, e errado aqui. Se a chave fosse derivada da sua senha, ninguém
+descriptografaria sem ela — nem com o servidor na mão. Mas o servidor precisa
+descriptografar **sozinho**, às 02:30, quando o webhook da Pluggy chega e não há
+ninguém para digitar. Chave derivada de senha tornaria o sync desassistido
+impossível — e é a função central do app.
 
-> ⚠️ Perder `APP_SECRETS_ENCRYPTION_KEY` torna o conteúdo do cofre
-> **irrecuperável**. Guarde uma cópia num gerenciador de senhas.
+Então: **chave da máquina criptografa; senha do usuário é o portão da UI.**
+
+Exceção que vale inverter: se algum dia o app iniciar pagamentos (a Pluggy
+suporta), aí a senha por operação passa a fazer sentido — credencial que move
+dinheiro *deve* exigir humano, e o custo de não ser desassistida vira o objetivo.
+
+## Backup e recuperação
+
+`backup-db.sh` copia **só o banco** (`.backup` do SQLite), não o volume. Isso é
+deliberado: um backup vazado é inútil sem a chave, que fica fora dele.
+
+O problema óbvio seria o restore: volume novo, chave nova, segredos
+indescriptografáveis. Resolvido com **envelope**: a chave do cofre também fica no
+banco, cifrada por uma chave derivada da senha mestre (`SystemMetadata`,
+`vault-key-recovery-v1`). Assim:
+
+| Cenário | Resultado |
+|---|---|
+| Backup roubado | inútil — precisa da senha, que está na sua cabeça |
+| Restore em máquina nova | funciona digitando a senha mestre (`recoverVaultKey`) |
 
 ## Não confunda as duas chaves
 
