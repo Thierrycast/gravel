@@ -182,3 +182,52 @@ Retorna checklist e resumo do mês.
 ```
 
 Persiste o resumo final quando todas as etapas foram revisadas pela UI.
+
+## Sincronização e webhook
+
+Ver [Sincronização](sync.md) para as cadências e o diagnóstico.
+
+`POST /api/webhooks/pluggy`
+
+Endpoint que a Pluggy chama. Autentica pelo header `X-Webhook-Secret`, enfileira
+o evento e responde em milissegundos — a Pluggy exige 2XX em menos de 5 s, senão
+reenvia até 9 vezes. Idempotente por `eventId`; reenvio devolve
+`{ "ok": true, "skipped": true }`.
+
+Público apenas em `POST https://<host-publico>/hooks/pluggy`, reescrito
+pelo Traefik. Nenhuma outra rota do app sai para a internet.
+
+`GET /api/webhooks/pluggy` — diagnóstico (só na LAN): últimos 20 eventos e
+contagem por estado. Primeiro lugar a olhar quando "o dado não atualiza".
+
+`GET|POST /api/webhooks/pluggy/register` — estado e reconciliação do registro na
+Pluggy. Exige `X-INTERNAL-API-KEY`. `{ "force": true }` apaga e recria (rotação
+de secret).
+
+`GET /api/sync/events` — stream SSE dos eventos de sincronização, com heartbeat
+de 25 s. É o que faz a UI atualizar sem polling.
+
+`GET|POST /api/sync/cron` — estado do agendador e gatilho externo de um ciclo.
+Exige `X-INTERNAL-API-KEY`. Aceita `{ "force": ["incremental-sync"] }` para
+ignorar a cadência e `{ "watchdogOnly": true }` para só liberar runs órfãos.
+
+## Conexões e credenciais
+
+`GET /api/pluggy/connections/health`
+
+Problemas que precisam de ação humana: reconexão (MFA/credencial), consentimento
+do Open Finance a menos de 15 dias do vencimento, instituição instável ou fora do
+ar. Nada aqui se resolve com "sincronizar de novo".
+
+`GET|PATCH /api/settings/secrets`
+
+Credenciais de provedor. O `GET` informa onde cada valor está (`database`,
+`environment`, `unset`) e **nunca** devolve valor. O `PATCH` grava criptografado
+(AES-256-GCM) e exige a senha em `masterPassword` quando já existe uma; o
+primeiro cadastro é liberado, senão o setup seria impossível.
+
+`GET /api/pluggy/insights/income`
+
+Renda detectada pela Insights API da Pluggy versus o salário configurado. O
+produto pode não estar habilitado na aplicação; nesse caso a resposta traz
+`unavailable` com o motivo em vez de erro.

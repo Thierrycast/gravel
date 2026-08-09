@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { after } from "next/server"
-import { OpsRunStatus, Prisma } from "@prisma/client"
+import { OpsRunStatus } from "@prisma/client"
 
 import {
   parseWebhookPayload,
@@ -59,10 +59,27 @@ export async function POST(req: Request) {
   }
 
   // Claim atômica por `eventId`: reenvios da Pluggy não reprocessam o evento.
+  //
+  // Usa `upsert` em vez de `create` + catch(P2002): o caminho de reenvio é
+  // normal, e o catch fazia o Prisma logar `prisma:error` a cada repetição —
+  // ruído que parece falha num fluxo que está funcionando.
   let eventRowId: string
-  try {
-    const created = await prisma.pluggyWebhookEvent.create({
-      data: {
+  const existing = await prisma.pluggyWebhookEvent.findUnique({
+    where: { eventId: payload.eventId },
+    select: { id: true, status: true },
+  })
+
+  if (existing) {
+    // Já processado: 200 e pronto — nada de 409, que só provocaria mais retries.
+    if (existing.status === OpsRunStatus.SUCCESS) {
+      return NextResponse.json({ ok: true, skipped: true })
+    }
+    eventRowId = existing.id
+  } else {
+    const created = await prisma.pluggyWebhookEvent.upsert({
+      where: { eventId: payload.eventId },
+      update: {},
+      create: {
         eventId: payload.eventId,
         event: payload.event,
         itemId: payload.itemId ?? undefined,
@@ -74,27 +91,6 @@ export async function POST(req: Request) {
       select: { id: true },
     })
     eventRowId = created.id
-  } catch (error) {
-    if (
-      !(
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      )
-    ) {
-      throw error
-    }
-
-    const existing = await prisma.pluggyWebhookEvent.findUnique({
-      where: { eventId: payload.eventId },
-      select: { id: true, status: true },
-    })
-
-    // Já processado com sucesso: 200 e pronto — nada de 409, que só provocaria
-    // mais retries da Pluggy.
-    if (!existing || existing.status === OpsRunStatus.SUCCESS) {
-      return NextResponse.json({ ok: true, skipped: true })
-    }
-    eventRowId = existing.id
   }
 
   after(async () => {

@@ -86,3 +86,6 @@ ERROS_DOCKER.md
 02-validation-copy/
 build-validation-*/
 validation-copy-*/
+
+# Lixo de build: diff gerado, nao versionar
+diff.txt

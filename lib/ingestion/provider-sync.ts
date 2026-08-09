@@ -88,6 +88,8 @@ export async function runBinanceSync(input: {
   resources?: BinanceSyncResource[]
   symbols?: string[]
   includeZeroBalances?: boolean
+  /** Origem do run (`manual`, `scheduler`) — vai para o OpsSyncRun. */
+  trigger?: string
 }) {
   const lockKey = `binance:${input.resource}`
   const owner = await acquireSyncLock(lockKey)
@@ -95,6 +97,7 @@ export async function runBinanceSync(input: {
     provider: SourceProvider.BINANCE,
     scope: input.scope,
     resource: input.resource,
+    trigger: input.trigger,
     requestJson: JSON.stringify(input),
   })
 

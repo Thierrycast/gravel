@@ -22,8 +22,31 @@ chown -R nextjs:nodejs /app/data 2>/dev/null || true
 
 # Apply schema — ideal for homelab/personal use. For formal migrations, replace
 # with: prisma migrate deploy
+#
+# Deliberadamente SEM --accept-data-loss: o flag transformaria qualquer remoção
+# acidental de campo em perda silenciosa de dado. Em troca, uma mudança
+# destrutiva de schema falha aqui — e sem a mensagem abaixo o container só
+# entrava em loop de restart sem explicar o motivo (aconteceu em 2026-08-09 ao
+# remover `UserSetting.syncIntervalHours`).
 echo "[gravel] Applying database schema..."
-su-exec nextjs prisma db push --skip-generate
+if ! su-exec nextjs prisma db push --skip-generate; then
+  cat >&2 <<'MSG'
+
+[gravel] ERRO: o schema não pôde ser aplicado.
+
+Se o motivo acima for perda de dado (remoção de coluna/tabela), isto é
+intencional: o push é estrito de propósito. Aplique a mudança destrutiva uma
+vez, com os olhos abertos, e faça backup antes:
+
+  docker run --rm -v gravel_gravel_data:/data -v "$PWD":/b alpine \
+    cp /data/prod.db /b/prod.db.bak
+  docker run --rm --entrypoint sh -v gravel_gravel_data:/app/data \
+    -e DATABASE_URL=file:/app/data/prod.db gravel:0.1.0 \
+    -c 'prisma db push --skip-generate --accept-data-loss'
+
+MSG
+  exit 1
+fi
 
 # Start MCP Server in the background via SSE
 echo "[gravel] Starting MCP Server (SSE) on port 3001..."

@@ -49,12 +49,6 @@ const secretDefinitions = [
     description: "Segredo usado para assinar requests autenticadas da Binance.",
   },
   {
-    key: "LOGO_DEV_PUBLISHABLE_KEY",
-    provider: "Logo.dev",
-    label: "Publishable Key",
-    description: "Token publico para carregar logos no CDN da Logo.dev.",
-  },
-  {
     key: "LOGO_DEV_SECRET_KEY",
     provider: "Logo.dev",
     label: "Secret Key",

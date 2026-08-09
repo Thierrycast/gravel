@@ -38,24 +38,48 @@ declare global {
   var binanceExchangeInfoCache: ExchangeInfoCache | undefined;
 }
 
-function getEnv(name: string) {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing env var: ${name}`);
-  }
-  return value;
-}
-
 function getBaseUrl() {
   return process.env.BINANCE_API_BASE ?? defaultBaseUrl;
 }
 
-function getApiKey() {
-  return getEnv("BINANCE_API_KEY");
+/**
+ * Erro de "ainda não configurado", distinto de falha real — o agendador usa isto
+ * para ficar em silêncio em vez de encher o log enquanto não há credencial.
+ */
+export class BinanceNotConfiguredError extends Error {
+  constructor() {
+    super(
+      "Binance não configurada. Cadastre as credenciais em /settings → Chaves e credenciais.",
+    );
+    this.name = "BinanceNotConfiguredError";
+  }
 }
 
-function getApiSecret() {
-  return getEnv("BINANCE_API_SECRET");
+/**
+ * Credenciais vêm do cofre criptografado (banco) e, na ausência, do ambiente —
+ * `getManagedSecretValue` resolve nessa ordem. É o que permite cadastrar pela
+ * tela em vez de editar arquivo no servidor.
+ */
+async function getCredentials() {
+  const { getManagedSecretValue } = await import("@/lib/server/secret-store");
+  const [key, secret] = await Promise.all([
+    getManagedSecretValue("BINANCE_API_KEY"),
+    getManagedSecretValue("BINANCE_API_SECRET"),
+  ]);
+  return { apiKey: key.value, apiSecret: secret.value };
+}
+
+export async function isBinanceConfigured() {
+  const { apiKey, apiSecret } = await getCredentials();
+  return Boolean(apiKey && apiSecret);
+}
+
+async function requireCredentials() {
+  const credentials = await getCredentials();
+  if (!credentials.apiKey || !credentials.apiSecret) {
+    throw new BinanceNotConfiguredError();
+  }
+  return { apiKey: credentials.apiKey, apiSecret: credentials.apiSecret };
 }
 
 function getRecvWindow() {
@@ -110,12 +134,13 @@ async function getServerTimeOffset() {
   return offsetMs;
 }
 
-function signQuery(queryString: string) {
-  return createHmac("sha256", getApiSecret()).update(queryString).digest("hex");
+function signQuery(queryString: string, apiSecret: string) {
+  return createHmac("sha256", apiSecret).update(queryString).digest("hex");
 }
 
 async function createSignedQuery(
-  query?: Record<string, string | number | boolean | undefined>,
+  query: Record<string, string | number | boolean | undefined> | undefined,
+  apiSecret: string,
 ) {
   const offsetMs = await getServerTimeOffset();
   const params = new URLSearchParams();
@@ -129,7 +154,7 @@ async function createSignedQuery(
   params.set("recvWindow", String(getRecvWindow()));
 
   const queryString = params.toString();
-  params.set("signature", signQuery(queryString));
+  params.set("signature", signQuery(queryString, apiSecret));
 
   return params;
 }
@@ -156,8 +181,12 @@ async function binanceRequest(
 ) {
   const url = new URL(`${getBaseUrl()}${path}`);
 
-  if (options.signed) {
-    const signedParams = await createSignedQuery(options.query);
+  // Só as chamadas assinadas precisam de credencial; preços públicos seguem
+  // funcionando sem nada configurado.
+  const credentials = options.signed ? await requireCredentials() : null;
+
+  if (options.signed && credentials) {
+    const signedParams = await createSignedQuery(options.query, credentials.apiSecret);
     url.search = signedParams.toString();
   } else if (options.query) {
     for (const [key, value] of Object.entries(options.query)) {
@@ -167,9 +196,9 @@ async function binanceRequest(
   }
 
   const response = await fetch(url.toString(), {
-    headers: options.signed
+    headers: options.signed && credentials
       ? {
-          "X-MBX-APIKEY": getApiKey(),
+          "X-MBX-APIKEY": credentials.apiKey,
           "Content-Type": "application/json",
         }
       : {

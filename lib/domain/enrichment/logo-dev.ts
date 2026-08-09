@@ -77,8 +77,16 @@ function getPublishableKey() {
   return process.env.LOGO_DEV_PUBLISHABLE_KEY
 }
 
-function getSecretKey() {
-  return process.env.LOGO_DEV_SECRET_KEY
+/**
+ * Só o secret passa pelo cofre. O token publicável (`pk_`) fica no ambiente de
+ * propósito: ele vai dentro de uma URL que o browser busca — é público por
+ * desenho — e os construtores de URL são síncronos, então empurrá-lo para o cofre
+ * exigiria tornar meia dúzia de funções assíncronas sem ganhar nada.
+ */
+async function getSecretKey() {
+  const { getManagedSecretValue } = await import("@/lib/server/secret-store")
+  const { value } = await getManagedSecretValue("LOGO_DEV_SECRET_KEY")
+  return value
 }
 
 function readDomainOverrides() {
@@ -145,7 +153,7 @@ type LogoDevDescribePayload = {
 }
 
 export async function describeLogoDevDomain(domain: string) {
-  const secret = getSecretKey()
+  const secret = await getSecretKey()
   if (!secret) return null
 
   const response = await fetch(`${LOGO_DEV_DESCRIBE_BASE}/${encodeURIComponent(domain)}`, {

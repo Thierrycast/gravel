@@ -3,6 +3,7 @@ import { OpsRunStatus, Prisma, SourceProvider } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { publishSyncEvent } from "@/lib/sync-events"
 
+import { retentionCutoffs } from "./retention"
 import { drainPendingWebhookEvents } from "./webhook-events"
 import { reconcilePluggyWebhook } from "./webhook-registry"
 
@@ -36,7 +37,9 @@ export const SCHEDULER_TASKS = [
   "webhook-drain",
   "balances",
   "incremental-sync",
+  "binance-sync",
   "daily-reconcile",
+  "retention",
   "consents",
 ] as const
 
@@ -117,40 +120,19 @@ export type SyncCadence = {
   lookbackDays: number
 }
 
-/**
- * Lê a cadência do `UserSetting`. `syncIntervalMinutes` é a fonte de verdade;
- * quando ainda está no default e havia um `syncIntervalHours` customizado
- * (config antiga, em horas), semeia a partir dele para não perder a escolha.
- */
+/** Lê a cadência do `UserSetting`. `syncIntervalMinutes` é a fonte de verdade. */
 export async function resolveSyncCadence(): Promise<SyncCadence> {
   const settings = await prisma.userSetting.findFirst({
     select: {
-      id: true,
       syncIntervalMinutes: true,
-      syncIntervalHours: true,
       syncLookbackDays: true,
     },
   })
 
-  let intervalMinutes = settings?.syncIntervalMinutes ?? DEFAULT_SYNC_INTERVAL_MINUTES
-
-  if (
-    settings &&
-    settings.syncIntervalMinutes === DEFAULT_SYNC_INTERVAL_MINUTES &&
-    settings.syncIntervalHours > 0 &&
-    settings.syncIntervalHours !== 6
-  ) {
-    intervalMinutes = settings.syncIntervalHours * 60
-    await prisma.userSetting.update({
-      where: { id: settings.id },
-      data: { syncIntervalMinutes: intervalMinutes },
-    })
-    console.log(
-      `[scheduler] semeou syncIntervalMinutes=${intervalMinutes} a partir de syncIntervalHours=${settings.syncIntervalHours}.`,
-    )
-  }
-
-  const safeMinutes = Math.max(1, intervalMinutes)
+  const safeMinutes = Math.max(
+    1,
+    settings?.syncIntervalMinutes ?? DEFAULT_SYNC_INTERVAL_MINUTES,
+  )
 
   return {
     intervalMinutes: safeMinutes,
@@ -234,6 +216,81 @@ async function runDailyReconcile(cadence: SyncCadence) {
   })
 
   return summary
+}
+
+/**
+ * Sincroniza a Binance. Até aqui ela só era atualizada no clique do botão de sync
+ * (`full: true`), então o cripto envelhecia indefinidamente se ninguém abrisse o
+ * app — o mesmo defeito que a Pluggy tinha, num provedor que passei sem cobrir.
+ *
+ * Falha isolada de propósito: chave inválida da Binance não pode impedir o ciclo
+ * da Pluggy, e vice-versa.
+ */
+async function runBinanceSyncTask() {
+  const { isBinanceConfigured } = await import("@/lib/integrations/binance")
+  if (!(await isBinanceConfigured())) {
+    return { skipped: "not-configured" as const }
+  }
+
+  const { runBinanceSync } = await import("./provider-sync")
+  const summary = await runBinanceSync({
+    scope: "scheduler/binance",
+    resource: "full",
+    trigger: "scheduler",
+  })
+
+  publishSyncEvent({
+    type: "sync:done",
+    source: "scheduler",
+    message: "Cripto atualizada.",
+  })
+
+  return summary
+}
+
+/**
+ * Poda das tabelas que crescem a cada sync. Sem isto o banco só cresce: em
+ * 2026-08-08 o `PluggyPayloadSnapshot` já tinha 3088 linhas num app de uso
+ * pessoal, e o arquivo passava de 9 MB mais 5 MB de WAL.
+ *
+ * Snapshots são histórico de payload bruto (útil para depurar, não para operar),
+ * runs e eventos são log. Todos têm valor decrescente com o tempo.
+ */
+async function runRetention() {
+  const cutoffs = retentionCutoffs()
+
+  const [snapshots, runs, events] = await Promise.all([
+    prisma.pluggyPayloadSnapshot.deleteMany({
+      where: { fetchedAt: { lt: cutoffs.payloadSnapshots } },
+    }),
+    prisma.opsSyncRun.deleteMany({
+      where: {
+        startedAt: { lt: cutoffs.opsRuns },
+        // Nunca apagar um run em curso: o watchdog é quem decide o destino dele.
+        status: { not: OpsRunStatus.RUNNING },
+      },
+    }),
+    prisma.pluggyWebhookEvent.deleteMany({
+      where: {
+        receivedAt: { lt: cutoffs.webhookEvents },
+        // Só o que já foi processado — evento com erro fica para inspeção.
+        status: OpsRunStatus.SUCCESS,
+      },
+    }),
+  ])
+
+  const total = snapshots.count + runs.count + events.count
+  if (total > 0) {
+    console.log(
+      `[scheduler] poda: ${snapshots.count} snapshot(s), ${runs.count} run(s), ${events.count} evento(s).`,
+    )
+  }
+
+  return {
+    payloadSnapshots: snapshots.count,
+    opsRuns: runs.count,
+    webhookEvents: events.count,
+  }
 }
 
 /** Consentimento vencendo em menos disso vira notificação (uma vez por dia). */
@@ -362,34 +419,31 @@ export async function runSchedulerTick(options?: {
     const cadence = await resolveSyncCadence()
     detail.cadence = cadence
 
-    // Primeiro boot ou instalação nova: sem credencial da Pluggy não há o que
-    // sincronizar. Isso é estado de setup, não falha — o log fica limpo e a UI
-    // pede a configuração. Sem esta guarda, cada tick lançaria exceção.
-    const { isPluggyConfigured } = await import("@/lib/integrations/pluggy")
-    if (!(await isPluggyConfigured())) {
-      detail.pluggy = "not-configured"
-      // O dreno de webhooks ainda roda: eventos podem estar enfileirados de uma
-      // configuração anterior, e o watchdog acima já rodou.
-      await runTask("webhook-drain", TICK_INTERVAL_MS, async () => {
-        detail.webhookDrain = await drainPendingWebhookEvents()
-      })
-      return { ran, skipped: false, errors, detail }
-    }
-
     // Eventos de webhook que ficaram pendentes (processo morreu entre o 200 e o
     // processamento) ou falharam. Vem primeiro: é o caminho mais fresco.
     await runTask("webhook-drain", TICK_INTERVAL_MS, async () => {
       detail.webhookDrain = await drainPendingWebhookEvents()
     })
 
+    // Sem credencial da Pluggy não há o que sincronizar dela — estado de setup,
+    // não falha, então o log fica limpo e a UI pede a configuração.
+    //
+    // A guarda cobre **só** as tarefas da Pluggy. Antes ela dava `return` e
+    // levava Binance e poda com ela, acoplando provedores que não têm relação:
+    // uma instalação sem Pluggy nunca sincronizava cripto nem podava o banco.
+    const { isPluggyConfigured } = await import("@/lib/integrations/pluggy")
+    const pluggyReady = await isPluggyConfigured()
+    if (!pluggyReady) detail.pluggy = "not-configured"
+
     const lastReconcile =
       state.lastRunAt["daily-reconcile"] ??
       (await lastSuccessfulRunAt("reconcile"))?.getTime()
 
     if (
-      forced.has("daily-reconcile") ||
-      !lastReconcile ||
-      Date.now() - lastReconcile >= RECONCILE_INTERVAL_MS
+      pluggyReady &&
+      (forced.has("daily-reconcile") ||
+        !lastReconcile ||
+        Date.now() - lastReconcile >= RECONCILE_INTERVAL_MS)
     ) {
       await runTask("daily-reconcile", 0, async () => {
         detail.reconcile = await runDailyReconcile(cadence)
@@ -401,9 +455,10 @@ export async function runSchedulerTick(options?: {
         (await lastSuccessfulRunAt("incremental"))?.getTime()
 
       if (
-        forced.has("incremental-sync") ||
-        !lastIncremental ||
-        Date.now() - lastIncremental >= cadence.intervalMs
+        pluggyReady &&
+        (forced.has("incremental-sync") ||
+          !lastIncremental ||
+          Date.now() - lastIncremental >= cadence.intervalMs)
       ) {
         await runTask("incremental-sync", 0, async () => {
           detail.incremental = await runIncrementalSync(cadence)
@@ -411,8 +466,36 @@ export async function runSchedulerTick(options?: {
       }
     }
 
+    // Binance segue a mesma cadência do incremental da Pluggy.
+    const lastBinance =
+      state.lastRunAt["binance-sync"] ??
+      (
+        await prisma.opsSyncRun.findFirst({
+          where: {
+            provider: SourceProvider.BINANCE,
+            status: OpsRunStatus.SUCCESS,
+          },
+          orderBy: { finishedAt: "desc" },
+          select: { finishedAt: true },
+        })
+      )?.finishedAt?.getTime()
+
+    if (
+      forced.has("binance-sync") ||
+      !lastBinance ||
+      Date.now() - lastBinance >= cadence.intervalMs
+    ) {
+      await runTask("binance-sync", 0, async () => {
+        detail.binance = await runBinanceSyncTask()
+      })
+    }
+
     await runTask("balances", BALANCE_REFRESH_MS, async () => {
       detail.balances = await runBalanceRefresh()
+    })
+
+    await runTask("retention", RECONCILE_INTERVAL_MS, async () => {
+      detail.retention = await runRetention()
     })
 
     return { ran, skipped: false, errors, detail }

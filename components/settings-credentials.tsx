@@ -123,12 +123,12 @@ export function SettingsCredentials() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border bg-muted/20 p-4 text-xs text-muted-foreground">
+      <div className="border bg-muted/20 p-4 text-xs">
         <p className="flex items-center gap-2 text-sm font-medium text-foreground">
           <KeyRound className="size-4" />
           Como isto é guardado
         </p>
-        <p className="mt-1.5">
+        <p className="mt-1.5 text-muted-foreground">
           O valor é criptografado com AES-256-GCM antes de ir para o banco e nunca
           volta para esta tela — por isso os campos aparecem vazios mesmo quando a
           credencial está configurada. A chave de criptografia é gerada pelo
@@ -154,7 +154,7 @@ export function SettingsCredentials() {
             secret.managedByApp ? (
               <div
                 key={secret.key}
-                className="flex items-start gap-2 rounded-lg border bg-muted/20 p-3"
+                className="flex items-start gap-2 border bg-muted/20 p-3"
               >
                 <Check
                   className={cn(

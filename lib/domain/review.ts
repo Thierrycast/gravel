@@ -369,8 +369,13 @@ export async function getInboxPayload() {
   }
 
   for (const item of pluggyItems) {
-    const staleHours = Math.max(settings.syncIntervalHours * 2, 12)
-    const isStale = now.getTime() - item.updatedAt.getTime() > staleHours * 60 * 60 * 1000
+    // "Parado" = duas cadências sem atualizar, com piso de 12h para não alarmar
+    // em intervalos curtos (o padrão agora é 30 min, não 6 horas).
+    const staleMs = Math.max(
+      settings.syncIntervalMinutes * 2 * 60 * 1000,
+      12 * 60 * 60 * 1000,
+    )
+    const isStale = now.getTime() - item.updatedAt.getTime() > staleMs
     const needsAuth = item.status && item.status !== "UPDATED" && item.status !== "UPDATING"
     if (!isStale && !needsAuth) continue
     items.push({

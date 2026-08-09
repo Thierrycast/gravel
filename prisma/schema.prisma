@@ -390,9 +390,6 @@ model UserSetting {
   monthlySalary       Decimal  @default(0)
   showFutureSalary    Boolean  @default(false)
   showFutureAccounts  Boolean  @default(true)
-  /// @deprecated Substituído por `syncIntervalMinutes` (é semeado a partir
-  /// deste valor na primeira execução). Mantido para não perder o dado.
-  syncIntervalHours   Int      @default(6)
   /// Cadência do sync incremental automático, em minutos. Editável em
   /// /settings → Sincronização.
   syncIntervalMinutes Int      @default(30)

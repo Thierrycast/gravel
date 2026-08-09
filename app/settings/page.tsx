@@ -56,7 +56,6 @@ type SettingsFormData = {
   effectiveMonthlySalary?: number
   showFutureSalary: boolean
   showFutureAccounts: boolean
-  syncIntervalHours: number
   syncIntervalMinutes: number
   syncLookbackDays: number
   vaultEnabled: boolean
@@ -356,7 +355,6 @@ function SettingsContent() {
     monthlySalary: 0,
     showFutureSalary: false,
     showFutureAccounts: true,
-    syncIntervalHours: 6,
     syncIntervalMinutes: 30,
     syncLookbackDays: 30,
     vaultEnabled: false,
@@ -379,7 +377,6 @@ function SettingsContent() {
         monthlySalary: settings.monthlySalary,
         showFutureSalary: settings.showFutureSalary,
         showFutureAccounts: settings.showFutureAccounts,
-        syncIntervalHours: settings.syncIntervalHours,
         syncIntervalMinutes: settings.syncIntervalMinutes ?? 30,
         syncLookbackDays: settings.syncLookbackDays,
         vaultEnabled: settings.vaultEnabled,

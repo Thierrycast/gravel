@@ -160,7 +160,6 @@ export async function PATCH(request: Request) {
     monthlySalary,
     showFutureSalary,
     showFutureAccounts,
-    syncIntervalHours,
     syncIntervalMinutes,
     syncLookbackDays,
     dashboardConfigJson,
@@ -221,7 +220,6 @@ export async function PATCH(request: Request) {
       monthlySalary: monthlySalary !== undefined ? monthlySalary : undefined,
       showFutureSalary: showFutureSalary !== undefined ? showFutureSalary : undefined,
       showFutureAccounts: showFutureAccounts !== undefined ? showFutureAccounts : undefined,
-      syncIntervalHours: syncIntervalHours !== undefined ? syncIntervalHours : undefined,
       syncIntervalMinutes:
         syncIntervalMinutes !== undefined
           ? Math.max(1, Number(syncIntervalMinutes))
