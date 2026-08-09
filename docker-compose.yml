@@ -43,6 +43,9 @@ services:
       - PLUGGY_AUTH_PATH=/auth
       - PLUGGY_CONNECT_TOKEN_PATH=/connect_token
       - PLUGGY_API_KEY_TTL_SECONDS=7200
+      # URL pública do webhook — não é segredo, é endereço. O secret dele vive no
+      # cofre. Ver docs/sync.md.
+      - PLUGGY_WEBHOOK_URL=${PLUGGY_WEBHOOK_URL:-}
       - BINANCE_API_BASE=https://api.binance.com
       - BINANCE_RECV_WINDOW=5000
     healthcheck:

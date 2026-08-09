@@ -8,8 +8,9 @@ dist
 tmp
 temp
 .agents
-.env.local
-.env.*.local
+.env
+.env.*
+!.env.example
 *.log
 data
 scratch
