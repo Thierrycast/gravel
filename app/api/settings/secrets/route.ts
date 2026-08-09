@@ -13,6 +13,30 @@ type SecretsPayload = {
   secrets?: Record<string, string | null>
 }
 
+/**
+ * Status de cada credencial: onde está (banco, ambiente ou não definida) e se dá
+ * para persistir. **Nunca devolve valor** — só se existe e de onde vem.
+ */
+export async function GET() {
+  try {
+    const settings = await prisma.userSetting.findFirst({
+      select: { vaultMasterPassword: true },
+    })
+    return jsonOk({
+      results: {
+        secrets: await listManagedSecretStatuses(),
+        canPersist: canPersistSecretsToDatabase(),
+        // Quando não há senha definida, o primeiro cadastro é liberado — senão
+        // seria impossível começar (o cadastro exigiria uma senha que só pode ser
+        // criada... na mesma tela).
+        requiresMasterPassword: Boolean(settings?.vaultMasterPassword),
+      },
+    })
+  } catch (error) {
+    return jsonError(error)
+  }
+}
+
 export async function PATCH(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as SecretsPayload
@@ -22,20 +46,27 @@ export async function PATCH(request: Request) {
       create: { id: "default" },
     })
 
-    if (!settings.vaultMasterPassword) {
-      return jsonError(
-        new Error("Defina uma senha mestre antes de salvar credenciais no painel."),
-        409
+    // Sem senha definida ainda: libera o primeiro cadastro. Exigir senha aqui
+    // tornaria o setup impossível — e não há nada a proteger antes da primeira
+    // credencial existir.
+    if (settings.vaultMasterPassword) {
+      const verification = await verifyMasterPassword(
+        body.masterPassword ?? "",
+        settings.vaultMasterPassword
       )
-    }
 
-    const verification = await verifyMasterPassword(
-      body.masterPassword ?? "",
-      settings.vaultMasterPassword
-    )
+      if (!verification.valid) {
+        return jsonError(new Error("Senha incorreta."), 401)
+      }
 
-    if (!verification.valid) {
-      return jsonError(new Error("Senha mestre incorreta."), 401)
+      // Senha ainda em texto de uma versão antiga: aproveita a verificação para
+      // gravar o hash scrypt.
+      if (verification.migratedHash) {
+        await prisma.userSetting.update({
+          where: { id: "default" },
+          data: { vaultMasterPassword: verification.migratedHash },
+        })
+      }
     }
 
     const entries = Object.entries(body.secrets ?? {})
@@ -59,15 +90,6 @@ export async function PATCH(request: Request) {
       }
       await setManagedSecretValue(key, value)
       updatedKeys.push(key)
-    }
-
-    if (verification.migratedHash) {
-      await prisma.userSetting.update({
-        where: { id: "default" },
-        data: {
-          vaultMasterPassword: verification.migratedHash,
-        },
-      })
     }
 
     return jsonOk({

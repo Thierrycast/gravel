@@ -10,6 +10,7 @@ import {
   Save,
   Loader2,
   Shield,
+  KeyRound,
   Palette,
   Plus,
   X,
@@ -36,6 +37,7 @@ import { useApi } from "@/hooks/use-api"
 import { useCurrency } from "@/lib/currency-context"
 import { cn } from "@/lib/utils"
 import { PageHeader } from "@/components/page-header"
+import { SettingsCredentials } from "@/components/settings-credentials"
 import type {
   Account,
   AccountsResponse,
@@ -74,6 +76,7 @@ type SalarySuggestion = {
 }
 
 type SettingsResponse = SettingsFormData & {
+  hasVaultMasterPassword?: boolean
   salaryPatterns?: string[]
   salarySources?: SalarySource[]
   salarySuggestions?: SalarySuggestion[]
@@ -113,10 +116,17 @@ const SECTIONS = [
     hasSave: false,
   },
   {
+    id: "credenciais",
+    label: "Chaves e credenciais",
+    icon: KeyRound,
+    description: "Pluggy, Binance e Logo.dev — guardadas criptografadas",
+    hasSave: false,
+  },
+  {
     id: "seguranca",
-    label: "Segurança",
+    label: "Privacidade",
     icon: Shield,
-    description: "Vault local e senha mestre",
+    description: "Senha e bloqueio da interface",
     hasSave: true,
   },
   {
@@ -664,14 +674,19 @@ function SettingsContent() {
           </div>
         )
 
+      case "credenciais":
+        return <SettingsCredentials />
+
       case "seguranca":
         return (
           <div className="space-y-6">
             <div className="flex items-center justify-between gap-4 rounded-xl border p-4">
               <div className="space-y-0.5">
-                <Label className="text-base">Vault local</Label>
+                <Label className="text-base">Bloquear a interface</Label>
                 <p className="text-xs text-muted-foreground">
-                  Trava a interface com senha para evitar olhares curiosos. Não é criptografia bancária — é uma camada visual de proteção local.
+                  Esconde a tela atrás da senha para evitar olhares curiosos. É
+                  proteção visual — os dados no banco já ficam criptografados
+                  independente disto.
                 </p>
               </div>
               <Switch
@@ -680,18 +695,23 @@ function SettingsContent() {
               />
             </div>
 
-            <div className={cn("space-y-4 transition-opacity", !formData.vaultEnabled && "pointer-events-none opacity-40")}>
+            <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="vaultPassword">Senha mestre</Label>
+                <Label htmlFor="vaultPassword">Senha</Label>
                 <Input
                   id="vaultPassword"
                   type="password"
-                  placeholder="Defina uma senha mestre"
-                  disabled={!formData.vaultEnabled}
+                  placeholder={settings?.hasVaultMasterPassword ? "•••••••• (definida)" : "Defina uma senha"}
                   value={formData.vaultMasterPassword}
                   onChange={(e) => setFormData({ ...formData, vaultMasterPassword: e.target.value })}
                 />
-                <p className="text-xs text-muted-foreground">Use ESC para travar instantaneamente (Panic Key).</p>
+                <p className="text-xs text-muted-foreground">
+                  Serve para duas coisas: autorizar mudanças em{" "}
+                  <strong>Chaves e credenciais</strong> e — se o bloqueio acima
+                  estiver ligado — destravar a interface (ESC tranca na hora).
+                  Também é ela que recupera suas credenciais se você restaurar um
+                  backup em outra máquina, então não a perca.
+                </p>
               </div>
 
               <div className="space-y-2">
