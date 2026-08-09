@@ -75,7 +75,9 @@ x-casaos:
     - arm
   main: gravel
   author: Thierrycast
-  category: Finance
+  # 'Finance' não existe no padrão do lab (lab-lint R4). Productivity é a
+  # categoria mais próxima para um painel financeiro pessoal.
+  category: Productivity
   description:
     en_us: Personal financial dashboard with multi-currency support and privacy mode. Tracking every digital 'cascalho' with precision.
     pt_br: Dashboard financeiro pessoal com suporte a múltiplas moedas e modo privado.
@@ -90,3 +92,6 @@ x-casaos:
     pt_br: Gravel
   index: /
   port_map: "8421"
+  # Exigido pelo lab-lint (R5/R6): sem isto o link "abrir app" do CasaOS fica sem
+  # protocolo. O app não termina TLS — quem faz isso é o Traefik.
+  scheme: http
