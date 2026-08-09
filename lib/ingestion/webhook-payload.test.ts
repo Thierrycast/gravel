@@ -143,3 +143,29 @@ describe("constantTimeEquals", () => {
     expect(constantTimeEquals("", "")).toBe(true)
   })
 })
+
+describe("payloads reais que chegaram em produção", () => {
+  // Estes três eventos ficaram em ERROR por 5 tentativas cada: eram items que o
+  // Gravel não acompanha (o MeuPluggy expõe a mesma conexão sob mais de um
+  // itemId). O parsing precisa lidar com `clientUserId: null` e com `id`
+  // duplicando `itemId`.
+  it("processa item/updated com clientUserId nulo e id == itemId", () => {
+    const payload = parseWebhookPayload({
+      itemId: "c653623b-3c83-42e1-8448-b53c4688c924",
+      clientId: "30c57a86-9336-46fa-a3fa-6149454c772d",
+      event: "item/updated",
+      id: "c653623b-3c83-42e1-8448-b53c4688c924",
+      eventId: "60f6ed88-35f9-4493-ab87-e109f2a2042c",
+      clientUserId: null,
+      triggeredBy: "SYNC",
+    })
+
+    expect(payload.eventId).toBe("60f6ed88-35f9-4493-ab87-e109f2a2042c")
+    expect(payload.itemId).toBe("c653623b-3c83-42e1-8448-b53c4688c924")
+    expect(payload.clientUserId).toBeNull()
+    // `eventId` tem de vencer o `id`, senão eventos distintos do mesmo item
+    // colidiriam na claim de idempotência.
+    expect(payload.eventId).not.toBe(payload.itemId)
+    expect(payload.triggeredBy).toBe("SYNC")
+  })
+})

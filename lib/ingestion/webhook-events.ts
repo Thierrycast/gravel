@@ -40,6 +40,42 @@ export type WebhookHandleResult = {
 }
 
 /**
+ * A Pluggy notifica sobre **todos** os items da aplicação, inclusive os que o
+ * Gravel não acompanha.
+ *
+ * No caso do MeuPluggy isso é rotina: a mesma conexão aparece sob mais de um
+ * `itemId` (medido em 2026-08-08 — três items órfãos com contas, números e
+ * saldos idênticos aos dos items locais, atualizados no mesmo minuto). Ingerir
+ * o órfão **duplicaria** os lançamentos no dashboard, então o certo é ignorar.
+ *
+ * Antes disto, o evento estourava em `prisma.pluggyItem.update()` (P2025:
+ * nenhum registro para atualizar), queimava as 5 tentativas e ficava em ERROR.
+ */
+async function isTrackedItem(itemId: string) {
+  const item = await prisma.pluggyItem.findUnique({
+    where: { pluggyItemId: itemId },
+    select: { pluggyItemId: true },
+  })
+  return Boolean(item)
+}
+
+function ignoredUntrackedItem(
+  event: string,
+  itemId: string,
+): WebhookHandleResult {
+  console.log(
+    `[webhook] ${event} para o item ${itemId}, que o Gravel não acompanha — ignorado. ` +
+      "Normal com MeuPluggy, que expõe a mesma conexão sob mais de um itemId.",
+  )
+  return {
+    event,
+    handled: false,
+    reprojected: false,
+    detail: { itemId, reason: "item-not-tracked" },
+  }
+}
+
+/**
  * Executa o efeito de um evento. Não trata idempotência nem estado da fila —
  * isso é de `processQueuedWebhookEvent`.
  */
@@ -92,6 +128,9 @@ async function handleItemSynced(
   const itemId = payload.itemId
   if (!itemId) {
     return { event: payload.event, handled: false, reprojected: false }
+  }
+  if (!(await isTrackedItem(itemId))) {
+    return ignoredUntrackedItem(payload.event, itemId)
   }
 
   const item = (await fetchItem(itemId)) as Record<string, unknown> | null
@@ -152,6 +191,10 @@ async function handleItemError(
     return { event: payload.event, handled: false, reprojected: false }
   }
 
+  if (!(await isTrackedItem(itemId))) {
+    return ignoredUntrackedItem(payload.event, itemId)
+  }
+
   const item = (await fetchItem(itemId).catch(() => null)) as Record<
     string,
     unknown
@@ -187,6 +230,10 @@ async function handleItemNeedsAction(
   const itemId = payload.itemId
   if (!itemId) {
     return { event: payload.event, handled: false, reprojected: false }
+  }
+
+  if (!(await isTrackedItem(itemId))) {
+    return ignoredUntrackedItem(payload.event, itemId)
   }
 
   const item = (await fetchItem(itemId).catch(() => null)) as Record<
