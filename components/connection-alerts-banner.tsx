@@ -2,12 +2,12 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { AlertTriangle, PlugZap, X } from "lucide-react"
+import { PlugZap } from "lucide-react"
 
+import { AttentionBanner } from "@/components/attention-banner"
 import { useApi } from "@/hooks/use-api"
 import { useSyncStream } from "@/hooks/use-sync-stream"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
 
 type ConnectionAlert = {
   kind: "needs-action" | "consent-expiring" | "connector-unstable" | "stale"
@@ -73,6 +73,7 @@ export function ConnectionAlertsBanner() {
 
   const critical = alerts.some((alert) => alert.severity === "critical")
   const needsReconnect = alerts.some((alert) => alert.kind !== "connector-unstable")
+  const first = alerts[0]
 
   function dismiss() {
     const now = Date.now()
@@ -85,50 +86,37 @@ export function ConnectionAlertsBanner() {
   }
 
   return (
-    <div
-      role="alert"
-      className={cn(
-        "mx-auto mb-4 flex w-full max-w-4xl items-start gap-3 rounded-md border px-3 py-2 text-sm text-foreground backdrop-blur-sm",
-        critical
-          ? "border-red-500/40 bg-red-500/10"
-          : "border-amber-500/40 bg-amber-500/10",
-      )}
-    >
-      <AlertTriangle
-        className={cn(
-          "mt-0.5 size-4 shrink-0",
-          critical ? "text-red-500" : "text-amber-500",
-        )}
-      />
-      <div className="flex-1 space-y-1 leading-tight">
-        {alerts.slice(0, 3).map((alert, index) => (
-          <p key={`${alert.kind}-${alert.itemId ?? index}`}>
-            <span className="font-medium">{alert.institution}</span>{" "}
-            <span className="text-muted-foreground">{alert.message}</span>
-          </p>
-        ))}
-        {alerts.length > 3 ? (
-          <p className="text-xs text-muted-foreground">
-            e mais {alerts.length - 3} conexão(ões) com aviso.
-          </p>
-        ) : null}
-      </div>
-      {needsReconnect ? (
-        <Button asChild variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
-          <Link href="/connect">
-            <PlugZap className="size-3.5" />
-            Reconectar
-          </Link>
-        </Button>
-      ) : null}
-      <button
-        type="button"
-        onClick={dismiss}
-        aria-label="Dispensar"
-        className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <X className="size-3.5" />
-      </button>
-    </div>
+    <AttentionBanner
+      tone={critical ? "critical" : "warning"}
+      title={
+        alerts.length === 1
+          ? `${first.institution}: ${first.message}`
+          : `${alerts.length} conexões precisam de atenção`
+      }
+      detail={
+        alerts.length > 1 ? (
+          <ul className="space-y-0.5">
+            {alerts.slice(0, 3).map((alert, index) => (
+              <li key={`${alert.kind}-${alert.itemId ?? index}`}>
+                <span className="text-foreground">{alert.institution}</span>{" "}
+                {alert.message}
+              </li>
+            ))}
+            {alerts.length > 3 ? <li>e mais {alerts.length - 3}.</li> : null}
+          </ul>
+        ) : null
+      }
+      action={
+        needsReconnect ? (
+          <Button asChild variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
+            <Link href="/connect">
+              <PlugZap className="size-3.5" />
+              Reconectar
+            </Link>
+          </Button>
+        ) : null
+      }
+      onDismiss={dismiss}
+    />
   )
 }

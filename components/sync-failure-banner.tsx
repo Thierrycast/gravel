@@ -1,9 +1,10 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { AlertTriangle, RefreshCw, X } from "lucide-react"
+import { RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 
+import { AttentionBanner } from "@/components/attention-banner"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -106,47 +107,35 @@ export function SyncFailureBanner() {
   const when = formatRelative(failure.startedAt)
 
   return (
-    <div
-      role="alert"
-      className={cn(
-        "mx-auto mb-4 flex w-full max-w-4xl items-center gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-foreground",
-        "backdrop-blur-sm"
-      )}
-    >
-      <AlertTriangle className="size-4 shrink-0 text-amber-500" />
-      <div className="flex-1 leading-tight">
-        <span className="font-medium">Último sync falhou</span>{" "}
-        <span className="text-muted-foreground">
-          ({provider}, {when}).
-        </span>
-        {failure.errorMessage ? (
-          <span
-            className="ml-1 hidden text-xs text-muted-foreground/80 md:inline"
-            title={failure.errorMessage}
-          >
-            {failure.errorMessage.slice(0, 120)}
-            {failure.errorMessage.length > 120 ? "…" : ""}
-          </span>
-        ) : null}
-      </div>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={retry}
-        disabled={retrying}
-        className="h-7 gap-1.5 text-xs"
-      >
-        <RefreshCw className={cn("size-3.5", retrying && "animate-spin")} />
-        Tentar agora
-      </Button>
-      <button
-        type="button"
-        onClick={dismiss}
-        aria-label="Dispensar"
-        className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <X className="size-3.5" />
-      </button>
-    </div>
+    <AttentionBanner
+      title="A última sincronização falhou"
+      detail={
+        <>
+          <p>
+            {provider} · {when}
+          </p>
+          {failure.errorMessage ? (
+            // Sem corte em 120 caracteres no meio da frase: a mensagem ganha
+            // linha própria e `line-clamp` decide onde parar.
+            <p className="line-clamp-2" title={failure.errorMessage}>
+              {failure.errorMessage}
+            </p>
+          ) : null}
+        </>
+      }
+      action={
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={retry}
+          disabled={retrying}
+          className="h-7 gap-1.5 text-xs"
+        >
+          <RefreshCw className={cn("size-3.5", retrying && "animate-spin")} />
+          Tentar agora
+        </Button>
+      }
+      onDismiss={dismiss}
+    />
   )
 }

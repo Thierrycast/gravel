@@ -976,7 +976,7 @@ function SettingsContent() {
                   key={section.id}
                   type="button"
                   onClick={() => navigateTo(section.id)}
-                  className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3.5 text-left transition-colors hover:bg-muted/50 active:bg-muted"
+                  className="flex w-full min-w-0 items-center gap-3 border bg-card px-4 py-3.5 text-left transition-colors hover:bg-muted/50 active:bg-muted"
                 >
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
                     <Icon className="size-4 text-primary" />
@@ -1003,26 +1003,39 @@ function SettingsContent() {
 
             <Card>
               <CardHeader>
-                <div className="flex items-center gap-2">
-                  <activeSection.icon className="size-5 text-primary" />
-                  <CardTitle>{activeSection.label}</CardTitle>
-                </div>
+                <CardTitle className="text-base">{activeSection.label}</CardTitle>
                 <CardDescription>{activeSection.description}</CardDescription>
               </CardHeader>
               <CardContent>{renderPanel(activeTab)}</CardContent>
+              {activeSection.hasSave && (
+                // Mesmo desenho do desktop: rodapé dentro do painel, os mesmos
+                // rótulos e o mesmo estado. Antes as ações ficavam fora do Card,
+                // diziam "Cancelar" em vez de "Descartar" e nunca desabilitavam.
+                <CardFooter className="gap-2 border-t pt-4">
+                  <Button
+                    variant="ghost"
+                    className="flex-1"
+                    onClick={() => refetch()}
+                    disabled={saving || !isDirty}
+                  >
+                    Descartar
+                  </Button>
+                  <Button
+                    variant={isDirty ? "default" : "outline"}
+                    className="flex-1 gap-2"
+                    onClick={saveSettings}
+                    disabled={saving || !isDirty}
+                  >
+                    {saving ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Save className="size-4" />
+                    )}
+                    {isDirty ? "Salvar" : "Salvo"}
+                  </Button>
+                </CardFooter>
+              )}
             </Card>
-
-            {activeSection.hasSave && (
-              <div className="flex gap-3">
-                <Button variant="outline" className="flex-1" onClick={() => refetch()} disabled={saving}>
-                  Cancelar
-                </Button>
-                <Button className="flex-1 gap-2" onClick={saveSettings} disabled={saving}>
-                  {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-                  Salvar
-                </Button>
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -1041,7 +1054,10 @@ function SettingsContent() {
                   type="button"
                   onClick={() => navigateTo(section.id)}
                   className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors w-full",
+                    // `min-w-0`: item de grid tem `min-width: auto`, então sem isto
+                    // o botão cresce além da trilha de 240px e nenhum `truncate`
+                    // interno segura — foi assim que o texto invadiu o painel.
+                    "flex w-full min-w-0 items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors",
                     isActive
                       ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground",
