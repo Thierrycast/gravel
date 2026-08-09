@@ -7,6 +7,7 @@ import {
   fetchItem,
   fetchTransactionsByCursor,
   maxTransactionIdsPerRequest,
+  PluggyApiError,
 } from "@/lib/integrations/pluggy"
 import { persistPluggyItemState } from "@/lib/pluggy-item-refresh"
 import {
@@ -303,29 +304,34 @@ async function handleTransactionsUpdated(
   const accountCurrencyCode = await resolveAccountCurrency(accountId)
   let processed = 0
   let inserted = 0
+  const skipped: string[] = []
+
+  const ingest = async (transactions: Record<string, unknown>[]) => {
+    const result = await ingestTransactionPayloads({
+      itemId,
+      accountId,
+      accountCurrencyCode,
+      transactions,
+    })
+    processed += result.processed
+    inserted += result.inserted
+  }
 
   for (
     let index = 0;
     index < payload.transactionIds.length;
     index += maxTransactionIdsPerRequest
   ) {
-    const ids = payload.transactionIds.slice(
+    const chunk = payload.transactionIds.slice(
       index,
       index + maxTransactionIdsPerRequest,
     )
-    let after: string | null = null
-    do {
-      const page = await fetchTransactionsByCursor({ accountId, ids, after })
-      const result = await ingestTransactionPayloads({
-        itemId,
-        accountId,
-        accountCurrencyCode,
-        transactions: page.results,
-      })
-      processed += result.processed
-      inserted += result.inserted
-      after = page.next
-    } while (after)
+    const chunkSkipped = await fetchIdsResilient(
+      accountId,
+      chunk,
+      ingest,
+    )
+    skipped.push(...chunkSkipped)
   }
 
   const reprojected = await reprojectPluggy()
@@ -342,7 +348,54 @@ async function handleTransactionsUpdated(
     event: payload.event,
     handled: true,
     reprojected,
-    detail: { accountId, processed, inserted },
+    detail: { accountId, processed, inserted, skipped: skipped.length },
+  }
+}
+
+/**
+ * Busca transações por `ids` tolerando id que a Pluggy não resolve.
+ *
+ * O `GET /v2/transactions?ids=` responde **400 para o lote inteiro** se um único
+ * id não existir (ou não pertencer à conta) — medido em 2026-08-08. E 400 é
+ * definitivo, sem retry. Um id obsoleto no evento (transação atualizada e depois
+ * removida, por exemplo) descartaria todas as correções do lote.
+ *
+ * Bisecção: em caso de 400, divide o lote pela metade e tenta de novo, até
+ * isolar e pular só os ids ruins. Custo O(log n) por id problemático, em vez de
+ * uma chamada por id.
+ */
+async function fetchIdsResilient(
+  accountId: string,
+  ids: string[],
+  ingest: (transactions: Record<string, unknown>[]) => Promise<void>,
+): Promise<string[]> {
+  if (ids.length === 0) return []
+
+  try {
+    let after: string | null = null
+    do {
+      const page = await fetchTransactionsByCursor({ accountId, ids, after })
+      await ingest(page.results)
+      after = page.next
+    } while (after)
+    return []
+  } catch (error) {
+    const isBadRequest =
+      error instanceof PluggyApiError && error.statusCode === 400
+    if (!isBadRequest) throw error
+
+    // Um id só: é ele o problema — pula e segue.
+    if (ids.length === 1) {
+      console.warn(
+        `[webhook] transação ${ids[0]} não pôde ser lida (a Pluggy não a resolve); ignorada.`,
+      )
+      return ids
+    }
+
+    const middle = Math.floor(ids.length / 2)
+    const left = await fetchIdsResilient(accountId, ids.slice(0, middle), ingest)
+    const right = await fetchIdsResilient(accountId, ids.slice(middle), ingest)
+    return [...left, ...right]
   }
 }
 

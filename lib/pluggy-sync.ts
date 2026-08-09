@@ -905,6 +905,18 @@ export async function syncPluggyData(options: SyncOptions = {}) {
         continue
       }
 
+      // Item saudável não deve carregar erro antigo. Sem isto, um
+      // "MeuPluggy item cant be updated" de uma tentativa de PATCH que nem
+      // fazemos mais fica para sempre na tela como se a conexão estivesse ruim.
+      await prisma.pluggyItem
+        .updateMany({
+          where: { pluggyItemId: itemId, syncError: { not: null } },
+          data: { syncError: null },
+        })
+        .catch(() => {
+          // Best-effort: não é motivo para abortar o sync.
+        })
+
       const accounts = iterateAllPages(
         (page, currentPageSize) =>
           fetchAccounts({ itemId, page, pageSize: currentPageSize }),
