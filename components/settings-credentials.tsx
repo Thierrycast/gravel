@@ -4,6 +4,7 @@ import { useState } from "react"
 import { AlertTriangle, Check, KeyRound, Loader2, Save } from "lucide-react"
 import { toast } from "sonner"
 
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -184,22 +185,25 @@ export function SettingsCredentials() {
                 <Label htmlFor={secret.key} className="text-sm">
                   {secret.label}
                 </Label>
-                <span
+                {/* Badge do sistema em vez de span à mão — e sem `rounded-full`:
+                    os tokens de raio do projeto são 0rem, cantos retos por decisão. */}
+                <Badge
+                  variant="outline"
                   className={cn(
-                    "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+                    "gap-1 text-[10px] font-medium",
                     secret.effectiveSource === "database" &&
-                      "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                      "border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
                     secret.effectiveSource === "environment" &&
-                      "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400",
+                      "border-sky-500/40 text-sky-600 dark:text-sky-400",
                     secret.effectiveSource === "unset" &&
-                      "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                      "border-amber-500/40 text-amber-600 dark:text-amber-400",
                   )}
                 >
                   {secret.effectiveSource === "database" ? (
                     <Check className="size-3" />
                   ) : null}
                   {SOURCE_LABEL[secret.effectiveSource]}
-                </span>
+                </Badge>
               </div>
               <Input
                 id={secret.key}

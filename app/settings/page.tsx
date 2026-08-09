@@ -25,7 +25,14 @@ import {
   ArrowLeft,
 } from "lucide-react"
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Input } from "@/components/ui/input"
@@ -119,7 +126,7 @@ const SECTIONS = [
     id: "credenciais",
     label: "Chaves e credenciais",
     icon: KeyRound,
-    description: "Pluggy, Binance e Logo.dev — guardadas criptografadas",
+    description: "Pluggy, Binance e Logo.dev, criptografadas no banco",
     hasSave: false,
   },
   {
@@ -261,6 +268,9 @@ function SettingsContent() {
   const queryClient = useQueryClient()
   const { format } = useCurrency()
   const [saving, setSaving] = useState(false)
+  // Snapshot do que veio do servidor: sem ele o botão Salvar fica sempre ativo e
+  // não há como saber se há algo para salvar (nem oferecer "Descartar").
+  const [baseline, setBaseline] = useState<string | null>(null)
   const [clearingCache, setClearingCache] = useState(false)
   const [pushState, setPushState] = useState<"idle" | "loading" | "active" | "unsupported">("idle")
 
@@ -365,7 +375,7 @@ function SettingsContent() {
 
   useEffect(() => {
     if (settings) {
-      setFormData({
+      const next: SettingsFormData = {
         monthlySalary: settings.monthlySalary,
         showFutureSalary: settings.showFutureSalary,
         showFutureAccounts: settings.showFutureAccounts,
@@ -381,7 +391,9 @@ function SettingsContent() {
         telegramBotToken: settings.telegramBotToken || "",
         telegramChatId: settings.telegramChatId || "",
         anthropicApiKey: settings.anthropicApiKey || "",
-      })
+      }
+      setFormData(next)
+      setBaseline(JSON.stringify(next))
       if (Array.isArray(settings.salaryPatterns)) setSalaryPatterns(settings.salaryPatterns)
       if (Array.isArray(settings.salarySources)) setSalarySources(settings.salarySources)
       if (Array.isArray(settings.salarySuggestions)) setSalarySuggestions(settings.salarySuggestions)
@@ -472,11 +484,12 @@ function SettingsContent() {
           <div className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="salary">Salário mensal estimado (líquido)</Label>
-              <div className="relative">
+              <div className="relative max-w-[13rem]">
                 <span className="absolute left-3 top-2.5 text-sm text-muted-foreground">R$</span>
                 <Input
                   id="salary"
                   type="number"
+                  inputMode="decimal"
                   className="pl-9"
                   value={formData.monthlySalary}
                   onChange={(e) => setFormData({ ...formData, monthlySalary: parseFloat(e.target.value) })}
@@ -926,6 +939,8 @@ function SettingsContent() {
   }
 
   const activeSection = SECTIONS.find((s) => s.id === activeTab) ?? SECTIONS[0]
+  // Nada alterado → Salvar desabilitado e rotulado "Salvo". Estado que faltava.
+  const isDirty = baseline !== null && JSON.stringify(formData) !== baseline
 
   if (loading) {
     return (
@@ -1033,40 +1048,58 @@ function SettingsContent() {
                   )}
                 >
                   <Icon className={cn("size-4 shrink-0", isActive ? "text-primary" : "")} />
-                  <div className="min-w-0 flex-1">
-                    <p className={cn("font-medium leading-none", isActive ? "text-primary" : "")}>{section.label}</p>
-                    <p className="mt-0.5 text-[11px] leading-tight truncate opacity-70">{section.description}</p>
-                  </div>
+                  {/* Só o label: a descrição vive no cabeçalho do painel. Repetir nos
+                      dois lugares transformava o índice numa parede de texto de 11px
+                      e duplicava a mesma frase na tela. */}
+                  <span className="min-w-0 flex-1 truncate font-medium">{section.label}</span>
                 </button>
               )
             })}
           </nav>
         </aside>
 
-        {/* Active panel */}
-        <div className="flex-1 min-w-0 space-y-4">
+        {/* Painel ativo. `max-w-2xl` mantém rótulo e campo no mesmo campo de visão —
+            sem isso o conteúdo esticava por toda a largura e a tela ficava com um
+            vazio enorme à direita. */}
+        <div className="min-w-0 flex-1 max-w-2xl">
           <Card>
             <CardHeader>
-              <div className="flex items-center gap-2">
-                <activeSection.icon className="size-5 text-primary" />
-                <CardTitle>{activeSection.label}</CardTitle>
-              </div>
+              <CardTitle className="text-base">{activeSection.label}</CardTitle>
               <CardDescription>{activeSection.description}</CardDescription>
             </CardHeader>
             <CardContent>{renderPanel(activeTab)}</CardContent>
+            {activeSection.hasSave && (
+              // Ações no rodapé do próprio painel, alinhadas aos campos. Antes
+              // flutuavam soltas a ~150px do último campo, no meio do vazio.
+              <CardFooter className="justify-end gap-2 border-t pt-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => refetch()}
+                  disabled={saving || !isDirty}
+                >
+                  Descartar
+                </Button>
+                <Button
+                  size="sm"
+                  // Sem alterações o botão não pode continuar pintado no accent
+                  // cheio: accent saturado em estado inativo mente sobre o que
+                  // está disponível.
+                  variant={isDirty ? "default" : "outline"}
+                  className="gap-2"
+                  onClick={saveSettings}
+                  disabled={saving || !isDirty}
+                >
+                  {saving ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Save className="size-4" />
+                  )}
+                  {isDirty ? "Salvar alterações" : "Salvo"}
+                </Button>
+              </CardFooter>
+            )}
           </Card>
-
-          {activeSection.hasSave && (
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => refetch()} disabled={saving}>
-                Cancelar
-              </Button>
-              <Button className="gap-2" onClick={saveSettings} disabled={saving}>
-                {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-                Salvar alterações
-              </Button>
-            </div>
-          )}
         </div>
       </div>
     </div>
