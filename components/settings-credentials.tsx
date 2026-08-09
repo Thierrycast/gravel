@@ -17,6 +17,7 @@ type SecretStatus = {
   label: string
   description: string
   effectiveSource: "database" | "environment" | "unset"
+  managedByApp: boolean
   hasDatabaseValue: boolean
   hasEnvironmentValue: boolean
   canPersistToDatabase: boolean
@@ -144,7 +145,40 @@ export function SettingsCredentials() {
       {groups.map(([provider, items]) => (
         <div key={provider} className="space-y-3">
           <Label className="text-base">{provider}</Label>
-          {items.map((secret) => (
+          {items.map((secret) =>
+            // Valores que o app gera e rotaciona sozinho (ex.: o secret do
+            // webhook, que ele inventa e comunica à Pluggy) aparecem como status,
+            // sem campo — pedir digitação seria transferir trabalho de máquina
+            // para o usuário.
+            secret.managedByApp ? (
+              <div
+                key={secret.key}
+                className="flex items-start gap-2 rounded-lg border bg-muted/20 p-3"
+              >
+                <Check
+                  className={cn(
+                    "mt-0.5 size-3.5 shrink-0",
+                    secret.effectiveSource === "unset"
+                      ? "text-muted-foreground"
+                      : "text-emerald-500",
+                  )}
+                />
+                <div className="space-y-0.5">
+                  <p className="text-sm">
+                    {secret.label}{" "}
+                    <span className="text-xs text-muted-foreground">
+                      —{" "}
+                      {secret.effectiveSource === "unset"
+                        ? "será gerado no primeiro registro do webhook"
+                        : "gerado pelo app"}
+                    </span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {secret.description}
+                  </p>
+                </div>
+              </div>
+            ) : (
             <div key={secret.key} className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <Label htmlFor={secret.key} className="text-sm">
@@ -183,7 +217,8 @@ export function SettingsCredentials() {
               />
               <p className="text-xs text-muted-foreground">{secret.description}</p>
             </div>
-          ))}
+            ),
+          )}
           <Separator />
         </div>
       ))}

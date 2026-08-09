@@ -1,10 +1,16 @@
+import { randomBytes } from "node:crypto"
+
 import {
   createWebhook,
   deleteWebhook,
   listWebhooks,
   type PluggyWebhook,
 } from "@/lib/integrations/pluggy"
-import { getManagedSecretValue } from "@/lib/server/secret-store"
+
+import {
+  getManagedSecretValue,
+  setManagedSecretValue,
+} from "@/lib/server/secret-store"
 
 import { constantTimeEquals } from "./webhook-payload"
 
@@ -21,6 +27,24 @@ const REGISTERED_EVENT = "all"
 export async function getWebhookSecret() {
   const { value } = await getManagedSecretValue("PLUGGY_WEBHOOK_SECRET")
   return value
+}
+
+/**
+ * Garante um secret de webhook, gerando-o se não existir.
+ *
+ * Este valor não é credencial de terceiro: o app o inventa e o comunica à Pluggy
+ * no `POST /webhooks`. Como as demais chaves de infraestrutura, não faz sentido
+ * pedir que o usuário o digite — antes disto, um deploy novo exigia colar 64
+ * caracteres hex à mão, ou os webhooks passavam a levar 401.
+ */
+export async function ensureWebhookSecret() {
+  const existing = await getWebhookSecret()
+  if (existing) return existing
+
+  const generated = randomBytes(32).toString("hex")
+  await setManagedSecretValue("PLUGGY_WEBHOOK_SECRET", generated)
+  console.log("[webhook] secret gerado e guardado no cofre (primeiro registro)")
+  return generated
 }
 
 /**
@@ -88,12 +112,7 @@ export async function reconcilePluggyWebhook(options?: {
     )
   }
 
-  const secret = await getWebhookSecret()
-  if (!secret) {
-    throw new Error(
-      "PLUGGY_WEBHOOK_SECRET não configurado — sem ele o endpoint aceitaria qualquer chamada.",
-    )
-  }
+  const secret = await ensureWebhookSecret()
 
   const existing = await listWebhooks()
   const mine = existing.filter((webhook) => webhook.url === url)

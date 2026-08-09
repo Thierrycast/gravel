@@ -31,7 +31,10 @@ const secretDefinitions = [
     provider: "Pluggy",
     label: "Webhook Secret",
     description:
-      "Valor exigido no header X-Webhook-Secret dos eventos que a Pluggy envia.",
+      "Gerado pelo app e informado à Pluggy no registro do webhook. Você não precisa administrá-lo.",
+    // Não é credencial de terceiro: o app inventa este valor e o comunica à
+    // Pluggy. Como as outras chaves de infraestrutura, não deve pedir digitação.
+    managedByApp: true,
   },
   {
     key: "BINANCE_API_KEY",
@@ -68,6 +71,8 @@ export type ManagedSecretStatus = {
   label: string
   description: string
   effectiveSource: ManagedSecretSource
+  /** Gerado e rotacionado pelo próprio app — não é para o usuário digitar. */
+  managedByApp: boolean
   hasDatabaseValue: boolean
   hasEnvironmentValue: boolean
   canPersistToDatabase: boolean
@@ -368,6 +373,7 @@ export async function listManagedSecretStatuses(): Promise<ManagedSecretStatus[]
 
     return {
       ...definition,
+      managedByApp: "managedByApp" in definition && definition.managedByApp === true,
       effectiveSource: hasDatabaseValue
         ? "database"
         : hasEnvironmentValue
