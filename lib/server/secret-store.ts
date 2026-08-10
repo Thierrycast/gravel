@@ -49,6 +49,19 @@ const secretDefinitions = [
     description: "Segredo usado para assinar requests autenticadas da Binance.",
   },
   {
+    key: "VAPID_PUBLIC_KEY",
+    provider: "Notificações push",
+    label: "VAPID Public Key",
+    description:
+      "Chave pública do Web Push. Servida ao browser em runtime por /api/push/key.",
+  },
+  {
+    key: "VAPID_PRIVATE_KEY",
+    provider: "Notificações push",
+    label: "VAPID Private Key",
+    description: "Assina as notificações push enviadas pelo servidor.",
+  },
+  {
     key: "LOGO_DEV_SECRET_KEY",
     provider: "Logo.dev",
     label: "Secret Key",

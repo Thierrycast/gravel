@@ -6,10 +6,27 @@ import { getProjectionPayload } from "@/lib/domain/derived"
 
 const LOG_FILE_PATH = path.join(process.cwd(), ".agents", "logs", "notifications.log")
 
-const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY
-const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY
-if (VAPID_PUBLIC && VAPID_PRIVATE) {
-  webpush.setVapidDetails("mailto:admin@gravel.finance", VAPID_PUBLIC, VAPID_PRIVATE)
+/**
+ * VAPID vem do cofre, configurado na primeira necessidade.
+ *
+ * Antes era lido de `process.env` no carregamento do módulo — e o container nunca
+ * recebeu as chaves, então o push estava silenciosamente morto em produção. Ler
+ * sob demanda permite cadastrar pela tela e passar a funcionar sem rebuild.
+ */
+export async function getVapidKeys() {
+  const { getManagedSecretValue } = await import("@/lib/server/secret-store")
+  const [pub, priv] = await Promise.all([
+    getManagedSecretValue("VAPID_PUBLIC_KEY"),
+    getManagedSecretValue("VAPID_PRIVATE_KEY"),
+  ])
+  return { publicKey: pub.value, privateKey: priv.value }
+}
+
+async function configureWebPush() {
+  const { publicKey, privateKey } = await getVapidKeys()
+  if (!publicKey || !privateKey) return false
+  webpush.setVapidDetails("mailto:admin@gravel.finance", publicKey, privateKey)
+  return true
 }
 
 // Assegura que o diretório de logs existe
@@ -61,7 +78,7 @@ export async function triggerNotificationDelivery(
     console.error("[NOTIFICATION] Settings lookup failed:", err)
   }
 
-  if (VAPID_PUBLIC && VAPID_PRIVATE) {
+  if (await configureWebPush()) {
     try {
       const subs = await prisma.pushSubscription.findMany()
       const payload = JSON.stringify({ title, body: message, href: "/" })

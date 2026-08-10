@@ -54,6 +54,15 @@ banco, cifrada por uma chave derivada da senha mestre (`SystemMetadata`,
 | Backup roubado | inútil — precisa da senha, que está na sua cabeça |
 | Restore em máquina nova | funciona digitando a senha mestre (`recoverVaultKey`) |
 
+## Web Push (VAPID)
+
+As duas chaves VAPID também vivem no cofre. A pública é servida ao browser em
+runtime por `GET /api/push/key`, e não embutida no bundle: a tela lia
+`process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY` num componente cliente, valor inlinado
+em tempo de build — e como o build nunca teve a chave, o push ficou
+silenciosamente morto em produção até 2026-08-09. Devolver a chave pública é
+seguro por definição do protocolo; a privada nunca sai do servidor.
+
 ## Não confunda as duas chaves
 
 | | O que faz |

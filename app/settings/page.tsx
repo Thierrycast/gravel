@@ -302,10 +302,19 @@ function SettingsContent() {
         return
       }
 
-      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+      // Buscada em runtime, não embutida no build: `NEXT_PUBLIC_*` é inlinado
+      // na compilação, e o build nunca teve a chave — o push ficava morto sem
+      // dizer por quê. Agora cadastrar em Chaves e credenciais basta.
+      const keyRes = await fetch("/api/push/key")
+      const keyBody = (await keyRes.json().catch(() => null)) as {
+        results?: { publicKey?: string | null }
+      } | null
+      const vapidKey = keyBody?.results?.publicKey
       if (!vapidKey) {
         setPushState("unsupported")
-        toast.error("VAPID key não configurada no servidor")
+        toast.error(
+          "Chave VAPID não cadastrada. Configure em Chaves e credenciais.",
+        )
         return
       }
 
