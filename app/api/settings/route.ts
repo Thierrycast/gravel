@@ -8,6 +8,11 @@ import { getUserSettings } from "@/lib/domain/queries"
 
 type DashboardConfig = {
   salaryPatterns?: string[]
+  ai?: {
+    provider?: "anthropic" | "openai-compatible"
+    baseUrl?: string
+    model?: string
+  }
   [key: string]: unknown
 }
 
@@ -104,11 +109,12 @@ export async function GET() {
   })
 
   let salaryPatterns: string[] = []
+  let dashboardConfig: DashboardConfig = {}
   if (settings.dashboardConfigJson) {
     try {
-      const parsed = JSON.parse(settings.dashboardConfigJson)
-      if (Array.isArray(parsed.salaryPatterns)) {
-        salaryPatterns = parsed.salaryPatterns
+      dashboardConfig = JSON.parse(settings.dashboardConfigJson)
+      if (Array.isArray(dashboardConfig.salaryPatterns)) {
+        salaryPatterns = dashboardConfig.salaryPatterns
       }
     } catch {}
   }
@@ -144,11 +150,15 @@ export async function GET() {
     // enviava ao cliente em toda visita à tela de configurações, e o formulário
     // a carregava num input. O cliente só precisa saber se ela existe.
     vaultMasterPassword: undefined,
+    anthropicApiKey: undefined,
     hasVaultMasterPassword: Boolean(settings.vaultMasterPassword),
     salaryPatterns,
     salarySources,
     salarySuggestions,
     effectiveMonthlySalary: effectiveSettings.monthlySalary,
+    aiProvider: dashboardConfig.ai?.provider ?? "anthropic",
+    aiBaseUrl: dashboardConfig.ai?.baseUrl ?? "",
+    aiModel: dashboardConfig.ai?.model ?? "claude-haiku-4-5-20251001",
   }
 
   return NextResponse.json(serialized)
@@ -170,11 +180,18 @@ export async function PATCH(request: Request) {
     notificationWebhookUrl,
     telegramBotToken,
     telegramChatId,
-    anthropicApiKey,
+    aiProvider,
+    aiBaseUrl,
+    aiModel,
   } = body
 
   let updatedConfigJson = dashboardConfigJson
-  if (salaryPatterns !== undefined) {
+  if (
+    salaryPatterns !== undefined ||
+    aiProvider !== undefined ||
+    aiBaseUrl !== undefined ||
+    aiModel !== undefined
+  ) {
     const current = await prisma.userSetting.findFirst({
       where: { id: "default" },
     })
@@ -184,10 +201,18 @@ export async function PATCH(request: Request) {
         config = JSON.parse(current.dashboardConfigJson)
       } catch {}
     }
-    config.salaryPatterns = salaryPatterns
+    if (salaryPatterns !== undefined) config.salaryPatterns = salaryPatterns
+    if (aiProvider !== undefined || aiBaseUrl !== undefined || aiModel !== undefined) {
+      config.ai = {
+        ...config.ai,
+        ...(aiProvider !== undefined ? { provider: aiProvider } : {}),
+        ...(aiBaseUrl !== undefined ? { baseUrl: String(aiBaseUrl).trim() } : {}),
+        ...(aiModel !== undefined ? { model: String(aiModel).trim() } : {}),
+      }
+    }
     updatedConfigJson = JSON.stringify(config)
 
-    const salaryCat = await prisma.domainCategory.findFirst({
+    const salaryCat = salaryPatterns !== undefined ? await prisma.domainCategory.findFirst({
       where: {
         OR: [
           { slug: "seed-salary" },
@@ -195,7 +220,7 @@ export async function PATCH(request: Request) {
           { name: { contains: "salário" } },
         ],
       },
-    })
+    }) : null
     if (salaryCat) {
       for (const pattern of salaryPatterns) {
         await prisma.domainTransaction.updateMany({
@@ -239,7 +264,6 @@ export async function PATCH(request: Request) {
       notificationWebhookUrl: notificationWebhookUrl !== undefined ? (notificationWebhookUrl || null) : undefined,
       telegramBotToken: telegramBotToken !== undefined ? (telegramBotToken || null) : undefined,
       telegramChatId: telegramChatId !== undefined ? (telegramChatId || null) : undefined,
-      anthropicApiKey: anthropicApiKey !== undefined ? (anthropicApiKey || null) : undefined,
     },
   })
 
@@ -263,6 +287,7 @@ export async function PATCH(request: Request) {
       ...settings,
       // Idem GET: o hash não volta para o cliente.
       vaultMasterPassword: undefined,
+      anthropicApiKey: undefined,
       hasVaultMasterPassword: Boolean(settings.vaultMasterPassword),
     }),
   )

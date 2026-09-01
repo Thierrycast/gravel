@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- CasaOS: o ícone do app apontava para `raw.githubusercontent.com/Thierrycast/gravel/main/public/icon.png`, que devolve **404** porque o repositório é privado — o tile aparecia com o placeholder genérico do CasaOS. Substituído pelos bytes de `public/icon.png` reduzidos a 96×96 e embutidos como `data:image/png;base64` nos três campos do compose (`services.gravel.labels.icon`, `x-casaos.icon`, `x-casaos.thumbnail`). Regra do lab: ícone é CDN https **ou** data-URI — nunca URL de repo privado, que sempre nasce quebrada.
 - Fixed persistence issue where the resolved institution name for "MeuPluggy" connections would revert to the generic name upon synchronization.
 - Foreign-currency purchases are now ingested using the amount actually charged to the account (`amountInAccountCurrency`, BRL) instead of the raw foreign amount; added a backfill script for existing records.
 - Card bill payment outflows ("Pagamento de fatura") are no longer counted as expenses — card purchases already count individually, so the payment leg was doubling monthly spending.

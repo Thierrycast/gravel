@@ -142,7 +142,11 @@ A maneira mais rápida de rodar a aplicação em produção:
 docker compose up --build -d
 ```
 
-O `docker-compose.yml` criará um volume nomeado (`gravel_data`) para proteger o arquivo SQLite, definirá healthchecks HTTP e setará o banco em `/app/data/prod.db`. A aplicação continua escutando na porta `3000` dentro do container, mas a porta publicada no host fica fora da faixa de desenvolvimento por padrão: `8421` (configurável via `APP_PORT`).
+O `docker-compose.yml` cria o volume `gravel_data`, define healthcheck e usa
+`/app/data/prod.db`. A aplicação escuta em `3000` no container e publica
+`8421` somente em loopback e no IP Tailscale do argos. A UI normal usa
+`https://<host>.lab.home` pelo Traefik; dados financeiros não ficam mais
+abertos diretamente para toda a LAN. O MCP em `8422` permanece só em loopback.
 
 ### Docker Puro
 

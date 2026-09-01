@@ -67,6 +67,12 @@ const secretDefinitions = [
     label: "Secret Key",
     description: "Segredo usado nas chamadas Describe da Logo.dev.",
   },
+  {
+    key: "AI_API_KEY",
+    provider: "Briefing por IA",
+    label: "API Key",
+    description: "Credencial do provider Anthropic ou OpenAI-compatible usado no briefing.",
+  },
 ] as const
 
 export type ManagedSecretKey = (typeof secretDefinitions)[number]["key"]

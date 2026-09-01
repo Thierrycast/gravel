@@ -64,7 +64,9 @@ type SettingsFormData = {
   notificationWebhookUrl: string
   telegramBotToken: string
   telegramChatId: string
-  anthropicApiKey: string
+  aiProvider: "anthropic" | "openai-compatible"
+  aiBaseUrl: string
+  aiModel: string
 }
 
 type SalarySource = {
@@ -89,7 +91,6 @@ type SettingsResponse = SettingsFormData & {
   notificationWebhookUrl?: string | null
   telegramBotToken?: string | null
   telegramChatId?: string | null
-  anthropicApiKey?: string | null
 }
 
 const SECTIONS = [
@@ -372,7 +373,9 @@ function SettingsContent() {
     notificationWebhookUrl: "",
     telegramBotToken: "",
     telegramChatId: "",
-    anthropicApiKey: "",
+    aiProvider: "anthropic",
+    aiBaseUrl: "",
+    aiModel: "claude-haiku-4-5-20251001",
   })
 
   const creditCards = (accountsData?.results ?? []).filter(isCreditCard)
@@ -396,7 +399,9 @@ function SettingsContent() {
         notificationWebhookUrl: settings.notificationWebhookUrl || "",
         telegramBotToken: settings.telegramBotToken || "",
         telegramChatId: settings.telegramChatId || "",
-        anthropicApiKey: settings.anthropicApiKey || "",
+        aiProvider: settings.aiProvider || "anthropic",
+        aiBaseUrl: settings.aiBaseUrl || "",
+        aiModel: settings.aiModel || "claude-haiku-4-5-20251001",
       }
       setFormData(next)
       setBaseline(JSON.stringify(next))
@@ -803,16 +808,33 @@ function SettingsContent() {
             <Separator />
 
             <div className="space-y-2">
-              <Label htmlFor="anthropicKey">Anthropic API Key</Label>
+              <Label htmlFor="aiProvider">Provider do briefing</Label>
+              <select
+                id="aiProvider"
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={formData.aiProvider}
+                onChange={(event) => setFormData({ ...formData, aiProvider: event.target.value as SettingsFormData["aiProvider"] })}
+              >
+                <option value="anthropic">Anthropic (legado)</option>
+                <option value="openai-compatible">OpenAI-compatible</option>
+              </select>
               <Input
-                id="anthropicKey"
-                type="password"
-                placeholder="sk-ant-..."
-                value={formData.anthropicApiKey}
-                onChange={(e) => setFormData({ ...formData, anthropicApiKey: e.target.value })}
+                aria-label="Modelo do briefing"
+                placeholder="Modelo"
+                value={formData.aiModel}
+                onChange={(event) => setFormData({ ...formData, aiModel: event.target.value })}
               />
+              {formData.aiProvider === "openai-compatible" && (
+                <Input
+                  aria-label="Base URL do provider"
+                  type="url"
+                  placeholder="http://servidor-local:porta/v1"
+                  value={formData.aiBaseUrl}
+                  onChange={(event) => setFormData({ ...formData, aiBaseUrl: event.target.value })}
+                />
+              )}
               <p className="text-xs text-muted-foreground">
-                Necessária para o Briefing Automático Mensal em /insights.
+                A chave é cadastrada no cofre, em Credenciais. Nenhum endpoint é ativado automaticamente.
               </p>
             </div>
 
