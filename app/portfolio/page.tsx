@@ -133,14 +133,25 @@ function SummaryStat({
   }[tone]
 
   return (
-    <div className="surface flex items-center justify-between gap-3 p-4">
-      <div className="min-w-0">
-        <p className="section-eyebrow">{label}</p>
-        <p className={cn("mt-1 text-lg font-semibold tracking-tight tabular-nums", toneClass)}>
-          {value}
-        </p>
+    // h-full + mt-auto: os rótulos têm comprimentos diferentes ("Fiat total" cabe
+    // numa linha, "Cripto total" quebra em duas), então sem isto os valores dos
+    // quatro tiles ficavam em alturas diferentes na mesma linha.
+    <div className="surface flex h-full flex-col gap-1 p-4">
+      <div className="flex items-start justify-between gap-2">
+        <p className="section-eyebrow min-w-0">{label}</p>
+        <Icon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
       </div>
-      <Icon className="size-4 shrink-0 text-muted-foreground" />
+      {/* truncate + min-w-0: o valor ficava por cima do ícone quando o tile
+          apertava — ele não tem como transbordar da própria coluna agora. */}
+      <p
+        title={value}
+        className={cn(
+          "mt-auto min-w-0 truncate text-lg font-semibold tracking-tight tabular-nums",
+          toneClass
+        )}
+      >
+        {value}
+      </p>
     </div>
   )
 }
@@ -304,8 +315,8 @@ export default function PortfolioPage() {
       />
 
       <section className="surface flex flex-col gap-5 p-5 md:p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="min-w-0">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 lg:max-w-md">
             <p className="section-eyebrow">Patrimônio líquido total</p>
             <p
               className={cn(
@@ -320,7 +331,10 @@ export default function PortfolioPage() {
             </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {/* auto-fit com piso de 10rem: os tiles nunca são espremidos abaixo da
+              largura em que o valor deixa de caber; em telas estreitas a linha
+              quebra em vez de achatar. */}
+          <div className="grid w-full gap-3 [grid-template-columns:repeat(auto-fit,minmax(10rem,1fr))] lg:w-auto lg:min-w-[34rem]">
             <SummaryStat
               label="Fiat total"
               value={formatPortfolioMoney(breakdown.fiat.total)}
