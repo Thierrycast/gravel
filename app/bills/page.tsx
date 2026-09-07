@@ -23,6 +23,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { PageError } from "@/components/page-error";
 import { PageHeader } from "@/components/page-header";
+import { LogoImage } from "@/components/logo-image";
 import type {
   CardStatement,
   CardStatementsPayload,
@@ -165,8 +166,18 @@ function CardSection({
     <section className="rounded-xl border bg-card">
       {/* Card header */}
       <div className="flex items-center gap-3 p-4 sm:p-5">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
-          {getInitials(card.accountName)}
+        <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-xs font-bold text-muted-foreground">
+          {card.imageUrl ? (
+            <LogoImage
+              src={card.imageUrl}
+              alt={card.institutionName ?? card.accountName}
+              className="size-full rounded-full"
+              fallback={getInitials(card.accountName)}
+              fallbackClassName="text-xs font-bold text-muted-foreground"
+            />
+          ) : (
+            getInitials(card.accountName)
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">

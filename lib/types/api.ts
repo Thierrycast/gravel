@@ -135,6 +135,7 @@ export interface CardStatementsPayload {
   accountId: string;
   accountName: string;
   institutionName: string | null;
+  imageUrl: string | null;
   configured: boolean;
   closingDay: number | null;
   dueDay: number | null;

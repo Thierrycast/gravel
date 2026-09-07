@@ -30,6 +30,10 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "img.logo.dev" },
+      // Logos de instituição do Pluggy (getPluggyLogoUrl). Faltava aqui: /accounts
+      // renderiza com <img> e nunca passou pelo next/image, mas /bills usa
+      // LogoImage (next/image), que valida o hostname mesmo com unoptimized.
+      { protocol: "https", hostname: "cdn.pluggy.ai" },
       { protocol: "https", hostname: "raw.githubusercontent.com" },
     ],
   },
