@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest"
 
-import { extractCursor, PluggyApiError } from "./pluggy"
+import {
+  clearPluggyApiKeyCache,
+  extractCursor,
+  getPluggyErrorDetails,
+  PluggyApiError,
+  PluggyCredentialsError,
+  PluggyNotConfiguredError,
+} from "./pluggy"
 
 describe("PluggyApiError", () => {
   it("flags rate limit and transient status codes", () => {
@@ -30,6 +37,43 @@ describe("PluggyApiError", () => {
     })
     expect(consent.code).toBe("BALANCE_CONSENT_ERROR")
     expect(consent.statusCode).toBe(403)
+  })
+
+  it("converte credenciais inválidas em orientação segura para a tela", () => {
+    expect(getPluggyErrorDetails(new PluggyCredentialsError())).toEqual({
+      statusCode: 401,
+      code: "PLUGGY_CREDENTIALS_INVALID",
+      message:
+        "O Pluggy recusou o Client ID ou o Client Secret. Atualize as duas credenciais em Configurações → Chaves e credenciais.",
+      actionPath: "/settings?tab=credenciais",
+      retryable: false,
+    })
+  })
+
+  it("distingue ausência de configuração de falha transitória", () => {
+    expect(getPluggyErrorDetails(new PluggyNotConfiguredError())).toMatchObject({
+      statusCode: 409,
+      code: "PLUGGY_NOT_CONFIGURED",
+      retryable: false,
+    })
+    expect(
+      getPluggyErrorDetails(
+        new PluggyApiError({ statusCode: 503, message: "indisponível" }),
+      ),
+    ).toMatchObject({ statusCode: 503, retryable: true })
+  })
+
+  it("limpa a API key em cache quando as credenciais mudam", () => {
+    globalThis.pluggyApiKeyCache = {
+      apiKey: "cached-key",
+      expiresAt: Date.now() + 60_000,
+    }
+    globalThis.pluggyAuthFailureCache = {
+      expiresAt: Date.now() + 60_000,
+    }
+    clearPluggyApiKeyCache()
+    expect(globalThis.pluggyApiKeyCache).toBeUndefined()
+    expect(globalThis.pluggyAuthFailureCache).toBeUndefined()
   })
 })
 

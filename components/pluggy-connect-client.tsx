@@ -1,6 +1,7 @@
 "use client"
 
 import dynamic from "next/dynamic"
+import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   AlertTriangle,
@@ -35,6 +36,13 @@ type PluggySuccessPayload = {
 type PluggyErrorPayload = {
   message?: string
   code?: string
+}
+
+type ProviderIssue = {
+  code?: string
+  message: string
+  actionPath?: string | null
+  retryable?: boolean
 }
 
 type StoredItem = {
@@ -197,11 +205,12 @@ function connectorInitials(name: string | null) {
 export function PluggyConnectClient() {
   const [token, setToken] = useState<string | null>(null)
   const [tokenState, setTokenState] = useState<LoadState>("loading")
-  const [tokenError, setTokenError] = useState<string | null>(null)
+  const [tokenIssue, setTokenIssue] = useState<ProviderIssue | null>(null)
 
   const [items, setItems] = useState<StoredItem[]>([])
   const [itemsState, setItemsState] = useState<LoadState>("loading")
   const [itemsError, setItemsError] = useState<string | null>(null)
+  const [providerIssue, setProviderIssue] = useState<ProviderIssue | null>(null)
 
   const [isOpening, setIsOpening] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -219,9 +228,17 @@ export function PluggyConnectClient() {
     }
     try {
       const response = await fetch("/api/pluggy/items", { cache: "no-store" })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const data = (await response.json()) as StoredItem[]
-      setItems(Array.isArray(data) ? data : [])
+      const data = (await response.json().catch(() => null)) as
+        | StoredItem[]
+        | { items?: StoredItem[]; providerIssue?: ProviderIssue | null; details?: string }
+        | null
+      if (!response.ok) {
+        throw new Error(
+          (!Array.isArray(data) && data?.details) || `HTTP ${response.status}`,
+        )
+      }
+      setItems(Array.isArray(data) ? data : (data?.items ?? []))
+      setProviderIssue(Array.isArray(data) ? null : (data?.providerIssue ?? null))
       setItemsState("ready")
       setItemsError(null)
     } catch (err) {
@@ -237,27 +254,41 @@ export function PluggyConnectClient() {
   const loadToken = useCallback(async () => {
     console.log("[PluggyConnect] Loading token...");
     setTokenState("loading")
-    setTokenError(null)
+    setTokenIssue(null)
     try {
       const response = await fetch("/api/pluggy/connect-token", {
         method: "POST",
       })
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.details || `HTTP ${response.status}`);
+        const errorData = (await response.json().catch(() => ({}))) as {
+          details?: string
+          code?: string
+          actionPath?: string | null
+          retryable?: boolean
+        }
+        setTokenIssue({
+          message: errorData.details || `Falha ao iniciar o widget (HTTP ${response.status}).`,
+          code: errorData.code,
+          actionPath: errorData.actionPath,
+          retryable: errorData.retryable,
+        })
+        setTokenState("error")
+        return
       }
       const data = await response.json()
       if (!data?.accessToken) {
         console.error("[PluggyConnect] API returned no accessToken:", data);
         throw new Error("Token inválido");
       }
-      console.log("[PluggyConnect] Token loaded successfully. Ends with:", data.accessToken.slice(-10));
       setToken(data.accessToken)
       setTokenState("ready")
     } catch (err) {
       console.error("[PluggyConnect] Token load error:", err);
       setTokenState("error")
-      setTokenError(err instanceof Error ? err.message : "Falha ao iniciar widget")
+      setTokenIssue({
+        message: err instanceof Error ? err.message : "Falha ao iniciar widget",
+        retryable: true,
+      })
     }
   }, [])
 
@@ -417,22 +448,39 @@ export function PluggyConnectClient() {
   async function handleSyncNow(pluggyItemId: string) {
     setSyncingItemIds((prev) => new Set(prev).add(pluggyItemId));
     try {
-      await fetch(`/api/pluggy/items/${pluggyItemId}/refresh`, {
+      const refreshResponse = await fetch(`/api/pluggy/items/${pluggyItemId}/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ wait: false }),
       });
+      if (!refreshResponse.ok) {
+        const errorBody = (await refreshResponse.json().catch(() => null)) as {
+          error?: string
+          details?: string
+        } | null
+        throw new Error(
+          errorBody?.details ?? errorBody?.error ?? `HTTP ${refreshResponse.status}`,
+        )
+      }
       
       let attempts = 0;
       const poll = setInterval(async () => {
         attempts++;
         try {
-          const res = await fetch("/api/pluggy/items", { cache: "no-store" });
-          if (res.ok) {
-            const freshItems = (await res.json()) as StoredItem[];
-            setItems(Array.isArray(freshItems) ? freshItems : []);
+          const response = await fetch("/api/pluggy/items", { cache: "no-store" });
+          if (response.ok) {
+            const payload = (await response.json()) as
+              | StoredItem[]
+              | { items?: StoredItem[]; providerIssue?: ProviderIssue | null }
+            const freshItems = Array.isArray(payload) ? payload : (payload.items ?? [])
+            setItems(freshItems)
+            setProviderIssue(
+              Array.isArray(payload) ? null : (payload.providerIssue ?? null),
+            )
             
-            const freshItem = freshItems.find(i => i.pluggyItemId === pluggyItemId);
+            const freshItem = freshItems.find(
+              (item) => item.pluggyItemId === pluggyItemId,
+            );
             const isTerminal = freshItem && (
               freshItem.executionStatus === "SUCCESS" || 
               freshItem.executionStatus === "PARTIAL_SUCCESS" || 
@@ -453,7 +501,14 @@ export function PluggyConnectClient() {
           // ignore error
         }
       }, 4000);
-    } catch {
+    } catch (error) {
+      setFeedback({
+        tone: "negative",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Não foi possível iniciar a sincronização.",
+      })
       setSyncingItemIds((prev) => {
         const next = new Set(prev);
         next.delete(pluggyItemId);
@@ -535,11 +590,17 @@ export function PluggyConnectClient() {
           tone="negative"
           icon={AlertTriangle}
           title="Não conseguimos iniciar o widget do Pluggy"
-          message={tokenError ?? "Verifique as credenciais e tente novamente."}
+          message={tokenIssue?.message ?? "Verifique as credenciais e tente novamente."}
           action={
-            <Button variant="outline" size="sm" onClick={() => void loadToken()}>
-              Tentar novamente
-            </Button>
+            tokenIssue?.actionPath ? (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={tokenIssue.actionPath}>Corrigir credenciais</Link>
+              </Button>
+            ) : tokenIssue?.retryable !== false ? (
+              <Button variant="outline" size="sm" onClick={() => void loadToken()}>
+                Tentar novamente
+              </Button>
+            ) : null
           }
         />
       ) : tokenState === "loading" ? (
@@ -548,6 +609,22 @@ export function PluggyConnectClient() {
           icon={Loader2}
           title="Preparando widget seguro"
           message="Estamos solicitando um token de uso único ao Pluggy."
+        />
+      ) : null}
+
+      {providerIssue && tokenState !== "error" ? (
+        <InlineNotice
+          tone="negative"
+          icon={AlertTriangle}
+          title="Sincronização do Pluggy indisponível"
+          message={providerIssue.message}
+          action={
+            providerIssue.actionPath ? (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={providerIssue.actionPath}>Corrigir credenciais</Link>
+              </Button>
+            ) : null
+          }
         />
       ) : null}
 

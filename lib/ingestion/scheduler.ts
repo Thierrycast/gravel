@@ -431,9 +431,23 @@ export async function runSchedulerTick(options?: {
     // A guarda cobre **só** as tarefas da Pluggy. Antes ela dava `return` e
     // levava Binance e poda com ela, acoplando provedores que não têm relação:
     // uma instalação sem Pluggy nunca sincronizava cripto nem podava o banco.
-    const { isPluggyConfigured } = await import("@/lib/integrations/pluggy")
-    const pluggyReady = await isPluggyConfigured()
+    const { getApiKey, getPluggyErrorDetails, isPluggyConfigured } =
+      await import("@/lib/integrations/pluggy")
+    let pluggyReady = await isPluggyConfigured()
     if (!pluggyReady) detail.pluggy = "not-configured"
+    if (pluggyReady) {
+      try {
+        await getApiKey()
+      } catch (error) {
+        const issue = getPluggyErrorDetails(error)
+        pluggyReady = false
+        detail.pluggy = {
+          code: issue.code,
+          message: issue.message,
+          actionPath: issue.actionPath,
+        }
+      }
+    }
 
     const lastReconcile =
       state.lastRunAt["daily-reconcile"] ??
@@ -490,9 +504,11 @@ export async function runSchedulerTick(options?: {
       })
     }
 
-    await runTask("balances", BALANCE_REFRESH_MS, async () => {
-      detail.balances = await runBalanceRefresh()
-    })
+    if (pluggyReady) {
+      await runTask("balances", BALANCE_REFRESH_MS, async () => {
+        detail.balances = await runBalanceRefresh()
+      })
+    }
 
     await runTask("retention", RECONCILE_INTERVAL_MS, async () => {
       detail.retention = await runRetention()

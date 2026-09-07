@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server"
 
-import { fetchAccounts, fetchItem } from "@/lib/integrations/pluggy"
+import {
+  fetchAccounts,
+  fetchItem,
+  getApiKey,
+  getPluggyErrorDetails,
+} from "@/lib/integrations/pluggy"
 import { deriveInstitutionFromNames } from "@/lib/domain/utils"
 import { PLUGGY_CONNECTOR_MAPPING, getPluggyLogoUrl } from "@/lib/constants/pluggy-connectors"
 import {
@@ -54,6 +59,28 @@ export async function GET() {
   const statusByConnector = new Map(
     connectorStatuses.map((status) => [status.connectorId, status]),
   )
+
+  // Autentica uma vez antes de consultar cada item. Credencial global inválida
+  // não deve produzir uma exceção e um log para cada banco conectado.
+  try {
+    await getApiKey()
+  } catch (error) {
+    const details = getPluggyErrorDetails(error)
+    return NextResponse.json({
+      items: items.map((item) => ({
+        ...item,
+        consentExpiresAt:
+          consentByItem.get(item.pluggyItemId)?.expiresAt ?? item.consentExpiresAt,
+        consentStatus: consentByItem.get(item.pluggyItemId)?.status ?? null,
+        owner: identityByItem.get(item.pluggyItemId) ?? null,
+        connectorStatus:
+          item.connectorId !== null
+            ? (statusByConnector.get(item.connectorId)?.status ?? null)
+            : null,
+      })),
+      providerIssue: details,
+    })
+  }
 
   const enrichedItems = await Promise.all(
     items.map(async (item) => {
@@ -122,7 +149,7 @@ export async function GET() {
     })
   )
 
-  return NextResponse.json(enrichedItems)
+  return NextResponse.json({ items: enrichedItems, providerIssue: null })
 }
 
 export async function POST(request: Request) {

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
 
-import { createConnectToken } from "@/lib/integrations/pluggy"
+import {
+  createConnectToken,
+  getPluggyErrorDetails,
+} from "@/lib/integrations/pluggy"
 import { getWebhookUrl } from "@/lib/ingestion/webhook-registry"
 
 export const dynamic = "force-dynamic"
@@ -17,19 +20,23 @@ export async function POST() {
 
     return NextResponse.json({ accessToken })
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Falha ao gerar o token de conexao do Pluggy"
+    const details = getPluggyErrorDetails(error)
 
-    console.error("[pluggy/connect-token]", error)
+    if (details.retryable) {
+      console.error("[pluggy/connect-token]", error)
+    } else {
+      console.warn(`[pluggy/connect-token] ${details.code}: ${details.message}`)
+    }
 
     return NextResponse.json(
       {
         error: "Pluggy Widget Init Failed",
-        details: message,
+        details: details.message,
+        code: details.code,
+        actionPath: details.actionPath,
+        retryable: details.retryable,
       },
-      { status: 500 }
+      { status: details.statusCode }
     )
   }
 }

@@ -57,6 +57,9 @@ export function SettingsCredentials() {
   const secrets = data?.results?.secrets ?? []
   const requiresPassword = data?.results?.requiresMasterPassword ?? false
   const canPersist = data?.results?.canPersist ?? false
+  const sourceConflicts = secrets.filter(
+    (secret) => secret.hasDatabaseValue && secret.hasEnvironmentValue,
+  )
 
   // Agrupamento por provedor. São ~7 itens; memoizar não pagaria o custo de
   // depender de um array recriado a cada render.
@@ -141,6 +144,14 @@ export function SettingsCredentials() {
             gravável. Enquanto isso, só valores vindos do ambiente funcionam.
           </p>
         ) : null}
+        {sourceConflicts.length > 0 ? (
+          <p className="mt-2 flex items-start gap-1.5 text-amber-600 dark:text-amber-400">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+            {sourceConflicts.length} credencial(is) existem no banco e no
+            ambiente. O valor criptografado no banco tem prioridade; o valor do
+            ambiente fica ignorado até o registro do banco ser removido.
+          </p>
+        ) : null}
       </div>
 
       {groups.map(([provider, items]) => (
@@ -220,6 +231,16 @@ export function SettingsCredentials() {
                 }
               />
               <p className="text-xs text-muted-foreground">{secret.description}</p>
+              {secret.hasDatabaseValue && secret.hasEnvironmentValue ? (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Duas fontes detectadas: usando o banco; ambiente ignorado.
+                </p>
+              ) : secret.effectiveSource === "environment" ? (
+                <p className="text-xs text-sky-600 dark:text-sky-400">
+                  Configuração externa ativa. Salvar neste campo cria um valor no
+                  banco, que passa a ter prioridade imediatamente.
+                </p>
+              ) : null}
             </div>
             ),
           )}

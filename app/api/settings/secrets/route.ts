@@ -1,4 +1,5 @@
 import { jsonError, jsonOk } from "@/lib/core/http"
+import { clearPluggyApiKeyCache } from "@/lib/integrations/pluggy"
 import { prisma } from "@/lib/prisma"
 import {
   canPersistSecretsToDatabase,
@@ -90,6 +91,15 @@ export async function PATCH(request: Request) {
       }
       await setManagedSecretValue(key, value)
       updatedKeys.push(key)
+    }
+
+    if (
+      updatedKeys.includes("PLUGGY_CLIENT_ID") ||
+      updatedKeys.includes("PLUGGY_CLIENT_SECRET")
+    ) {
+      // Uma API key obtida com as credenciais anteriores pode durar duas horas.
+      // A próxima chamada precisa validar imediatamente o valor salvo na tela.
+      clearPluggyApiKeyCache()
     }
 
     return jsonOk({

@@ -14,7 +14,7 @@ via `env_file`. A chave nunca entra em arquivo versionado.
 | `AI_PROVIDER` | `openai-compatible` |
 | `AI_BASE_URL` | `http://omniroute:20128/v1` |
 | `AI_MODEL` | `lab-economico` (nome de **combo**) |
-| `AI_API_KEY` | chave `app-gravel`, restrita a `lab-economico` |
+| `AI_API_KEY` | chave compartilhada `homelab-inference`, somente inferência |
 
 `AI_API_KEY` também pode ser gravada em /settings → Segurança; o secret store
 do app vence a variável de ambiente quando as duas existem.

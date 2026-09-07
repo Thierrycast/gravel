@@ -14,7 +14,7 @@ services:
     - <host-do-lab>:8421:3000
     - 127.0.0.1:8422:3001
     volumes:
-    - gravel_data:/app/data
+    - <appdata>/gravel/data:/app/data
     env_file:
     - /home/thierry/.config/gravel/secrets.env
     environment:
@@ -24,12 +24,13 @@ services:
     - HOSTNAME=0.0.0.0
     - TZ=America/Sao_Paulo
     - NODE_OPTIONS=--max-old-space-size=192
+    - APP_SECRETS_ENCRYPTION_KEY=
     - PLUGGY_API_BASE=https://api.pluggy.ai
     - PLUGGY_API_KEY_HEADER=X-API-KEY
     - PLUGGY_AUTH_PATH=/auth
     - PLUGGY_CONNECT_TOKEN_PATH=/connect_token
     - PLUGGY_API_KEY_TTL_SECONDS=7200
-    - PLUGGY_WEBHOOK_URL=${PLUGGY_WEBHOOK_URL:-}
+    - PLUGGY_WEBHOOK_URL=https://<host-publico>/hooks/pluggy
     - BINANCE_API_BASE=https://api.binance.com
     - BINANCE_RECV_WINDOW=5000
     healthcheck:
@@ -54,16 +55,13 @@ services:
     networks:
       default: null
       omniroute_default: null
-volumes:
-  gravel_data:
-    driver: local
 x-casaos:
   architectures:
   - amd64
   - arm64
   - arm
   main: gravel
-  hostname: <host>.lab.home
+  hostname: <host-publico>
   author: Thierrycast
   category: Productivity
   description:
@@ -79,8 +77,8 @@ x-casaos:
     en_us: Gravel
     pt_br: Gravel
   index: /
-  port_map: '443'
-  scheme: https
+  port_map: '8421'
+  scheme: http
 networks:
   omniroute_default:
     external: true
