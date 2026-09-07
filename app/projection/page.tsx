@@ -119,27 +119,27 @@ const horizons = [
 const chartConfig: ChartConfig = {
   income: {
     label: "Receitas",
-    color: "#10b981",
+    color: "var(--chart-6)",
   },
   recurringExpenses: {
     label: "Recorr\u00eancias",
-    color: "#f43f5e",
+    color: "var(--chart-8)",
   },
   cardBills: {
     label: "Faturas de cart\u00e3o",
-    color: "#ec4899",
+    color: "var(--chart-5)",
   },
   installments: {
     label: "Parcelas",
-    color: "#f59e0b",
+    color: "var(--chart-4)",
   },
   variableExpenses: {
     label: "Vari\u00e1vel",
-    color: "#6b7280",
+    color: "var(--chart-neutral)",
   },
   balance: {
     label: "Saldo Projetado",
-    color: "#3b82f6",
+    color: "var(--chart-1)",
   },
 };
 
@@ -895,9 +895,9 @@ export default function ProjectionPage() {
                 <CardContent>
                   <ChartContainer
                     config={{
-                      outer: { label: "p10–p90", color: "hsl(var(--chart-1))" },
-                      inner: { label: "p25–p75", color: "hsl(var(--chart-1))" },
-                      p50: { label: "Mediana", color: "hsl(var(--primary))" },
+                      outer: { label: "p10–p90", color: "var(--chart-1)" },
+                      inner: { label: "p25–p75", color: "var(--chart-1)" },
+                      p50: { label: "Mediana", color: "var(--chart-1)" },
                     }}
                     className="h-80 w-full"
                   >
@@ -912,17 +912,17 @@ export default function ProjectionPage() {
                       }))}
                       margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
                     >
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.3)" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="color-mix(in srgb, var(--border) 30%, transparent)" />
                       <XAxis
                         dataKey="label"
-                        tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                        tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
                         interval={Math.floor(mcData.series.length / 8)}
                         axisLine={false}
                         tickLine={false}
                       />
                       <YAxis
                         tickFormatter={(v) => formatCompact(v)}
-                        tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                        tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
                         axisLine={false}
                         tickLine={false}
                         width={60}
@@ -943,7 +943,7 @@ export default function ProjectionPage() {
                         type="monotone"
                         dataKey="outerBand"
                         stackId="outer"
-                        fill="hsl(var(--primary))"
+                        fill="var(--chart-1)"
                         fillOpacity={0.08}
                         stroke="none"
                       />
@@ -960,7 +960,7 @@ export default function ProjectionPage() {
                         type="monotone"
                         dataKey="innerBand"
                         stackId="inner"
-                        fill="hsl(var(--primary))"
+                        fill="var(--chart-1)"
                         fillOpacity={0.18}
                         stroke="none"
                       />
@@ -968,11 +968,11 @@ export default function ProjectionPage() {
                       <Line
                         type="monotone"
                         dataKey="p50"
-                        stroke="hsl(var(--primary))"
+                        stroke="var(--chart-1)"
                         strokeWidth={2}
                         dot={false}
                       />
-                      <ReferenceLine y={0} stroke="hsl(var(--destructive))" strokeDasharray="4 2" />
+                      <ReferenceLine y={0} stroke="var(--destructive)" strokeDasharray="4 2" />
                     </AreaChart>
                   </ChartContainer>
                 </CardContent>

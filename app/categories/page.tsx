@@ -183,7 +183,7 @@ function CategoryBadge({
   return (
     <div
       className={`${sizeClasses} flex shrink-0 items-center justify-center rounded-full`}
-      style={{ backgroundColor: `${color}20` }}
+      style={{ backgroundColor: `color-mix(in srgb, ${color} 13%, transparent)` }}
     >
       <span>{emoji}</span>
     </div>

@@ -116,10 +116,10 @@ const TOOLTIP_LABEL_STYLE: React.CSSProperties = {
 
 
 const CASHFLOW_COLORS: Record<string, string> = {
-  income:      "var(--chart-2)",
-  expense:     "var(--chart-4)",
-  investments: "var(--chart-3)",
-  net:         "#1d4ed8",
+  income:      "var(--chart-6)",
+  expense:     "var(--chart-8)",
+  investments: "var(--chart-1)",
+  net:         "var(--chart-7)",
 };
 
 const CASHFLOW_LABELS: Record<string, string> = {
@@ -605,10 +605,10 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
                     yAxisId={0}
                   />
                   {(cashFlowSubMode === "all" || cashFlowSubMode === "inflow") && (
-                    <Bar dataKey="income" fill="var(--chart-2)" radius={[4, 4, 0, 0]} barSize={20} />
+                    <Bar dataKey="income" fill="var(--chart-6)" radius={[4, 4, 0, 0]} barSize={20} />
                   )}
                   {(cashFlowSubMode === "all" || cashFlowSubMode === "outflow") && (
-                    <Bar dataKey="expense" fill="var(--chart-4)" radius={[4, 4, 0, 0]} barSize={20} />
+                    <Bar dataKey="expense" fill="var(--chart-8)" radius={[4, 4, 0, 0]} barSize={20} />
                   )}
                 </ComposedChart>
               </ResponsiveContainer>
@@ -842,10 +842,10 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
                     yAxisId={0}
                   />
                   {(cashFlowSubMode === "all" || cashFlowSubMode === "inflow") && (
-                    <Bar dataKey="income" fill="var(--chart-2)" radius={[4, 4, 0, 0]} barSize={20} />
+                    <Bar dataKey="income" fill="var(--chart-6)" radius={[4, 4, 0, 0]} barSize={20} />
                   )}
                   {(cashFlowSubMode === "all" || cashFlowSubMode === "outflow") && (
-                    <Bar dataKey="expense" fill="var(--chart-4)" radius={[4, 4, 0, 0]} barSize={20} />
+                    <Bar dataKey="expense" fill="var(--chart-8)" radius={[4, 4, 0, 0]} barSize={20} />
                   )}
                 </ComposedChart>
               </ResponsiveContainer>
