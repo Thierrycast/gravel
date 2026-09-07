@@ -302,19 +302,27 @@ function MerchantsContent() {
         </div>
       )}
 
-      {/* Search */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar comerciante..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-8"
-        />
-      </div>
-
-      {/* Merchants Table */}
+      {/* Merchants Table — a busca vive dentro do card que ela filtra, como
+          barra de ferramentas da tabela. Solta entre os cards de resumo e a
+          tabela ela não dizia sobre o que agia ("parece meio perdido ali"). */}
       <Card>
+        <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full sm:max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar comerciante..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8"
+              aria-label="Buscar comerciante"
+            />
+          </div>
+          <p className="shrink-0 text-xs tabular-nums text-muted-foreground" aria-live="polite">
+            {searchQuery.trim()
+              ? `${filtered.length} de ${totalMerchants} comerciantes`
+              : `${totalMerchants} comerciantes`}
+          </p>
+        </div>
         <CardContent className="p-0">
           {loading ? (
             <div className="p-4">
