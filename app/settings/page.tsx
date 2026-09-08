@@ -208,7 +208,7 @@ function CardBillingRow({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border bg-muted/20 p-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="grid gap-3 rounded-xl border bg-muted/20 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
       <div className="min-w-0">
         <p className="flex items-center gap-2 text-sm font-semibold">
           {account.name}
@@ -223,7 +223,7 @@ function CardBillingRow({
           {account.institution || "Cartão de crédito"}
         </p>
       </div>
-      <div className="flex items-end gap-2">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2">
         <div className="space-y-1">
           <Label className="text-[11px] text-muted-foreground">Fechamento</Label>
           <Input
@@ -231,7 +231,7 @@ function CardBillingRow({
             min="1"
             max="31"
             placeholder="dia"
-            className="h-8 w-20 text-sm"
+            className="h-8 min-w-0 w-full text-sm"
             value={closingDay}
             onChange={(e) => setClosingDay(e.target.value)}
           />
@@ -243,12 +243,12 @@ function CardBillingRow({
             min="1"
             max="31"
             placeholder={suggestedDueDay ? `${suggestedDueDay}?` : "dia"}
-            className="h-8 w-20 text-sm"
+            className="h-8 min-w-0 w-full text-sm"
             value={dueDay}
             onChange={(e) => setDueDay(e.target.value)}
           />
         </div>
-        <Button size="sm" className="h-8" disabled={saving} onClick={save}>
+        <Button size="sm" className="h-8 whitespace-nowrap" disabled={saving} onClick={save}>
           {saving ? "..." : "Salvar"}
         </Button>
       </div>
