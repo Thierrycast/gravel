@@ -171,6 +171,9 @@ export default function ReportsPage() {
   const [detailed, setDetailed] = useState(
     searchParams.get("detailed") !== "false",
   );
+  const [showBalances, setShowBalances] = useState(
+    searchParams.get("showBalances") !== "false",
+  );
 
   const updateParam = (key: string, value: boolean) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -220,7 +223,6 @@ export default function ReportsPage() {
     );
   }, [spending]);
 
-  
   const aggregatedCategories = useMemo(() => {
     if (!spending?.results || !allCategoriesData?.results) return [];
 
@@ -363,6 +365,22 @@ export default function ReportsPage() {
                   Subcategorias
                 </Label>
               </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="show-balances"
+                  checked={showBalances}
+                  onCheckedChange={(value) => {
+                    setShowBalances(value);
+                    updateParam("showBalances", value);
+                  }}
+                />
+                <Label
+                  htmlFor="show-balances"
+                  className="cursor-pointer text-xs font-medium"
+                >
+                  Mostrar saldo
+                </Label>
+              </div>
             </div>
             <PeriodSwitcher state={period} />
           </div>
@@ -370,7 +388,9 @@ export default function ReportsPage() {
       />
 
       {/* Stat strip */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
+      <div
+        className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${showBalances ? "md:grid-cols-4" : "md:grid-cols-1"}`}
+      >
         <StatCard
           label="Total Gasto"
           value={format(monthlyExpenses)}
@@ -388,54 +408,60 @@ export default function ReportsPage() {
             )
           }
         />
-        <StatCard
-          label="Receita"
-          value={format(monthlyIncome)}
-          tone="positive"
-        />
-        <StatCard
-          label="Resultado"
-          value={format(netResult)}
-          tone={netResult >= 0 ? "positive" : "negative"}
-          sub={
-            netChange != null && (
-              <span
-                className={
-                  netChange >= 0 ? "text-emerald-400" : "text-rose-500"
-                }
-              >
-                {netChange >= 0 ? "↑" : "↓"}{" "}
-                {formatPercent(Math.abs(netChange))} vs mês ant.
-              </span>
-            )
-          }
-        />
-        <StatCard
-          label="Taxa de Poupança"
-          value={savingsRate == null ? "N/D" : `${savingsRate.toFixed(1)}%`}
-          tone={
-            savingsRate == null
-              ? "neutral"
-              : savingsRate >= 20
-                ? "positive"
-                : savingsRate >= 0
+        {showBalances && (
+          <>
+            <StatCard
+              label="Receita"
+              value={format(monthlyIncome)}
+              tone="positive"
+            />
+            <StatCard
+              label="Resultado"
+              value={format(netResult)}
+              tone={netResult >= 0 ? "positive" : "negative"}
+              sub={
+                netChange != null && (
+                  <span
+                    className={
+                      netChange >= 0 ? "text-emerald-400" : "text-rose-500"
+                    }
+                  >
+                    {netChange >= 0 ? "↑" : "↓"}{" "}
+                    {formatPercent(Math.abs(netChange))} vs mês ant.
+                  </span>
+                )
+              }
+            />
+            <StatCard
+              label="Taxa de Poupança"
+              value={savingsRate == null ? "N/D" : `${savingsRate.toFixed(1)}%`}
+              tone={
+                savingsRate == null
                   ? "neutral"
-                  : "negative"
-          }
-          sub={
-            savingsRate == null ? (
-              <span>Receita insuficiente para calcular</span>
-            ) : (
-              <span>~{format(dailyAvgSpend)}/dia em gastos</span>
-            )
-          }
-        />
+                  : savingsRate >= 20
+                    ? "positive"
+                    : savingsRate >= 0
+                      ? "neutral"
+                      : "negative"
+              }
+              sub={
+                savingsRate == null ? (
+                  <span>Receita insuficiente para calcular</span>
+                ) : (
+                  <span>~{format(dailyAvgSpend)}/dia em gastos</span>
+                )
+              }
+            />
+          </>
+        )}
       </div>
 
       {/* Main grid */}
       <div className="grid gap-4 lg:grid-cols-5">
         {/* Gastos por Categoria */}
-        <Card className="lg:col-span-3 rounded-none border-border">
+        <Card
+          className={`${showBalances ? "lg:col-span-3" : "lg:col-span-5"} rounded-none border-border`}
+        >
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="font-mono text-xs tracking-widest text-muted-foreground uppercase">
@@ -509,8 +535,7 @@ export default function ReportsPage() {
                       <div
                         className="size-2 shrink-0"
                         style={{
-                          backgroundColor:
-                            getCategoryColor(cat.name, i),
+                          backgroundColor: getCategoryColor(cat.name, i),
                         }}
                       />
                       <span className="flex-1 truncate text-xs font-mono">
@@ -536,110 +561,112 @@ export default function ReportsPage() {
         </Card>
 
         {/* Resultado Parcial */}
-        <Card className="lg:col-span-2 rounded-none border-border">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="font-mono text-xs tracking-widest text-muted-foreground uppercase">
-                Resultado
-              </CardTitle>
-              <Link
-                href="/cash-flow"
-                className="font-mono text-xs text-primary hover:text-primary/80 inline-flex items-center gap-1"
-              >
-                fluxo_caixa
-                <ExternalLink className="size-2.5" />
-              </Link>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Net */}
-            <div>
-              <span
-                className={`font-mono text-3xl font-bold tabular-nums ${
-                  netResult >= 0 ? "text-emerald-400" : "text-rose-500"
-                }`}
-              >
-                {format(netResult)}
-              </span>
-              {netChange != null && (
-                <div className="flex items-center gap-2 mt-1">
-                  <span
-                    className={`inline-flex items-center gap-0.5 font-mono text-xs font-medium ${
-                      netChange >= 0 ? "text-emerald-400" : "text-rose-500"
-                    }`}
-                  >
-                    {netChange >= 0 ? (
-                      <TrendingUp className="size-3" />
-                    ) : (
-                      <TrendingDown className="size-3" />
-                    )}
-                    {netChange >= 0 ? "+" : ""}
-                    {formatPercent(Math.abs(netChange))}
-                  </span>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    vs período anterior
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Income/Expense bar — flat, no rounding */}
-            <div className="flex h-2 w-full overflow-hidden">
-              <div
-                className="bg-emerald-500 transition-all"
-                style={{ width: `${incomePercent}%` }}
-              />
-              <div
-                className="bg-rose-500/70 transition-all"
-                style={{ width: `${100 - incomePercent}%` }}
-              />
-            </div>
-
-            {/* Breakdown */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="border border-border p-3">
-                <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-1">
-                  Receita
-                </p>
-                <p className="font-mono text-sm font-bold tabular-nums text-emerald-400">
-                  {format(monthlyIncome)}
-                </p>
+        {showBalances && (
+          <Card className="lg:col-span-2 rounded-none border-border">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="font-mono text-xs tracking-widest text-muted-foreground uppercase">
+                  Resultado
+                </CardTitle>
+                <Link
+                  href="/cash-flow"
+                  className="font-mono text-xs text-primary hover:text-primary/80 inline-flex items-center gap-1"
+                >
+                  fluxo_caixa
+                  <ExternalLink className="size-2.5" />
+                </Link>
               </div>
-              <div className="border border-border p-3">
-                <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-1">
-                  Gasto
-                </p>
-                <p className="font-mono text-sm font-bold tabular-nums text-rose-500">
-                  {format(monthlyExpenses)}
-                </p>
-              </div>
-              <div className="border border-border p-3">
-                <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-1">
-                  Poupança
-                </p>
-                <p
-                  className={`font-mono text-sm font-bold tabular-nums ${
-                    savingsRate == null
-                      ? "text-muted-foreground"
-                      : savingsRate >= 0
-                        ? "text-emerald-400"
-                        : "text-rose-500"
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Net */}
+              <div>
+                <span
+                  className={`font-mono text-3xl font-bold tabular-nums ${
+                    netResult >= 0 ? "text-emerald-400" : "text-rose-500"
                   }`}
                 >
-                  {savingsRate == null ? "N/D" : `${savingsRate.toFixed(1)}%`}
-                </p>
+                  {format(netResult)}
+                </span>
+                {netChange != null && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <span
+                      className={`inline-flex items-center gap-0.5 font-mono text-xs font-medium ${
+                        netChange >= 0 ? "text-emerald-400" : "text-rose-500"
+                      }`}
+                    >
+                      {netChange >= 0 ? (
+                        <TrendingUp className="size-3" />
+                      ) : (
+                        <TrendingDown className="size-3" />
+                      )}
+                      {netChange >= 0 ? "+" : ""}
+                      {formatPercent(Math.abs(netChange))}
+                    </span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      vs período anterior
+                    </span>
+                  </div>
+                )}
               </div>
-              <div className="border border-border p-3">
-                <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-1">
-                  Média/dia
-                </p>
-                <p className="font-mono text-sm font-bold tabular-nums">
-                  {format(dailyAvgSpend)}
-                </p>
+
+              {/* Income/Expense bar — flat, no rounding */}
+              <div className="flex h-2 w-full overflow-hidden">
+                <div
+                  className="bg-emerald-500 transition-all"
+                  style={{ width: `${incomePercent}%` }}
+                />
+                <div
+                  className="bg-rose-500/70 transition-all"
+                  style={{ width: `${100 - incomePercent}%` }}
+                />
               </div>
-            </div>
-          </CardContent>
-        </Card>
+
+              {/* Breakdown */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="border border-border p-3">
+                  <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-1">
+                    Receita
+                  </p>
+                  <p className="font-mono text-sm font-bold tabular-nums text-emerald-400">
+                    {format(monthlyIncome)}
+                  </p>
+                </div>
+                <div className="border border-border p-3">
+                  <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-1">
+                    Gasto
+                  </p>
+                  <p className="font-mono text-sm font-bold tabular-nums text-rose-500">
+                    {format(monthlyExpenses)}
+                  </p>
+                </div>
+                <div className="border border-border p-3">
+                  <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-1">
+                    Poupança
+                  </p>
+                  <p
+                    className={`font-mono text-sm font-bold tabular-nums ${
+                      savingsRate == null
+                        ? "text-muted-foreground"
+                        : savingsRate >= 0
+                          ? "text-emerald-400"
+                          : "text-rose-500"
+                    }`}
+                  >
+                    {savingsRate == null ? "N/D" : `${savingsRate.toFixed(1)}%`}
+                  </p>
+                </div>
+                <div className="border border-border p-3">
+                  <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest mb-1">
+                    Média/dia
+                  </p>
+                  <p className="font-mono text-sm font-bold tabular-nums">
+                    {format(dailyAvgSpend)}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Sankey */}
