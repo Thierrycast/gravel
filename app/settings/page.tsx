@@ -593,11 +593,11 @@ function SettingsContent() {
                   {salarySuggestions.map((sug) => (
                     <div
                       key={sug.pattern}
-                      className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3 transition-all hover:border-primary/30"
+                      className="flex flex-col gap-3 rounded-lg border bg-background p-3 transition-all hover:border-primary/30 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="min-w-0 flex-1">
-                        <span className="font-semibold text-xs block truncate text-foreground">{sug.pattern}</span>
-                        <span className="text-[10px] text-muted-foreground block truncate">
+                        <span className="block break-words text-xs font-semibold text-foreground">{sug.pattern}</span>
+                        <span className="mt-0.5 block break-words text-[10px] text-muted-foreground">
                           Média: {format(sug.averageAmount)}/mês · Última: {sug.lastDescription || sug.pattern} ({new Date(sug.lastDate).toLocaleDateString("pt-BR")})
                         </span>
                       </div>
@@ -651,22 +651,22 @@ function SettingsContent() {
                 {salarySources.map((source) => (
                   <div
                     key={source.pattern}
-                    className="flex items-center justify-between gap-4 rounded-xl border bg-muted/30 p-3.5 transition-all hover:bg-muted/50"
+                    className="flex flex-col gap-3 rounded-xl border bg-muted/30 p-3.5 transition-all hover:bg-muted/50 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="min-w-0 flex-1 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm truncate">{source.pattern}</span>
-                        <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Ativa</span>
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <span className="min-w-0 break-words text-sm font-semibold">{source.pattern}</span>
+                        <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Ativa</span>
                       </div>
                       {source.lastDescription ? (
-                        <p className="text-xs text-muted-foreground truncate">
+                        <p className="line-clamp-2 break-words text-xs text-muted-foreground">
                           Última: {source.lastDescription} · {new Date(source.lastDate!).toLocaleDateString("pt-BR")}
                         </p>
                       ) : (
                         <p className="text-xs text-muted-foreground italic">Nenhuma transação recebida ainda no período de busca.</p>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex items-center gap-3 self-end sm:self-auto">
                       {source.lastAmount !== null && (
                         <span className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
                           {format(source.lastAmount)}
