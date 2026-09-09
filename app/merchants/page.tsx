@@ -127,9 +127,6 @@ function MerchantsContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const period = usePeriod("mtd");
 
-  const [showSalary, setShowSalary] = useState(
-    searchParams.get("showFutureSalary") !== "false",
-  );
   const [showFuture, setShowFuture] = useState(
     searchParams.get("showFutureAccounts") !== "false",
   );
@@ -150,7 +147,6 @@ function MerchantsContent() {
     {
       ...period.params,
       showFutureAccounts: String(showFuture),
-      showFutureSalary: String(showSalary),
     },
   );
   const {
@@ -226,22 +222,6 @@ function MerchantsContent() {
         actions={
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-4 border-r pr-6 border-border/60">
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="show-salary"
-                  checked={showSalary}
-                  onCheckedChange={(val) => {
-                    setShowSalary(val);
-                    updateParam("showFutureSalary", val);
-                  }}
-                />
-                <Label
-                  htmlFor="show-salary"
-                  className="text-xs font-medium cursor-pointer"
-                >
-                  Salários
-                </Label>
-              </div>
               <div className="flex items-center gap-2">
                 <Switch
                   id="show-future"
