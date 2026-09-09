@@ -38,6 +38,18 @@ function ensureLogDir() {
 }
 
 /**
+ * Header HTTP não carrega UTF-8: o título "teste de notificação" chegava no
+ * celular como "notifica\ufffdo". A saída é RFC 2047 (encoded-word), que o ntfy
+ * decodifica — conferido contra o ntfy do lab. ASCII puro passa direto, para o
+ * header continuar legível em log e em `curl -v`.
+ */
+function encodeHeaderValue(value: string): string {
+  // eslint-disable-next-line no-control-regex
+  if (!/[^\u0000-\u007f]/.test(value)) return value
+  return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`
+}
+
+/**
  * Trigger de entrega de notificacoes.
  * Grava localmente e envia via webhook Slack-compatible, ntfy, Telegram e Web
  * Push — cada um só se estiver configurado.
@@ -79,7 +91,7 @@ export async function triggerNotificationDelivery(
         method: "POST",
         headers: {
           "Content-Type": "text/plain; charset=utf-8",
-          Title: title,
+          Title: encodeHeaderValue(title),
           Priority: priority,
           Tags: tag,
           ...(settings.ntfyToken ? { Authorization: `Bearer ${settings.ntfyToken}` } : {}),
