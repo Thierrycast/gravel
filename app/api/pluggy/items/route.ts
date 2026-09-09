@@ -106,7 +106,7 @@ export async function GET() {
            }
         }
 
-        await updateStoredPluggyItem({
+        const storedItem = await updateStoredPluggyItem({
           itemId: item.pluggyItemId,
           connectorId: connectorId ?? null,
           connectorName: connectorName ?? null,
@@ -114,13 +114,13 @@ export async function GET() {
           imageUrl: imageUrl ?? null,
         })
 
-        const effectiveConnectorId = connectorId ?? item.connectorId
+        const effectiveConnectorId = storedItem.connectorId
 
         return {
-          ...item,
+          ...storedItem,
           connectorId: effectiveConnectorId,
-          connectorName: connectorName ?? item.connectorName,
-          status: liveItem?.status ?? item.status,
+          connectorName: storedItem.connectorName,
+          status: storedItem.status,
           // executionStatus vivo (SUCCESS/PARTIAL_SUCCESS/ERROR/null=em curso)
           // e horário da última atualização do item na instituição.
           executionStatus: liveItem?.executionStatus ?? item.executionStatus,
@@ -140,7 +140,7 @@ export async function GET() {
               : null,
           syncError: item.syncError,
           lastSyncedAt: item.lastSyncedAt,
-          imageUrl: imageUrl ?? item.imageUrl,
+          imageUrl: storedItem.imageUrl,
         }
       } catch (err) {
         console.warn(`[pluggy/items] failed to sync item ${item.pluggyItemId}:`, err)
