@@ -140,6 +140,10 @@ Checklist da revisão de ponta a ponta solicitada. Itens são marcados conforme 
 - Cartões sem fechamento/vencimento configurados continuam nas heurísticas antigas — configurar cada cartão em /settings › Cartões de crédito.
 - O deploy em produção aplica o schema automaticamente (`prisma db push` no entrypoint); os campos novos de billing entram sem passo manual.
 
+## Pendências de produto — anotações (2026-09-09)
+
+- [ ] Limites de crédito em `/accounts`: a Pluggy disponibiliza `creditData.creditLimit` e `creditData.availableCreditLimit`, mas o sync só persiste os campos básicos de `PluggyAccountRecord` e o projetor não os expõe em `DomainAccount`/`/api/domain/accounts`. Persistir os dois limites, expor a resposta tipada e só então mostrar o limite por cartão e o total agregado; não estimar a partir de saldo ou faturas.
+
 ---
 
 ## Achados da análise (em andamento)
@@ -150,3 +154,7 @@ Checklist da revisão de ponta a ponta solicitada. Itens são marcados conforme 
 - Faturas Pluggy (`DomainBill`) existem até o ciclo anterior; a fatura corrente é sintetizada via `bills-fallback.ts` usando o saldo total do cartão (soma de tudo em aberto) — causa raiz do problema 3.
 - Transações futuras de parcelas já existem em `DomainTransaction` (até 2027) — dá para agrupar por ciclo de fatura com precisão.
 - Projeção (`getProjectionPayload`) mistura 4 fontes de estimativa (regras, bills, parcelas detectadas, transações futuras) com riscos de dupla contagem.
+
+## Feature planejada — chat de IA multimodal (anotação `vibe_1788751248151_fq609tmo6`)
+
+- [ ] Planejar popup persistente no canto inferior direito e tela cheia, com entrada de texto, imagem e áudio; usar as ferramentas MCP existentes do Gravel e OmniRouter como provedor. Avaliar TTS/STT pela speech-api e modo de voz ao vivo por WebSocket. Antes de qualquer envio a provedor externo, definir e implementar um guard explícito contra vazamento de dados financeiros/pessoais sensíveis (minimização, redaction, confirmação e trilha de auditoria), além de controles de escopo por tool.
