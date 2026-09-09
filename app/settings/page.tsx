@@ -62,6 +62,8 @@ type SettingsFormData = {
   vaultMasterPassword: string
   vaultInactivityMin: number
   notificationWebhookUrl: string
+  ntfyTopicUrl: string
+  ntfyToken: string
   telegramBotToken: string
   telegramChatId: string
   aiProvider: "anthropic" | "openai-compatible"
@@ -89,6 +91,8 @@ type SettingsResponse = SettingsFormData & {
   salarySources?: SalarySource[]
   salarySuggestions?: SalarySuggestion[]
   notificationWebhookUrl?: string | null
+  ntfyTopicUrl?: string | null
+  ntfyToken?: string | null
   telegramBotToken?: string | null
   telegramChatId?: string | null
 }
@@ -371,6 +375,8 @@ function SettingsContent() {
     vaultMasterPassword: "",
     vaultInactivityMin: 0,
     notificationWebhookUrl: "",
+    ntfyTopicUrl: "",
+    ntfyToken: "",
     telegramBotToken: "",
     telegramChatId: "",
     aiProvider: "anthropic",
@@ -397,6 +403,8 @@ function SettingsContent() {
         vaultMasterPassword: "",
         vaultInactivityMin: settings.vaultInactivityMin,
         notificationWebhookUrl: settings.notificationWebhookUrl || "",
+        ntfyTopicUrl: settings.ntfyTopicUrl || "",
+        ntfyToken: settings.ntfyToken || "",
         telegramBotToken: settings.telegramBotToken || "",
         telegramChatId: settings.telegramChatId || "",
         aiProvider: settings.aiProvider || "anthropic",
@@ -778,6 +786,40 @@ function SettingsContent() {
 
             <div className="space-y-4">
               <div>
+                <p className="text-sm font-medium">ntfy (servidor do lab)</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Cole o tópico completo do seu ntfy. Diferente do webhook acima, o ntfy recebe a
+                  mensagem em texto puro — título, prioridade e ícone vão nos headers.
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="ntfyTopic">URL do tópico</Label>
+                  <Input
+                    id="ntfyTopic"
+                    type="url"
+                    placeholder="http://<servidor>:3380/lab-gravel"
+                    value={formData.ntfyTopicUrl}
+                    onChange={(e) => setFormData({ ...formData, ntfyTopicUrl: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ntfyToken">Token (se o tópico for protegido)</Label>
+                  <Input
+                    id="ntfyToken"
+                    type="password"
+                    placeholder="tk_..."
+                    value={formData.ntfyToken}
+                    onChange={(e) => setFormData({ ...formData, ntfyToken: e.target.value })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+              <div>
                 <p className="text-sm font-medium">Telegram</p>
                 <p className="text-xs text-muted-foreground mt-0.5">Crie um bot em @BotFather para obter o token.</p>
               </div>
@@ -869,6 +911,42 @@ function SettingsContent() {
                   Notificações push ativadas neste dispositivo.
                 </p>
               )}
+            </div>
+
+            <Separator />
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium">Testar entrega</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Dispara uma notificação pelos mesmos caminhos das reais e diz quais destinos
+                  estavam configurados. Salve antes de testar.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="shrink-0"
+                onClick={async () => {
+                  try {
+                    const res = await fetch("/api/notifications/test", { method: "POST" })
+                    const data = await res.json()
+                    if (!data.success) throw new Error(data.error || "falhou")
+                    const ligados = Object.entries(data.destinos as Record<string, boolean | number>)
+                      .filter(([, on]) => Boolean(on))
+                      .map(([nome]) => nome)
+                    toast.success(
+                      ligados.length
+                        ? `Disparado para: ${ligados.join(", ")}`
+                        : "Disparado, mas nenhum destino está configurado",
+                    )
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Falha ao disparar teste")
+                  }
+                }}
+              >
+                Enviar notificação de teste
+              </Button>
             </div>
           </div>
         )

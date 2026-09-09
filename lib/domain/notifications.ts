@@ -39,7 +39,8 @@ function ensureLogDir() {
 
 /**
  * Trigger de entrega de notificacoes.
- * Grava localmente e envia via webhook Slack-compatible e/ou Telegram se configurado.
+ * Grava localmente e envia via webhook Slack-compatible, ntfy, Telegram e Web
+ * Push — cada um só se estiver configurado.
  */
 export async function triggerNotificationDelivery(
   title: string,
@@ -65,6 +66,26 @@ export async function triggerNotificationDelivery(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       }).catch((err) => console.error("[NOTIFICATION] Webhook delivery failed:", err))
+    }
+
+    // ntfy é destino próprio, não um webhook Slack-compatible: ele publica o
+    // CORPO da requisição como mensagem. Mandar `{"text": ...}` para um tópico
+    // ntfy entrega o JSON cru no celular. Título, prioridade e tag vão em
+    // header, que é a interface dele.
+    if (settings.ntfyTopicUrl) {
+      const priority = severity === "critical" ? "5" : severity === "warning" ? "4" : "3"
+      const tag = severity === "critical" ? "rotating_light" : severity === "warning" ? "warning" : "moneybag"
+      await fetch(settings.ntfyTopicUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          Title: title,
+          Priority: priority,
+          Tags: tag,
+          ...(settings.ntfyToken ? { Authorization: `Bearer ${settings.ntfyToken}` } : {}),
+        },
+        body: message,
+      }).catch((err) => console.error("[NOTIFICATION] ntfy delivery failed:", err))
     }
 
     if (settings.telegramBotToken && settings.telegramChatId) {
