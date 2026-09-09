@@ -928,39 +928,46 @@ function SettingsContent() {
       case "dados":
         return (
           <div className="space-y-6">
-            <div className="space-y-3">
-              <Label>Exportação</Label>
-              <Button variant="outline" asChild className="gap-2 w-full sm:w-auto">
+            <section className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <h3 className="text-sm font-medium">Exportação</h3>
+                <p className="text-xs text-muted-foreground">
+                  Baixe uma cópia das transações para análise externa. O arquivo não altera seus dados.
+                </p>
+              </div>
+              <Button variant="outline" asChild className="w-full shrink-0 gap-2 sm:w-auto">
                 <a href="/api/domain/transactions/export" download>
                   <Download className="size-4" />
                   Exportar transações (CSV)
                 </a>
               </Button>
-            </div>
+            </section>
 
             <Separator />
 
-            <div className="space-y-3">
-              <div>
-                <Label>Cache local</Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Se valores parecerem desatualizados, limpe o cache. Os dados do banco de dados não são afetados.
-                </p>
+            <section className="border-t border-destructive/20 pt-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-medium">Limpar cache local</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Remove cópias salvas neste dispositivo e recarrega a interface. Os dados do banco não são afetados.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full shrink-0 gap-2 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive sm:w-auto"
+                  disabled={clearingCache}
+                  onClick={clearLocalCache}
+                >
+                  {clearingCache ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="size-4" />
+                  )}
+                  Limpar cache
+                </Button>
               </div>
-              <Button
-                variant="outline"
-                className="gap-2 w-full sm:w-auto"
-                disabled={clearingCache}
-                onClick={clearLocalCache}
-              >
-                {clearingCache ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="size-4" />
-                )}
-                Limpar cache local
-              </Button>
-            </div>
+            </section>
           </div>
         )
     }
