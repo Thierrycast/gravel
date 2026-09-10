@@ -20,6 +20,7 @@ const buildCpus = Number(process.env.NEXT_BUILD_CPUS ?? "")
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  transpilePackages: ["voice-kit"],
   devIndicators: false,
   experimental: {
     // Load route modules on demand instead of preloading every entry at boot —
