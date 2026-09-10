@@ -1085,3 +1085,20 @@ model PushSubscription {
   auth      String
   createdAt DateTime @default(now())
 }
+
+/// Histórico do chat de IA.
+///
+/// Guardado no banco porque conversa que some no refresh não serve para
+/// acompanhar decisão — ele pergunta "e aquilo que falamos ontem?". Junto vai a
+/// trilha de auditoria: qual provedor viu o quê, quantos identificadores foram
+/// mascarados e quantos bytes saíram.
+model AiChatMessage {
+  id            String   @id @default(cuid())
+  role          String
+  content       String
+  toolCallsJson String?
+  auditJson     String?
+  createdAt     DateTime @default(now())
+
+  @@index([createdAt])
+}

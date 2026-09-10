@@ -2,11 +2,11 @@ import { createHash } from "node:crypto"
 
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { generateAiText, type AiProviderKind } from "@/lib/ai/provider"
+import { resolveAiConfig } from "@/lib/ai/config"
+import { generateAiText } from "@/lib/ai/provider"
 import { getProjectionPayload } from "@/lib/domain/derived"
 import { getCardStatementsSummaryMetrics } from "@/lib/domain/billing"
 import { serializeForJson } from "@/lib/core/http"
-import { getManagedSecretValue } from "@/lib/server/secret-store"
 
 export const dynamic = "force-dynamic"
 
@@ -31,17 +31,13 @@ function rememberBriefing(key: string, value: { text: string; generatedAt: strin
 }
 
 export async function GET() {
-  const settings = await prisma.userSetting.findUnique({ where: { id: "default" } })
-  const managedSecret = await getManagedSecretValue("AI_API_KEY")
-  const apiKey = managedSecret.value || settings?.anthropicApiKey
-  if (!apiKey) {
-    return NextResponse.json({ error: "api_key_missing" }, { status: 400 })
+  // Provedor, modelo e chave saem de `lib/ai/config.ts`, o mesmo lugar que o
+  // chat usa: dois resolvedores divergiriam no primeiro ajuste de /settings.
+  const resolved = await resolveAiConfig()
+  if (!resolved.ok) {
+    return NextResponse.json({ error: resolved.reason }, { status: 400 })
   }
-
-  let aiConfig: { provider?: AiProviderKind; baseUrl?: string; model?: string } = {}
-  try {
-    aiConfig = JSON.parse(settings?.dashboardConfigJson || "{}").ai || {}
-  } catch {}
+  const aiConfig = resolved.config
 
   const now = new Date()
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
@@ -138,13 +134,7 @@ ${goalLines}
 
 Gere o briefing agora:`
 
-  // Os defaults vêm do ambiente para o provider padrão do lab (OmniRoute) não
-  // ficar fixo em código: o que estiver salvo em /settings sempre vence.
-  const envProvider = process.env.AI_PROVIDER === "openai-compatible" ? "openai-compatible" : undefined
-  const provider = aiConfig.provider || envProvider || "anthropic"
-  const fallbackModel =
-    process.env.AI_MODEL?.trim() ||
-    (provider === "anthropic" ? "claude-haiku-4-5-20251001" : "local-default")
+  const provider = aiConfig.kind
   // Mesmos dados, mesmo briefing: não há motivo para pagar uma geração nova a
   // cada vez que o dashboard é aberto. O `Cache-Control` abaixo só instrui o
   // navegador; toda requisição que CHEGA aqui gerava de novo, porque a rota é
@@ -164,9 +154,9 @@ Gere o briefing agora:`
     text = await generateAiText(
       {
         kind: provider,
-        apiKey,
-        baseUrl: aiConfig.baseUrl || process.env.AI_BASE_URL?.trim() || undefined,
-        model: aiConfig.model || fallbackModel,
+        apiKey: aiConfig.apiKey,
+        baseUrl: aiConfig.baseUrl ?? undefined,
+        model: aiConfig.model,
       },
       prompt
     )

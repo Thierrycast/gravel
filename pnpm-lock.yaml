@@ -104,6 +104,9 @@ importers:
       tw-animate-css:
         specifier: ^1.4.0
         version: 1.4.0
+      voice-kit:
+        specifier: file:vendor/voice-kit
+        version: file:vendor/voice-kit(react@19.2.3)
       web-push:
         specifier: ^3.6.7
         version: 3.6.7
@@ -5266,6 +5269,14 @@ packages:
       happy-dom:
         optional: true
       jsdom:
+        optional: true
+
+  voice-kit@file:vendor/voice-kit:
+    resolution: {directory: vendor/voice-kit, type: directory}
+    peerDependencies:
+      react: '>=18'
+    peerDependenciesMeta:
+      react:
         optional: true
 
   web-push@3.6.7:
@@ -10663,6 +10674,10 @@ snapshots:
       '@vitest/ui': 4.1.5(vitest@4.1.5)
     transitivePeerDependencies:
       - msw
+
+  voice-kit@file:vendor/voice-kit(react@19.2.3):
+    optionalDependencies:
+      react: 19.2.3
 
   web-push@3.6.7:
     dependencies:

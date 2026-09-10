@@ -58,7 +58,7 @@ for f in "${FILES[@]}"; do
   [ -f "$f" ] || continue
   # .env.example é o modelo: só documenta nomes, valores ficam vazios.
   case "$f" in
-    pnpm-lock.yaml|*.lock|.git/*) continue ;;
+    pnpm-lock.yaml|*.lock|.git/*|*.test.ts) continue ;;
   esac
 
   for pat in "${PATTERNS[@]}"; do
