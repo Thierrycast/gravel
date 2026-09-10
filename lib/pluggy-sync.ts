@@ -17,6 +17,7 @@ import {
 } from "@/lib/integrations/pluggy"
 import { resolveTransactionWindow } from "@/lib/ingestion/transaction-window"
 import { resolveStoredPluggyItemIds, updateStoredPluggyItem } from "@/lib/pluggy-items"
+import { extractCreditData } from "@/lib/domain/credit"
 import { prisma } from "@/lib/prisma"
 
 export type SyncResource =
@@ -308,9 +309,28 @@ async function syncAccountEntity(itemId: string, account: Record<string, unknown
     sourceUpdatedAt: toDate(account.updatedAt),
   })
 
+  // `creditData` só existe em conta de crédito. Vinha sendo descartado aqui —
+  // ficava no snapshot cru e nunca chegava ao domínio, então a tela de contas
+  // não tinha limite para mostrar.
+  const credit = extractCreditData(
+    account.creditData as Record<string, unknown> | null | undefined,
+  )
+  const creditFields = {
+    creditLimit: toDecimal(credit?.creditLimit) ?? null,
+    availableCreditLimit: toDecimal(credit?.availableCreditLimit) ?? null,
+    minimumPayment: toDecimal(credit?.minimumPayment) ?? null,
+    creditLevel: credit?.level ?? null,
+    creditBrand: credit?.brand ?? null,
+    creditStatus: credit?.status ?? null,
+    isLimitFlexible: credit?.isLimitFlexible ?? null,
+    balanceCloseDate: toDate(credit?.balanceCloseDate) ?? null,
+    balanceDueDate: toDate(credit?.balanceDueDate) ?? null,
+  }
+
   await prisma.pluggyAccountRecord.upsert({
     where: { externalId },
     update: {
+      ...creditFields,
       itemExternalId: itemId,
       type: toStringOrNull(account.type),
       subtype: toStringOrNull(account.subtype),
@@ -323,6 +343,7 @@ async function syncAccountEntity(itemId: string, account: Record<string, unknown
       providerUpdatedAt: toDate(account.updatedAt) ?? undefined,
     },
     create: {
+      ...creditFields,
       externalId,
       itemExternalId: itemId,
       type: toStringOrNull(account.type),

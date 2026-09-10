@@ -225,6 +225,11 @@ export async function projectPluggyAccounts() {
           kind: mapPluggyAccountKind(record.type),
           currencyCode: record.currencyCode ?? "BRL",
           balance: record.balance ?? undefined,
+          // Limite vai para o domínio com a data do conector: número que ele
+          // confere com o app do banco não pode aparecer sem dizer de quando é.
+          creditLimit: record.creditLimit,
+          availableCreditLimit: record.availableCreditLimit,
+          creditDataAt: record.creditLimit ? record.providerUpdatedAt : null,
           sourceParentId: record.itemExternalId,
           ownerName: record.owner ?? undefined,
           institutionName: institutionName ?? undefined,
@@ -241,6 +246,9 @@ export async function projectPluggyAccounts() {
           kind: mapPluggyAccountKind(record.type),
           currencyCode: record.currencyCode ?? "BRL",
           balance: record.balance ?? undefined,
+          creditLimit: record.creditLimit,
+          availableCreditLimit: record.availableCreditLimit,
+          creditDataAt: record.creditLimit ? record.providerUpdatedAt : null,
           sourceProvider: SourceProvider.PLUGGY,
           sourceExternalId: record.externalId,
           sourceParentId: record.itemExternalId,

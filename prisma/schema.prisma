@@ -86,6 +86,12 @@ model DomainAccount {
   realtimeBalance       Decimal?
   realtimeBalanceAt     DateTime?
   realtimeBalanceStatus String?
+  // Limite do cartão como o banco informa. `creditDataAt` é o horário do
+  // conector, não o do nosso sync: limite é número que o usuário confere com o
+  // app do banco, e mostrar sem data seria pedir para ele confiar no escuro.
+  creditLimit          Decimal?
+  availableCreditLimit Decimal?
+  creditDataAt         DateTime?
   metadataJson     String?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
@@ -782,6 +788,18 @@ model PluggyAccountRecord {
   taxNumber         String?
   currencyCode      String?
   balance           Decimal?
+  // `creditData` do payload da Pluggy, achatado. Vinha sendo jogado fora: o
+  // limite do cartão chegava em todo sync, ficava no snapshot cru e nunca
+  // subia para o domínio, então a tela não tinha como mostrar.
+  creditLimit          Decimal?
+  availableCreditLimit Decimal?
+  minimumPayment       Decimal?
+  creditLevel          String?
+  creditBrand          String?
+  creditStatus         String?
+  isLimitFlexible      Boolean?
+  balanceCloseDate     DateTime?
+  balanceDueDate       DateTime?
   providerCreatedAt DateTime?
   providerUpdatedAt DateTime?
   createdAt         DateTime  @default(now())

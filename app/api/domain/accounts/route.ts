@@ -107,6 +107,18 @@ export async function GET(request: Request) {
         billingDueDay: account.billingDueDay ?? null,
         realtimeBalanceAt: account.realtimeBalanceAt ?? null,
         realtimeBalanceStatus: account.realtimeBalanceStatus ?? null,
+        // Decimal do Prisma serializa como string; a tela soma isto, então
+        // converte aqui em vez de deixar "11300" + "1700" = "113001700".
+        creditLimit:
+          account.creditLimit !== null && account.creditLimit !== undefined
+            ? Number(account.creditLimit)
+            : null,
+        availableCreditLimit:
+          account.availableCreditLimit !== null &&
+          account.availableCreditLimit !== undefined
+            ? Number(account.availableCreditLimit)
+            : null,
+        creditDataAt: account.creditDataAt ?? null,
       };
     });
 
