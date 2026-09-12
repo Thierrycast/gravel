@@ -69,6 +69,8 @@ type SettingsFormData = {
   aiProvider: "anthropic" | "openai-compatible"
   aiBaseUrl: string
   aiModel: string
+  speechBaseUrl: string
+  speechVoice: string
 }
 
 type SalarySource = {
@@ -382,6 +384,8 @@ function SettingsContent() {
     aiProvider: "anthropic",
     aiBaseUrl: "",
     aiModel: "claude-haiku-4-5-20251001",
+    speechBaseUrl: "",
+    speechVoice: "",
   })
 
   const creditCards = (accountsData?.results ?? []).filter(isCreditCard)
@@ -410,6 +414,8 @@ function SettingsContent() {
         aiProvider: settings.aiProvider || "anthropic",
         aiBaseUrl: settings.aiBaseUrl || "",
         aiModel: settings.aiModel || "claude-haiku-4-5-20251001",
+        speechBaseUrl: settings.speechBaseUrl || "",
+        speechVoice: settings.speechVoice || "",
       }
       setFormData(next)
       setBaseline(JSON.stringify(next))
@@ -877,6 +883,29 @@ function SettingsContent() {
               )}
               <p className="text-xs text-muted-foreground">
                 A chave é cadastrada no cofre, em Credenciais. Nenhum endpoint é ativado automaticamente.
+              </p>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-2">
+              <Label htmlFor="speechBaseUrl">Voz do assistente (speech-api)</Label>
+              <Input
+                id="speechBaseUrl"
+                type="url"
+                placeholder="http://servidor:8010"
+                value={formData.speechBaseUrl}
+                onChange={(event) => setFormData({ ...formData, speechBaseUrl: event.target.value })}
+              />
+              <Input
+                aria-label="Voz usada na fala"
+                placeholder="piper:pt_BR-cadu-medium"
+                value={formData.speechVoice}
+                onChange={(event) => setFormData({ ...formData, speechVoice: event.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                Em branco, o assistente funciona só por texto — sem botão de microfone morto na tela.
+                O endereço é servido ao navegador em runtime e não entra no build nem em commit.
               </p>
             </div>
 

@@ -13,7 +13,10 @@ const securityHeaders = [
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  // `microphone=()` bloqueava `getUserMedia` na origem inteira — com ela, o
+  // botão de falar do chat abriria e não capturaria nada. `self` mantém o
+  // microfone fora de iframe de terceiro, que era o ponto da regra.
+  { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=()" },
 ];
 
 const buildCpus = Number(process.env.NEXT_BUILD_CPUS ?? "")

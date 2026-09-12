@@ -44,7 +44,6 @@ function ensureLogDir() {
  * header continuar legível em log e em `curl -v`.
  */
 function encodeHeaderValue(value: string): string {
-  // eslint-disable-next-line no-control-regex
   if (!/[^\u0000-\u007f]/.test(value)) return value
   return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`
 }

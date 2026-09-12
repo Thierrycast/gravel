@@ -16,6 +16,9 @@ const eslintConfig = defineConfig([
     // Artefatos locais gerados (bundle do MCP e script de auditoria).
     "mcp.js",
     "run-lighthouse.js",
+    // Código de terceiro vendorizado: as regras de hooks deste app não mandam
+    // nele, e "corrigir" aqui só faria o próximo update do kit dar conflito.
+    "vendor/**",
   ]),
   {
     files: ["scripts/*.js"],

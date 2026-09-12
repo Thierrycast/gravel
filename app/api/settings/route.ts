@@ -13,6 +13,12 @@ type DashboardConfig = {
     baseUrl?: string
     model?: string
   }
+  // Endereço do speech-api (voz do chat). Fica aqui, e não em `NEXT_PUBLIC_*`,
+  // porque é infraestrutura pessoal dele e este repo tem remote no GitHub.
+  speech?: {
+    baseUrl?: string
+    voice?: string
+  }
   [key: string]: unknown
 }
 
@@ -156,9 +162,21 @@ export async function GET() {
     salarySources,
     salarySuggestions,
     effectiveMonthlySalary: effectiveSettings.monthlySalary,
-    aiProvider: dashboardConfig.ai?.provider ?? "anthropic",
-    aiBaseUrl: dashboardConfig.ai?.baseUrl ?? "",
-    aiModel: dashboardConfig.ai?.model ?? "claude-haiku-4-5-20251001",
+    // O padrão vem do ambiente do deploy, não de "anthropic" fixo aqui.
+    //
+    // Com o padrão fixo, abrir /settings e salvar qualquer coisa gravava
+    // `provider: "anthropic"` sem ele ter escolhido nada — e como o que está
+    // salvo vence o ambiente em `resolveAiConfig`, o app passou a mandar a
+    // chave do OmniRoute para a Anthropic e tomar 401 no briefing e no chat.
+    // A tela tem de mostrar o que o app realmente usa.
+    aiProvider:
+      dashboardConfig.ai?.provider ??
+      (process.env.AI_PROVIDER === "openai-compatible" ? "openai-compatible" : "anthropic"),
+    aiBaseUrl: dashboardConfig.ai?.baseUrl ?? process.env.AI_BASE_URL?.trim() ?? "",
+    aiModel:
+      dashboardConfig.ai?.model ?? process.env.AI_MODEL?.trim() ?? "claude-haiku-4-5-20251001",
+    speechBaseUrl: dashboardConfig.speech?.baseUrl ?? "",
+    speechVoice: dashboardConfig.speech?.voice ?? "",
   }
 
   return NextResponse.json(serialized)
@@ -185,6 +203,8 @@ export async function PATCH(request: Request) {
     aiProvider,
     aiBaseUrl,
     aiModel,
+    speechBaseUrl,
+    speechVoice,
   } = body
 
   let updatedConfigJson = dashboardConfigJson
@@ -192,7 +212,9 @@ export async function PATCH(request: Request) {
     salaryPatterns !== undefined ||
     aiProvider !== undefined ||
     aiBaseUrl !== undefined ||
-    aiModel !== undefined
+    aiModel !== undefined ||
+    speechBaseUrl !== undefined ||
+    speechVoice !== undefined
   ) {
     const current = await prisma.userSetting.findFirst({
       where: { id: "default" },
@@ -210,6 +232,13 @@ export async function PATCH(request: Request) {
         ...(aiProvider !== undefined ? { provider: aiProvider } : {}),
         ...(aiBaseUrl !== undefined ? { baseUrl: String(aiBaseUrl).trim() } : {}),
         ...(aiModel !== undefined ? { model: String(aiModel).trim() } : {}),
+      }
+    }
+    if (speechBaseUrl !== undefined || speechVoice !== undefined) {
+      config.speech = {
+        ...config.speech,
+        ...(speechBaseUrl !== undefined ? { baseUrl: String(speechBaseUrl).trim() } : {}),
+        ...(speechVoice !== undefined ? { voice: String(speechVoice).trim() } : {}),
       }
     }
     updatedConfigJson = JSON.stringify(config)

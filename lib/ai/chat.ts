@@ -43,6 +43,10 @@ export const CHAT_SYSTEM_PROMPT = [
   "diga em que tela ele faz isso.",
   "Identificadores (número de conta, CPF, e-mail) chegam mascarados de propósito;",
   "não peça esses dados nem tente reconstruí-los.",
+  "Todo número que você escrever tem de existir, literal, em algum campo devolvido",
+  "pela ferramenta. É proibido somar, subtrair, arredondar ou estimar valor: se a",
+  "ferramenta traz `resposta_pronta` ou um campo de total, use o texto/valor como está.",
+  "Inventar ou recalcular dinheiro é o pior erro possível aqui.",
 ].join(" ")
 
 export type ChatRole = "user" | "assistant"

@@ -13,6 +13,7 @@
  */
 import { getOverviewMetrics } from "@/lib/domain/analytics/overview"
 import { getCardStatementsSummaryMetrics } from "@/lib/domain/billing"
+import { getSpendingByCategoryMetrics } from "@/lib/domain/analytics/reports"
 import { summarizeCreditLimits } from "@/lib/domain/credit"
 import { getProjectionPayload } from "@/lib/domain/derived"
 import { prisma } from "@/lib/prisma"
@@ -28,6 +29,11 @@ export type ChatToolSchema = {
 }
 
 export type ChatToolHandler = (args: Record<string, unknown>) => Promise<unknown>
+
+/** Reais no formato que o app usa. Existe para a ferramenta entregar frase pronta. */
+function formatBrl(value: number): string {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
 
 function toNumber(value: unknown): number {
   if (value === null || value === undefined) return 0
@@ -49,9 +55,35 @@ export const CHAT_TOOLS: Array<{ schema: ChatToolSchema; handler: ChatToolHandle
         "Números do mês corrente: entradas, saídas, saldo líquido, patrimônio e as maiores categorias de gasto. Use para qualquer pergunta do tipo 'como estou este mês'.",
       parameters: { type: "object", properties: {} },
     },
+    // Antes esta ferramenta despejava o retorno inteiro de `getOverviewMetrics`
+    // — quarenta campos, cotação, filtros aplicados — e **nenhuma categoria**,
+    // apesar de a descrição prometer as maiores categorias de gasto. O modelo
+    // procurou, não achou e inventou ("Mercado R$ 250, Restaurantes R$ 180"),
+    // com saída real de R$ 813,74 no mês. Payload curado, promessa cumprida.
     handler: async () => {
-      const metrics = await getOverviewMetrics()
-      return metrics
+      const [metrics, categories] = await Promise.all([
+        getOverviewMetrics(),
+        getSpendingByCategoryMetrics(new URLSearchParams({ period: "mtd", limit: "5" })),
+      ])
+
+      const maiores = categories.results.map((group) => ({
+        categoria: group.name,
+        gasto: toNumber(group.amount),
+        participacao_percentual: toNumber(group.sharePercent),
+      }))
+
+      return {
+        resposta_pronta: `No mês: entrou ${formatBrl(toNumber(metrics.monthlyInflow))}, saiu ${formatBrl(toNumber(metrics.monthlyOutflow))}, saldo do mês ${formatBrl(toNumber(metrics.monthlyNet))}. Patrimônio líquido: ${formatBrl(toNumber(metrics.netWorth))}.`,
+        entradas_do_mes: toNumber(metrics.monthlyInflow),
+        saidas_do_mes: toNumber(metrics.monthlyOutflow),
+        saldo_do_mes: toNumber(metrics.monthlyNet),
+        saldo_em_conta: toNumber(metrics.accountBalance),
+        faturas_em_aberto: toNumber(metrics.openBills),
+        patrimonio_liquido: toNumber(metrics.netWorth),
+        maiores_categorias_do_mes: maiores,
+        observacao:
+          "Todos os valores já estão em reais e prontos. Não some nem converta nada.",
+      }
     },
   },
   {
@@ -92,20 +124,63 @@ export const CHAT_TOOLS: Array<{ schema: ChatToolSchema; handler: ChatToolHandle
         })),
       )
 
+      // O total vai **pronto**, em português e com a conta já fechada.
+      //
+      // Na primeira versão o resumo saía com as chaves em inglês do
+      // `CreditLimitSummary` no meio de um payload em português, e o modelo
+      // barato do lab ignorou o campo e somou os cartões por conta própria —
+      // esqueceu o Nubank e respondeu R$ 2.800 onde o certo era R$ 14.100.
+      // Somar dinheiro não é trabalho do modelo: é trabalho da ferramenta.
+      // O nome do cartão sozinho não identifica: ele tem um "gold" do Nubank e
+      // um "GOLD" do Inter. Mandando só o nome, o modelo tratou os dois como o
+      // mesmo cartão, jogou fora o de R$ 11.300 e respondeu R$ 2.800.
+      const somados = cards
+        .filter((card) => card.creditLimit && Number(card.creditLimit) > 0)
+        .map((card) => ({
+          nome: `${card.nickname ?? card.name}${card.institutionName ? ` (${card.institutionName})` : ""}`,
+          limite: toNumber(card.creditLimit),
+          limite_disponivel: card.availableCreditLimit
+            ? toNumber(card.availableCreditLimit)
+            : null,
+        }))
+
+      // Payload enxuto de propósito.
+      //
+      // O OmniRoute comprime **todo** request que passa por ele (engine
+      // "stacked", ~17% em 2026-09-10). Para prosa isso é inofensivo; para um
+      // JSON de 13 contas com números, não: o modelo passou a receber um
+      // resumo com linhas faltando e respondeu R$ 2.800 onde o certo era
+      // R$ 14.100. Quanto menor e mais repetido o essencial, menos sobra para
+      // a compressão jogar fora. O total vem primeiro e em texto pronto.
       return {
+        resposta_pronta: `Limite total: ${formatBrl(creditSummary.totalLimit)}. Disponível: ${formatBrl(creditSummary.totalAvailable)}. Usado: ${formatBrl(creditSummary.totalUsed)}.`,
         contas: accounts.map((account) => ({
           nome: account.nickname ?? account.name,
           instituicao: account.institutionName,
           tipo: account.kind,
-          moeda: account.currencyCode,
           saldo: toNumber(account.balance),
-          limite: account.creditLimit ? toNumber(account.creditLimit) : null,
-          limite_disponivel: account.availableCreditLimit
-            ? toNumber(account.availableCreditLimit)
-            : null,
-          limite_informado_em: account.creditDataAt,
+          ...(account.creditLimit
+            ? {
+                limite: toNumber(account.creditLimit),
+                limite_disponivel: account.availableCreditLimit
+                  ? toNumber(account.availableCreditLimit)
+                  : null,
+              }
+            : {}),
         })),
-        resumo_de_limite: creditSummary,
+        resumo_de_limite: {
+          limite_total: creditSummary.totalLimit,
+          disponivel_total: creditSummary.totalAvailable,
+          usado_total: creditSummary.totalUsed,
+          uso_percentual: creditSummary.usedRatio,
+          cartoes_somados: somados,
+          quantidade_de_cartoes_somados: creditSummary.countedAccounts,
+          cartoes_sem_limite_informado: creditSummary.missingLimitNames,
+          cartoes_sem_disponivel_informado: creditSummary.missingAvailableNames,
+          dado_mais_antigo_em: creditSummary.oldestDataAt,
+          observacao:
+            "limite_total e disponivel_total já são a soma de todos os cartões listados em cartoes_somados. Responda com esses números; não some de novo.",
+        },
       }
     },
   },
@@ -116,7 +191,33 @@ export const CHAT_TOOLS: Array<{ schema: ChatToolSchema; handler: ChatToolHandle
         "Faturas de cartão: fatura atual, próximas e total em aberto por cartão. Use para 'quanto vou pagar', 'qual a fatura do mês'.",
       parameters: { type: "object", properties: {} },
     },
-    handler: async () => getCardStatementsSummaryMetrics(),
+    // Mesmo motivo do `visao_geral`: o retorno cru traz cada fatura de cada
+    // cartão com período, vencimento e status. Vai o essencial, com o total em
+    // texto pronto — o resto o modelo não precisa para responder "quanto vou
+    // pagar".
+    handler: async () => {
+      const summary = await getCardStatementsSummaryMetrics()
+      return {
+        resposta_pronta: `Em aberto: ${formatBrl(summary.openAmount)}. Vence nos próximos 7 dias: ${formatBrl(summary.dueIn7DaysAmount)}. Em atraso: ${formatBrl(summary.overdueAmount)}.`,
+        total_em_aberto: summary.openAmount,
+        vence_em_7_dias: summary.dueIn7DaysAmount,
+        em_atraso: summary.overdueAmount,
+        quantidades: summary.counts,
+        faturas: summary.statements.slice(0, 8).map((card) => ({
+          cartao: card.accountName,
+          instituicao: card.institutionName,
+          em_aberto_no_cartao: card.totalOpen,
+          fatura_atual: card.current
+            ? {
+                valor: card.current.providerAmount ?? card.current.amount,
+                vencimento: card.current.dueDate,
+                situacao: card.current.status,
+              }
+            : null,
+        })),
+        observacao: "Valores já somados e em reais. Não some nem converta nada.",
+      }
+    },
   },
   {
     schema: {
@@ -175,7 +276,7 @@ export const CHAT_TOOLS: Array<{ schema: ChatToolSchema; handler: ChatToolHandle
         },
       })
 
-      return transactions.map((transaction) => ({
+      const itens = transactions.map((transaction) => ({
         data: transaction.occurredAt,
         descricao: transaction.description,
         valor: toNumber(transaction.amount),
@@ -186,6 +287,19 @@ export const CHAT_TOOLS: Array<{ schema: ChatToolSchema; handler: ChatToolHandle
         conta:
           transaction.domainAccount?.nickname ?? transaction.domainAccount?.name ?? null,
       }))
+
+      // A soma vai pronta: "quanto gastei nisso" é a pergunta mais comum sobre
+      // uma lista, e somar linha a linha é justamente onde o modelo erra.
+      const totalListado = itens.reduce((sum, item) => sum + Math.abs(item.valor), 0)
+
+      return {
+        resposta_pronta: `${itens.length} lançamento(s) encontrados, somando ${formatBrl(totalListado)}.`,
+        quantidade: itens.length,
+        soma_dos_listados: Math.round(totalListado * 100) / 100,
+        itens,
+        observacao:
+          "soma_dos_listados já é o total desta lista. Não some os itens de novo.",
+      }
     },
   },
   {
