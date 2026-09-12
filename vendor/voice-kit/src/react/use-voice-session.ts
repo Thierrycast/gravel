@@ -1,4 +1,4 @@
-import { MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
 import { VoiceSession, VoiceSessionOptions, VoiceSessionState, VoiceMode } from "../core/voice-session";
 import { VoiceVisualMetrics, emptyVoiceMetrics } from "../core/audio-metrics";
 
@@ -54,11 +54,12 @@ export function useVoiceSession(
   // Os callbacks do app mudam a cada render; a sessão precisa sempre do mais recente sem ser
   // recriada. Guardá-los em ref é o que permite a sessão nascer uma única vez.
   const handlersRef = useRef(options);
-  handlersRef.current = options;
+  const sessionRef = useRef<VoiceSession | null>(null);
 
-  const session = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    return new VoiceSession({
+  useEffect(() => { handlersRef.current = options; }, [options]);
+
+  useEffect(() => {
+    const session = new VoiceSession({
       ...handlersRef.current,
       handlers: {
         onTrace: (event, data) => handlersRef.current.handlers?.onTrace?.(event, data),
@@ -76,14 +77,16 @@ export function useVoiceSession(
         onError: (message) => { setError(message); handlersRef.current.handlers?.onError?.(message); },
       },
     });
+    sessionRef.current = session;
+    return () => {
+      session.stop();
+      sessionRef.current = null;
+    };
   }, []);
-
-  const sessionRef = useRef(session);
-  sessionRef.current = session;
 
   // Endpoint, voz e modelos podem mudar nas preferências do app sem reabrir o microfone.
   useEffect(() => {
-    session?.configure({
+    sessionRef.current?.configure({
       endpoint: options.endpoint,
       models: options.models,
       voice: options.voice,
@@ -91,26 +94,24 @@ export function useVoiceSession(
       streamSpeech: options.streamSpeech,
       language: options.language,
     });
-  }, [session, options.endpoint, options.models, options.voice, options.streamingUrl, options.streamSpeech, options.language]);
-
-  useEffect(() => () => { sessionRef.current?.stop(); }, []);
+  }, [options.endpoint, options.models, options.voice, options.streamingUrl, options.streamSpeech, options.language]);
 
   const start = useCallback(async (mode: VoiceMode = "live") => {
     setError(null);
-    await session?.start(mode);
-    setOpen(!!session?.isOpen);
-  }, [session]);
+    await sessionRef.current?.start(mode);
+    setOpen(!!sessionRef.current?.isOpen);
+  }, []);
 
   const stop = useCallback(() => {
-    session?.stop();
+    sessionRef.current?.stop();
     setOpen(false);
     setPartial("");
     setMuted(false);
-  }, [session]);
+  }, []);
 
-  const toggleMute = useCallback(() => { setMuted(session?.toggleMute() ?? false); }, [session]);
-  const speak = useCallback(async (text: string) => { await session?.speak(text); }, [session]);
-  const stopSpeaking = useCallback(() => session?.stopSpeaking(), [session]);
+  const toggleMute = useCallback(() => { setMuted(sessionRef.current?.toggleMute() ?? false); }, []);
+  const speak = useCallback(async (text: string) => { await sessionRef.current?.speak(text); }, []);
+  const stopSpeaking = useCallback(() => sessionRef.current?.stopSpeaking(), []);
 
   return { state, metricsRef, partial, muted, open, error, start, stop, toggleMute, speak, stopSpeaking };
 }

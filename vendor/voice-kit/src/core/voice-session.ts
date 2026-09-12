@@ -104,7 +104,9 @@ export class VoiceSession {
   private lastPartial = "";
   private readonly pending: Blob[] = [];
   private draining = false;
+  private transcriptionAbort: AbortController | null = null;
   private streamingStop: (() => void) | null = null;
+  private playbackGeneration = 0;
 
   constructor(options: VoiceSessionOptions) {
     this.options = options;
@@ -240,8 +242,9 @@ export class VoiceSession {
       const blob = this.pending.shift()!;
       try {
         const controller = new AbortController();
+        this.transcriptionAbort = controller;
         const timer = setTimeout(() => controller.abort(), 20_000);
-        const text = await transcribeAudio(this.options.endpoint, blob, this.options.models.transcription, this.options.language)
+        const text = await transcribeAudio(this.options.endpoint, blob, this.options.models.transcription, this.options.language, controller.signal)
           .finally(() => clearTimeout(timer));
         const clean = text.trim();
         const descartado = !clean || HALLUCINATIONS.some((pattern) => pattern.test(clean));
@@ -251,7 +254,11 @@ export class VoiceSession {
           if (this.mode === "live") this.publish("thinking");
         }
       } catch (error) {
-        this.fail(error instanceof Error ? error.message : "Falha ao transcrever áudio.");
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          this.fail(error instanceof Error ? error.message : "Falha ao transcrever áudio.");
+        }
+      } finally {
+        this.transcriptionAbort = null;
       }
     }
     this.draining = false;
@@ -265,6 +272,10 @@ export class VoiceSession {
   }
 
   stop() {
+    this.playbackGeneration += 1;
+    this.cancelPlayback();
+    this.transcriptionAbort?.abort();
+    this.transcriptionAbort = null;
     if (this.metricsTimer) window.clearInterval(this.metricsTimer);
     this.metricsTimer = 0;
     this.analyzer?.disconnect();
@@ -281,15 +292,22 @@ export class VoiceSession {
     this.audio = null;
     this.stream?.getTracks().forEach((track) => track.stop());
     this.stream = null;
-    this.output?.pause();
-    this.output = null;
     this.muted = false;
     this.publish("idle");
   }
 
   /** Corta a fala no meio. É o que um botão de "parar" deve chamar. */
   stopSpeaking() {
+    this.playbackGeneration += 1;
+    this.cancelPlayback();
+    this.speakingUntil = Date.now() + ECHO_TAIL;
+    this.segmenter?.resume();
+    this.publish(this.stream ? "listening" : "idle");
+  }
+
+  private cancelPlayback() {
     this.streamingStop?.();
+    this.streamingStop = null;
     this.output?.pause();
     this.output = null;
   }
@@ -303,8 +321,11 @@ export class VoiceSession {
     if (!spoken) return;
     if (!this.options.endpoint.baseUrl.trim()) { this.fail("Servidor de voz não configurado."); return; }
 
+    const generation = this.playbackGeneration + 1;
+    this.playbackGeneration = generation;
+    this.cancelPlayback();
+
     try {
-      this.output?.pause();
       // Suspender o VAD evita que a própria fala abra um enunciado e vire turno do usuário.
       this.segmenter?.suspend();
       this.publish("speaking");
@@ -314,6 +335,7 @@ export class VoiceSession {
           await this.speakStreaming(spoken);
           return;
         } catch (error) {
+          if (generation !== this.playbackGeneration) return;
           this.trace("streaming caiu para arquivo inteiro", { erro: error instanceof Error ? error.message : String(error) });
         }
       }
@@ -331,13 +353,18 @@ export class VoiceSession {
         URL.revokeObjectURL(url);
       }
     } catch (error) {
-      this.fail(error instanceof Error ? error.message : "Falha ao sintetizar voz.");
+      if (generation === this.playbackGeneration) {
+        this.fail(error instanceof Error ? error.message : "Falha ao sintetizar voz.");
+      }
     } finally {
-      this.speakingUntil = Date.now() + ECHO_TAIL;
-      this.segmenter?.resume();
-      // Sem microfone aberto, esta foi uma leitura avulsa: volta a ocioso em vez de ficar preso
-      // em "falando" para sempre.
-      this.publish(this.stream ? "listening" : "idle");
+      // Um `return` aqui apagaria a exceção que estivesse subindo; a guarda vira condição.
+      if (generation === this.playbackGeneration) {
+        this.speakingUntil = Date.now() + ECHO_TAIL;
+        this.segmenter?.resume();
+        // Sem microfone aberto, esta foi uma leitura avulsa: volta a ocioso em vez de ficar preso
+        // em "falando" para sempre.
+        this.publish(this.stream ? "listening" : "idle");
+      }
     }
   }
 

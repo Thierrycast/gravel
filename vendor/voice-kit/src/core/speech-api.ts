@@ -88,12 +88,18 @@ export async function checkVoiceEndpoint(endpoint: VoiceEndpoint): Promise<Conne
  * Transcrição em lote. É esta que produz o texto **autoritativo** — o que o app vai obedecer.
  * O rascunho do `SttStream` serve para a tela, não para decidir.
  */
-export async function transcribeAudio(endpoint: VoiceEndpoint, audio: Blob, model: string, language = "pt"): Promise<string> {
+export async function transcribeAudio(
+  endpoint: VoiceEndpoint,
+  audio: Blob,
+  model: string,
+  language = "pt",
+  signal?: AbortSignal,
+): Promise<string> {
   const form = new FormData();
   form.append("file", audio, "fala.wav");
   form.append("model", model);
   form.append("language", language);
-  const response = await fetch(voiceUrl(endpoint, "audio/transcriptions"), { method: "POST", headers: { Accept: "application/json", ...voiceHeaders(endpoint) }, body: form });
+  const response = await fetch(voiceUrl(endpoint, "audio/transcriptions"), { method: "POST", headers: { Accept: "application/json", ...voiceHeaders(endpoint) }, body: form, signal });
   if (!response.ok) { const detail = await responseDetail(response); throw new Error(`Transcrição falhou (HTTP ${response.status})${detail ? `: ${detail}` : "."}`); }
   const payload = await response.json() as { text?: string; transcript?: string };
   return payload.text ?? payload.transcript ?? "";
