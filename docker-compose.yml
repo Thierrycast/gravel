@@ -32,6 +32,7 @@ services:
     - PLUGGY_API_KEY_TTL_SECONDS=7200
     - PLUGGY_WEBHOOK_URL=https://<host-publico>/hooks/pluggy
     - BINANCE_API_BASE=https://api.binance.com
+    - SPEECH_API_BASE_URL=http://speech-api:8000
     - BINANCE_RECV_WINDOW=5000
     healthcheck:
       test:
@@ -55,6 +56,7 @@ services:
     networks:
       default: null
       omniroute_default: null
+      speech-net: null
 x-casaos:
   architectures:
   - amd64
@@ -81,4 +83,7 @@ x-casaos:
   scheme: http
 networks:
   omniroute_default:
+    external: true
+  speech-net:
+    name: speech-net
     external: true
