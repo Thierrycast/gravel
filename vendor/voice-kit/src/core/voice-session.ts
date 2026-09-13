@@ -142,6 +142,17 @@ export class VoiceSession {
       this.fail("O runtime de voz só existe no navegador.");
       return;
     }
+    /*
+     * `mediaDevices` só existe em contexto seguro: HTTPS, `localhost` ou `127.0.0.1`. Servido por
+     * IP da rede em http — que é como um app do lab costuma ser aberto — o objeto simplesmente não
+     * está lá, e chamar `getUserMedia` nele estoura um TypeError que vira "Não consegui abrir o
+     * microfone": a pessoa fica clicando num botão que nunca vai funcionar sem saber por quê.
+     */
+    if (!navigator.mediaDevices?.getUserMedia) {
+      const origem = typeof location === "undefined" ? "" : ` Esta página está em ${location.origin}.`;
+      this.fail(`O navegador só libera o microfone em HTTPS ou em localhost.${origem}`);
+      return;
+    }
     if (this.stream) { this.trace("start ignorado: microfone já aberto", { mode }); return; }
     this.mode = mode;
 

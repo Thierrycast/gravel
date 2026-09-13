@@ -45,7 +45,10 @@ export function ChatVoice({
   const session = useVoiceSession({
     endpoint: { baseUrl, apiKey: "" },
     streamingUrl: streamingUrl || undefined,
-    models: { transcription: "whisper", speech: "tts-1" },
+    // `vosk` é o único modelo de transcrição local do speech-api. Qualquer outro nome
+    // (inclusive "whisper") é encaminhado a um provedor remoto sem credencial e a
+    // transcrição volta 502 — a voz morre calada no meio da conversa.
+    models: { transcription: "vosk", speech: "tts-1" },
     voice,
     language: "pt",
     onTranscript: (text) => {
