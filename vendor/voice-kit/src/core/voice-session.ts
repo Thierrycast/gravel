@@ -107,6 +107,10 @@ export class VoiceSession {
   private transcriptionAbort: AbortController | null = null;
   private streamingStop: (() => void) | null = null;
   private playbackGeneration = 0;
+  /** Chamada de `start()` em voo. Ver o comentário dentro de `start()`. */
+  private starting: Promise<void> | null = null;
+  /** Sobe a cada `start()` e a cada `stop()`. Ver o comentário em `openMicrophone()`. */
+  private startGeneration = 0;
 
   constructor(options: VoiceSessionOptions) {
     this.options = options;
@@ -154,11 +158,36 @@ export class VoiceSession {
       return;
     }
     if (this.stream) { this.trace("start ignorado: microfone já aberto", { mode }); return; }
+    /*
+     * Um segundo `start()` antes do primeiro terminar — duplo clique, ou o duplo prompt de
+     * permissão — reentraria aqui com `this.stream` ainda nulo: cada chamada abriria seu próprio
+     * microfone, `AudioContext`, timer de métricas e socket de texto ao vivo, e só a última
+     * sobrescreveria os campos da classe. As anteriores vazam — mic nunca liberado, timer nunca
+     * limpo e, o pior, um `SttStream` que nunca fecha e continua ocupando uma vaga do limite de
+     * seis conexões do servidor até a página recarregar. A chamada em voo é reaproveitada em vez
+     * de disparar outra.
+     */
+    if (this.starting) { return this.starting; }
     this.mode = mode;
+    const generation = ++this.startGeneration;
+    this.starting = this.openMicrophone(generation).finally(() => { this.starting = null; });
+    return this.starting;
+  }
 
+  /**
+   * A parte de `start()` que tem `await` — e por isso pode ser interrompida no meio por um
+   * `stop()` alheio (um clique em "parar" enquanto o navegador ainda pede permissão, ou o
+   * `useEffect` de cleanup do hook rodando porque o componente desmontou). Sem o `generation`, o
+   * microfone terminaria de abrir de qualquer jeito depois que o resto do app já assumiu que ele
+   * estava fechado — aceso escondido, sem UI nenhuma escutando e sem outro `stop()` disponível
+   * para desligar. Cada `await` é seguido de checar se `stop()` mudou o número embaixo do pé.
+   */
+  private async openMicrophone(generation: number) {
+    const abandonado = () => generation !== this.startGeneration;
     try {
+      let stream: MediaStream;
       try {
-        this.stream = await navigator.mediaDevices.getUserMedia({
+        stream = await navigator.mediaDevices.getUserMedia({
           audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
         });
       } catch (error) {
@@ -175,9 +204,17 @@ export class VoiceSession {
           { cause: error },
         );
       }
+      if (abandonado()) {
+        // `stop()` rodou enquanto o navegador ainda pedia permissão: este microfone acabou de
+        // abrir sem que `this.stream` chegasse a apontar para ele. Devolve na hora.
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      this.stream = stream;
 
       this.audio = new AudioContext({ sampleRate: CAPTURE_SAMPLE_RATE });
       await this.audio.audioWorklet.addModule(captureWorkletUrl());
+      if (abandonado()) { this.stop(); return; }
       const source = this.audio.createMediaStreamSource(this.stream);
       this.node = new AudioWorkletNode(this.audio, CAPTURE_WORKLET_NAME);
       source.connect(this.node);
@@ -217,10 +254,15 @@ export class VoiceSession {
       };
 
       await this.audio.resume();
+      if (abandonado()) { this.stop(); return; }
       this.publish("listening");
     } catch (error) {
-      this.fail(error instanceof Error ? error.message : "Não foi possível acessar o microfone.");
-      this.stop();
+      // Se já foi abandonado, um `stop()` alheio já tratou da limpeza — `fail`/`stop` aqui
+      // republicariam um erro ou um "idle" que não são deste `start()`.
+      if (!abandonado()) {
+        this.fail(error instanceof Error ? error.message : "Não foi possível acessar o microfone.");
+        this.stop();
+      }
     }
   }
 
@@ -283,6 +325,7 @@ export class VoiceSession {
   }
 
   stop() {
+    this.startGeneration += 1;
     this.playbackGeneration += 1;
     this.cancelPlayback();
     this.transcriptionAbort?.abort();
