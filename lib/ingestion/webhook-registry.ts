@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto"
 import {
   createWebhook,
   deleteWebhook,
+  isPluggyConfigured,
   listWebhooks,
   type PluggyWebhook,
 } from "@/lib/integrations/pluggy"
@@ -100,6 +101,18 @@ export async function reconcilePluggyWebhook(options?: {
   /** Remove webhooks apontando para outras URLs. Padrão: true. */
   pruneForeign?: boolean
 }): Promise<WebhookReconcileResult> {
+  // Sem credencial não há o que reconciliar: avisar uma vez é útil, tentar a
+  // cada boot e falhar com 401 da Pluggy só polui o log.
+  if (!(await isPluggyConfigured())) {
+    return {
+      url: getWebhookUrl() ?? "",
+      created: null,
+      kept: null,
+      removed: [],
+      reason: "pluggy-nao-configurada",
+    }
+  }
+
   const url = getWebhookUrl()
   if (!url) {
     throw new Error(

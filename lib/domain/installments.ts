@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto"
+
 import { DomainCategoryKind, DomainTransactionDirection, Prisma } from "@prisma/client"
 
 import { normalizeFinancialText, normalizeMerchantName } from "@/lib/domain/enrichment/normalization"
@@ -241,56 +243,71 @@ export async function rebuildInstallmentGroups() {
   const groups = inferInstallmentGroups(transactions)
   const categoryKindById = new Map(categories.map((category) => [category.id, category.kind]))
 
-  await prisma.$transaction(async (tx) => {
-    await tx.domainTransaction.updateMany({
+  // O rebuild é uma transação em lote: os N updates viajam num único round-trip.
+  // No modo interativo (`async (tx) => {}`) cada `await` era uma ida ao banco e
+  // lotes grandes estouravam o timeout padrão de 5s, derrubando o sync com P2028.
+  const groupRows: Prisma.TransactionInstallmentGroupCreateManyInput[] = []
+  const transactionUpdates: {
+    id: string
+    data: Prisma.DomainTransactionUncheckedUpdateInput
+  }[] = []
+
+  for (const group of groups) {
+    const first = group.transactions[0]
+    const last = group.transactions.at(-1)
+    if (!first || !last) continue
+    const canonicalCategoryId = selectCanonicalInstallmentCategoryId(
+      group.transactions,
+      categoryKindById,
+    )
+
+    const groupId = randomUUID()
+    groupRows.push({
+      id: groupId,
+      merchantKey: installmentMerchantKey(first),
+      descriptionKey: installmentDescriptionKey(first),
+      accountId: first.domainAccountId ?? null,
+      categoryId: canonicalCategoryId,
+      amount: first.amount.abs(),
+      totalInstallments: group.totalInstallments,
+      firstDate: first.occurredAt,
+      lastDate: last.occurredAt,
+      confidence: group.confidence,
+      source: group.source,
+    })
+
+    for (const [index, transaction] of group.transactions.entries()) {
+      const explicit = detectExplicitInstallment(transaction.description ?? transaction.normalizedDescription)
+      transactionUpdates.push({
+        id: transaction.id,
+        data: {
+          installmentGroupId: groupId,
+          installmentNumber: explicit?.current ?? index + 1,
+          installmentTotal: explicit?.total ?? group.totalInstallments,
+          ...(canonicalCategoryId && !hasManualCategoryOverride(transaction)
+            ? { domainCategoryId: canonicalCategoryId }
+            : {}),
+        },
+      })
+    }
+  }
+
+  await prisma.$transaction([
+    prisma.domainTransaction.updateMany({
       data: {
         installmentGroupId: null,
         installmentNumber: null,
         installmentTotal: null,
       },
-    })
-    await tx.transactionInstallmentGroup.deleteMany()
-
-    for (const group of groups) {
-      const first = group.transactions[0]
-      const last = group.transactions.at(-1)
-      if (!first || !last) continue
-      const canonicalCategoryId = selectCanonicalInstallmentCategoryId(
-        group.transactions,
-        categoryKindById,
-      )
-
-      const createdGroup = await tx.transactionInstallmentGroup.create({
-        data: {
-          merchantKey: installmentMerchantKey(first),
-          descriptionKey: installmentDescriptionKey(first),
-          accountId: first.domainAccountId ?? null,
-          categoryId: canonicalCategoryId,
-          amount: first.amount.abs(),
-          totalInstallments: group.totalInstallments,
-          firstDate: first.occurredAt,
-          lastDate: last.occurredAt,
-          confidence: group.confidence,
-          source: group.source,
-        },
-      })
-
-      for (const [index, transaction] of group.transactions.entries()) {
-        const explicit = detectExplicitInstallment(transaction.description ?? transaction.normalizedDescription)
-        await tx.domainTransaction.update({
-          where: { id: transaction.id },
-          data: {
-            installmentGroupId: createdGroup.id,
-            installmentNumber: explicit?.current ?? index + 1,
-            installmentTotal: explicit?.total ?? group.totalInstallments,
-            ...(canonicalCategoryId && !hasManualCategoryOverride(transaction)
-              ? { domainCategoryId: canonicalCategoryId }
-              : {}),
-          },
-        })
-      }
-    }
-  })
+    }),
+    prisma.transactionInstallmentGroup.deleteMany(),
+    ...(groupRows.length > 0
+      ? [prisma.transactionInstallmentGroup.createMany({ data: groupRows })]
+      : []),
+    ...transactionUpdates.map(({ id, data }) =>
+      prisma.domainTransaction.update({ where: { id }, data }),
+    ),
+  ])
 
   return { transactions: transactions.length, groups: groups.length }
 }

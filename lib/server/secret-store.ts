@@ -116,10 +116,24 @@ function markAppSecretTableMissing() {
   appSecretTableState = "missing"
 }
 
+/**
+ * Valores de preenchimento ("COLE_O_NOVO_AQUI", "<sua-chave>", "changeme"...)
+ * contam como *ausentes*. Sem isso o app se julga configurado, o agendador bate
+ * no provedor a cada tick e o log vira uma fileira de 401 em vez da mensagem
+ * "credencial não configurada" que a tela de Configurações já sabe mostrar.
+ */
+const placeholderSecretPattern =
+  /^(?:<[^>]*>|(?:cole|coloque|preencha|substitua|insira|your|seu|sua|change|changeme|replace|todo|fixme|placeholder|example|dummy|x{3,})[a-z0-9_\- ]*)$/i
+
+function isPlaceholderSecret(value: string) {
+  return placeholderSecretPattern.test(value)
+}
+
 function normalizeSecretValue(value?: string | null) {
   if (typeof value !== "string") return null
   const normalized = value.trim()
-  return normalized.length > 0 ? normalized : null
+  if (normalized.length === 0) return null
+  return isPlaceholderSecret(normalized) ? null : normalized
 }
 
 function getEncryptionPassphrase() {
