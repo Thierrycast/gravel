@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { ModeToggle } from "@/components/mode-toggle";
 import { PrivacyToggle } from "@/components/privacy-toggle";
 import { CurrencySelector } from "@/components/currency-selector";
+import { LogoutButton } from "@/components/logout-button";
 import { SyncButton } from "@/components/sync-button";
 import {
   NAV_MAIN,
@@ -217,6 +218,9 @@ export function AppSidebar() {
           <div className="px-1 py-1 text-[10px] font-mono text-muted-foreground tracking-[0.2em] flex items-center justify-between group-data-[collapsible=icon]:hidden">
             <span>SYS::READY</span>
             <span className="animate-pulse">●</span>
+          </div>
+          <div className="group-data-[collapsible=icon]:hidden px-1">
+            <LogoutButton />
           </div>
           <a
             href="https://github.com/Thierrycast"

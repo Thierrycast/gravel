@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { after } from "next/server"
 import { OpsRunStatus } from "@prisma/client"
 
+import { ensureInternalApiKey } from "@/lib/admin/internal-auth"
 import {
   parseWebhookPayload,
   processQueuedWebhookEvent,
@@ -109,8 +110,16 @@ export async function POST(req: Request) {
  * Diagnóstico: mostra os últimos eventos recebidos e o estado deles. Útil para
  * saber se a Pluggy está entregando de fato (a maior parte dos problemas de
  * "dado não atualiza" é o webhook nunca chegar).
+ *
+ * Exige `X-INTERNAL-API-KEY`. O POST sempre teve o segredo da Pluggy, mas este
+ * GET respondia a qualquer um: devolvia `itemId` de cada conexão e o estado da
+ * fila, e `/api/webhooks/**` precisa ficar fora do porteiro de sessão (a Pluggy
+ * não faz login). Sem esta checagem, a exceção do middleware viraria um buraco.
  */
-export async function GET() {
+export async function GET(request: Request) {
+  const unauthorized = ensureInternalApiKey(request)
+  if (unauthorized) return unauthorized
+
   const [recent, counts] = await Promise.all([
     prisma.pluggyWebhookEvent.findMany({
       orderBy: { receivedAt: "desc" },
