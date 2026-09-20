@@ -1,5 +1,5 @@
-import { DomainTransactionDirection, Prisma } from "@prisma/client";
-import { isBrlCurrency } from "@/lib/domain/currency";
+import { DomainTransactionDirection } from "@prisma/client";
+import { createBrlConverter } from "@/lib/domain/currency";
 import { getUsdBrlRate } from "@/lib/exchange-rate";
 import { prisma } from "@/lib/prisma";
 import { getUserSettings } from "../queries";
@@ -27,6 +27,10 @@ export async function getCashFlowMetrics(searchParams: URLSearchParams) {
     getUserSettings(searchParams),
     getUsdBrlRate(),
   ]);
+
+  // Um conversor por chamada: converte o que conhece e anota o que não
+  // conhece, em vez de somar euro como se fosse dólar.
+  const toBrl = createBrlConverter(usdBrlRate);
 
   const categoryMap = new Map(
     categories.map((category) => [category.id, category]),
@@ -70,11 +74,9 @@ export async function getCashFlowMetrics(searchParams: URLSearchParams) {
     );
 
     // Converte para BRL como o overview faz, para os buckets do fluxo de
-    // caixa baterem com os KPIs da visão geral.
-    let amount = transaction.amount.abs();
-    if (transaction.currencyCode && !isBrlCurrency(transaction.currencyCode)) {
-      amount = amount.mul(new Prisma.Decimal(usdBrlRate));
-    }
+    // caixa baterem com os KPIs da visão geral. A conversão é a compartilhada:
+    // a versão local tratava euro como dólar.
+    const amount = toBrl(transaction.amount.abs(), transaction.currencyCode);
 
     if (classification === "investment") {
       current.investments =
@@ -112,7 +114,7 @@ export async function getCashFlowMetrics(searchParams: URLSearchParams) {
 
 type PeriodType = "month" | "quarter" | "semester" | "year";
 
-function getCashFlowComparisonWindows(periodType: PeriodType, count: number) {
+export function getCashFlowComparisonWindows(periodType: PeriodType, count: number) {
   const now = new Date();
   const windows: { label: string; from: Date; to: Date }[] = [];
   for (let i = 0; i < count; i++) {
@@ -172,6 +174,20 @@ function xLabel(x: number, periodType: PeriodType, windowFrom: Date): string {
   return months[date.getMonth()] ?? String(x);
 }
 
+/**
+ * Serializa um limite de janela para a query string.
+ *
+ * Precisa ser ISO COMPLETO. Antes era `.toISOString().split("T")[0]`, que joga
+ * fora a hora — e o `to` da janela é o último instante do mês em horário
+ * local. Num fuso a oeste (UTC-3), `30/09 23:59:59.999` local é
+ * `01/10 02:59` em UTC, e o corte virava "2026-10-01": a janela de setembro
+ * vazava para outubro. Em fuso a leste o erro é o simétrico, e o último dia do
+ * mês desaparece da comparação.
+ */
+export function formatWindowBound(date: Date) {
+  return date.toISOString();
+}
+
 export async function getCashFlowComparisonMetrics(searchParams: URLSearchParams) {
   const periodType = (searchParams.get("periodType") ?? "month") as PeriodType;
   const count = Math.min(4, Math.max(2, parseInt(searchParams.get("count") ?? "2", 10)));
@@ -181,8 +197,8 @@ export async function getCashFlowComparisonMetrics(searchParams: URLSearchParams
   const periodsData = await Promise.all(
     windows.map(async (window) => {
       const params = new URLSearchParams({
-        from: window.from.toISOString().split("T")[0],
-        to: window.to.toISOString().split("T")[0],
+        from: formatWindowBound(window.from),
+        to: formatWindowBound(window.to),
         groupBy,
       });
       const metrics = await getCashFlowMetrics(params);
@@ -203,7 +219,7 @@ export async function getCashFlowComparisonMetrics(searchParams: URLSearchParams
         const r = (n: number) => Math.round(n * 100) / 100;
         return { x, xLabel: xLabel(x, periodType, window.from), net: r(vals.net), income: r(vals.income), expense: r(vals.expense), cumNet: r(cumNet), cumIncome: r(cumIncome), cumExpense: r(cumExpense) };
       });
-      return { label: window.label, from: window.from.toISOString().split("T")[0], to: window.to.toISOString().split("T")[0], points };
+      return { label: window.label, from: formatWindowBound(window.from), to: formatWindowBound(window.to), points };
     }),
   );
 

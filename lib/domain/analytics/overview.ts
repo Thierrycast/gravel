@@ -1,10 +1,7 @@
 import { DomainAccountKind, Prisma, SourceProvider } from "@prisma/client";
-import {
-  isBrlCurrency,
-  normalizeCurrencyCode,
-  sumConvertedToBrl,
-} from "@/lib/domain/currency";
+import { createBrlConverter, sumConvertedToBrl } from "@/lib/domain/currency";
 
+import { summarizeAccountAllocation } from "./allocation";
 import { getUserSettings } from "../queries";
 import { prisma } from "@/lib/prisma";
 import { getUsdBrlRate } from "@/lib/exchange-rate";
@@ -16,7 +13,6 @@ import {
   detectInternalTransferPairIds,
   isActiveInvestmentPosition,
   isOutstandingBill,
-  percentOf,
   startOfLocalDay,
   sumDecimals,
   ZERO,
@@ -77,6 +73,10 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
     getUsdBrlRate(),
   ]);
 
+  // Um conversor por chamada: converte o que conhece e anota o que não
+  // conhece, em vez de somar euro como se fosse dólar.
+  const toBrl = createBrlConverter(usdBrlRate);
+
   const categoryMap = new Map(
     categories.map((category) => [category.id, category]),
   );
@@ -104,10 +104,7 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
       },
     );
 
-    let amount = decimal(transaction.amount).abs();
-    if (transaction.currencyCode && !isBrlCurrency(transaction.currencyCode)) {
-      amount = amount.mul(new Prisma.Decimal(usdBrlRate));
-    }
+    const amount = toBrl(decimal(transaction.amount).abs(), transaction.currencyCode);
 
     if (classification === "income") {
       inflow = inflow.plus(amount);
@@ -265,79 +262,20 @@ export async function getAccountAllocationMetrics(
     getUsdBrlRate(),
   ]);
 
-  const creditKinds = new Set(["CARD", "CREDIT"]);
-
-  const netWorth = sumConvertedToBrl(
-    accounts.map((a) => ({
-      ...a,
-      balance: creditKinds.has(a.kind) ? decimal(a.balance).mul(-1) : a.balance,
-    })),
-    (a) => a.balance,
-    (a) => a.currencyCode,
-    usdBrlRate,
-  );
-
-  const positiveAccounts = accounts.filter(
-    (account) => account.balance && account.balance.greaterThan(0),
-  );
-  const assetsTotal = sumConvertedToBrl(
-    positiveAccounts,
-    (a) => a.balance,
-    (a) => a.currencyCode,
-    usdBrlRate,
-  );
-
-  const byAccount = accounts.slice(0, filters.limit).map((account) => {
-    const balBrl =
-      normalizeCurrencyCode(account.currencyCode) === "USD"
-        ? decimal(account.balance).mul(usdBrlRate)
-        : decimal(account.balance);
-
-    return {
-      id: account.id,
-      name: account.name,
-      kind: account.kind,
-      institutionName: account.institutionName,
-      sourceProvider: account.sourceProvider,
-      balance: decimal(account.balance),
-      sharePercent: assetsTotal.isZero()
-        ? ZERO
-        : percentOf(balBrl.abs(), assetsTotal),
-    };
-  });
-
-  const byKindMap = new Map<DomainAccountKind, Prisma.Decimal>();
-  for (const account of accounts) {
-    let bal = decimal(account.balance);
-    if (normalizeCurrencyCode(account.currencyCode) === "USD") {
-      bal = bal.mul(new Prisma.Decimal(usdBrlRate));
-    }
-
-    const current = byKindMap.get(account.kind) ?? ZERO;
-    if (creditKinds.has(account.kind)) {
-      byKindMap.set(account.kind, current.minus(bal.abs()));
-    } else {
-      byKindMap.set(account.kind, current.plus(bal));
-    }
-  }
-
-  const byKind = Array.from(byKindMap.entries())
-    .map(([kind, balance]) => ({
-      kind,
-      balance,
-      sharePercent: assetsTotal.isZero()
-        ? ZERO
-        : percentOf(balance.abs(), assetsTotal),
-    }))
-    .sort((left, right) => right.balance.comparedTo(left.balance));
+  // A matemática vive em ./allocation.ts, testável sem banco. Aqui ficou só a
+  // consulta — era a mistura das duas coisas que deixava o cálculo sem teste.
+  const allocation = summarizeAccountAllocation(accounts, usdBrlRate, filters.limit);
 
   return {
-    total: netWorth,
-    byAccount,
-    byKind,
+    total: allocation.netWorth,
+    byAccount: allocation.byAccount,
+    byKind: allocation.byKind,
     counts: {
       totalAccounts: accounts.length,
-      positiveAccounts: positiveAccounts.length,
+      positiveAccounts: allocation.assetAccountCount,
     },
+    // Quando aparece moeda que não sabemos converter, o payload diz — antes
+    // ela era somada 1:1 com BRL e ninguém ficava sabendo.
+    unsupportedCurrencies: allocation.unsupportedCurrencies,
   };
 }

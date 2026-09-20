@@ -1,5 +1,6 @@
-import { Prisma } from "@prisma/client";
-import { isBrlCurrency } from "@/lib/domain/currency";
+
+import { createBrlConverter } from "@/lib/domain/currency";
+import { summarizeBills } from "./bills-summary";
 import { getUsdBrlRate } from "@/lib/exchange-rate";
 import { prisma } from "@/lib/prisma";
 import {
@@ -8,9 +9,7 @@ import {
   classifyCashFlowTransaction,
   decimal,
   detectInternalTransferPairIds,
-  normalizeBillStatus,
   percentOf,
-  startOfLocalDay,
   sumDecimals,
   ZERO,
 } from "./shared";
@@ -18,92 +17,29 @@ import {
 export async function getBillsSummaryMetrics(searchParams: URLSearchParams) {
   const filters = buildMetricFilters(searchParams, { limit: 12 });
   const now = new Date();
-  const dueIn7 = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-  const dueIn30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
   const hasDateWindow =
     searchParams.has("from") ||
     searchParams.has("to") ||
     searchParams.has("period");
 
-  const bills = await prisma.domainBill.findMany({
-    where: {
-      sourceProvider: filters.provider,
-      domainAccountId: filters.accountId,
-      dueDate: hasDateWindow
-        ? {
-            gte: filters.from,
-            lte: filters.to,
-          }
-        : undefined,
-    },
-    orderBy: [{ dueDate: "asc" }, { totalAmount: "desc" }],
-  });
+  const [bills, usdBrlRate] = await Promise.all([
+    prisma.domainBill.findMany({
+      where: {
+        sourceProvider: filters.provider,
+        domainAccountId: filters.accountId,
+        dueDate: hasDateWindow ? { gte: filters.from, lte: filters.to } : undefined,
+      },
+      orderBy: [{ dueDate: "asc" }, { totalAmount: "desc" }],
+    }),
+    getUsdBrlRate(),
+  ]);
 
-  const normalizedBills = bills.map((bill) => ({
-    ...bill,
-    status: normalizeBillStatus(
-      bill.status,
-      bill.dueDate,
-      bill.totalAmount,
-      now,
-    ),
-  }));
-
-  const totalAmount = sumDecimals(
-    normalizedBills.map((bill) => bill.totalAmount),
-  );
-  const minimumPayment = sumDecimals(
-    normalizedBills.map((bill) => bill.minimumPaymentAmount),
-  );
-  const paid = normalizedBills.filter(
-    (bill) => bill.status === "PAID" || bill.status === "CLOSED",
-  );
-  const overdue = normalizedBills.filter((bill) => bill.status === "OVERDUE");
-  const open = normalizedBills.filter((bill) => bill.status === "OPEN");
-  const upcoming = normalizedBills
-    .filter(
-      (bill) =>
-        bill.dueDate &&
-        bill.dueDate >= startOfLocalDay(now) &&
-        bill.status === "OPEN",
-    )
-    .slice(0, filters.limit);
+  // A matemática vive em ./bills-summary.ts, testável sem banco. Aqui ficou só
+  // a consulta.
+  const summary = summarizeBills(bills, now, usdBrlRate, filters.limit);
 
   return {
-    totalAmount,
-    minimumPayment,
-    openAmount: sumDecimals(open.map((bill) => bill.totalAmount)),
-    paidAmount: sumDecimals(paid.map((bill) => bill.totalAmount)),
-    overdueAmount: sumDecimals(overdue.map((bill) => bill.totalAmount)),
-    dueIn7DaysAmount: sumDecimals(
-      normalizedBills
-        .filter(
-          (bill) =>
-            bill.status === "OPEN" &&
-            bill.dueDate &&
-            bill.dueDate >= now &&
-            bill.dueDate <= dueIn7,
-        )
-        .map((bill) => bill.totalAmount),
-    ),
-    dueIn30DaysAmount: sumDecimals(
-      normalizedBills
-        .filter(
-          (bill) =>
-            bill.status === "OPEN" &&
-            bill.dueDate &&
-            bill.dueDate >= now &&
-            bill.dueDate <= dueIn30,
-        )
-        .map((bill) => bill.totalAmount),
-    ),
-    counts: {
-      bills: normalizedBills.length,
-      open: open.length,
-      overdue: overdue.length,
-      paid: paid.length,
-    },
-    upcoming,
+    ...summary,
     appliedFilters: {
       from: filters.from,
       to: filters.to,
@@ -128,6 +64,10 @@ export async function getSpendingByCategoryMetrics(
     }),
     getUsdBrlRate(),
   ]);
+
+  // Um conversor por chamada: converte o que conhece e anota o que não
+  // conhece, em vez de somar euro como se fosse dólar.
+  const toBrl = createBrlConverter(usdBrlRate);
 
   const internalTransferPairIds = detectInternalTransferPairIds(allTxs);
 
@@ -158,10 +98,7 @@ export async function getSpendingByCategoryMetrics(
         averageAmount: ZERO,
       };
 
-      let amount = decimal(tx.amount).abs();
-      if (tx.currencyCode && !isBrlCurrency(tx.currencyCode)) {
-        amount = amount.mul(new Prisma.Decimal(usdBrlRate));
-      }
+      const amount = toBrl(decimal(tx.amount).abs(), tx.currencyCode);
       current.amount = current.amount.plus(amount);
       current.count += 1;
       current.averageAmount = current.amount.div(current.count);
@@ -211,6 +148,10 @@ export async function getSpendingByMerchantMetrics(
     getUsdBrlRate(),
   ]);
 
+  // Um conversor por chamada: converte o que conhece e anota o que não
+  // conhece, em vez de somar euro como se fosse dólar.
+  const toBrl = createBrlConverter(usdBrlRate);
+
   const internalTransferPairIds = detectInternalTransferPairIds(allTxs);
 
   const transactions = allTxs.filter((tx) => {
@@ -256,10 +197,7 @@ export async function getSpendingByMerchantMetrics(
       averageAmount: ZERO,
     };
 
-    let amount = transaction.amount.abs();
-    if (transaction.currencyCode && !isBrlCurrency(transaction.currencyCode)) {
-      amount = amount.mul(new Prisma.Decimal(usdBrlRate));
-    }
+    const amount = toBrl(transaction.amount.abs(), transaction.currencyCode);
     current.amount = current.amount.plus(amount);
     current.count += 1;
     current.averageAmount = current.amount.div(current.count);
@@ -301,6 +239,10 @@ export async function getSpendingTrendsMetrics(searchParams: URLSearchParams) {
     }),
     getUsdBrlRate(),
   ]);
+
+  // Um conversor por chamada: converte o que conhece e anota o que não
+  // conhece, em vez de somar euro como se fosse dólar.
+  const toBrl = createBrlConverter(usdBrlRate);
   const internalTransferPairIds = detectInternalTransferPairIds(allTxs);
 
   const buckets = new Map<string, Map<string, number>>();
@@ -318,10 +260,7 @@ export async function getSpendingTrendsMetrics(searchParams: URLSearchParams) {
       const catName = tx.domainCategory?.name ?? "Sem categoria";
       const monthKey = `${tx.occurredAt.getUTCFullYear()}-${String(tx.occurredAt.getUTCMonth() + 1).padStart(2, "0")}`;
       const monthly = buckets.get(catName) ?? new Map<string, number>();
-      let amount = Math.abs(Number(tx.amount));
-      if (tx.currencyCode && !isBrlCurrency(tx.currencyCode)) {
-        amount *= usdBrlRate;
-      }
+      const amount = toBrl(decimal(tx.amount).abs(), tx.currencyCode).toNumber();
       monthly.set(monthKey, (monthly.get(monthKey) ?? 0) + amount);
       buckets.set(catName, monthly);
     }

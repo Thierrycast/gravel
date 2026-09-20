@@ -16,6 +16,7 @@ import {
   ruleSuppressionKeys,
 } from "@/lib/domain/recurring";
 import { getUserSettings } from "@/lib/domain/queries";
+import { variableExpenseDivisor } from "@/lib/domain/projection-window";
 import { matchesSalaryPatternValues } from "@/lib/domain/salary";
 import { prisma } from "@/lib/prisma";
 
@@ -696,8 +697,18 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
   const totalVariableOutflow = sumDecimals(
     variableTransactions.map((tx) => tx.amount.abs()),
   );
+  // O divisor era 3 fixo (a janela é de 90 dias), o que dividia por três o
+  // gasto de quem só tem um mês de extrato. Agora vem do histórico que existe
+  // de fato — ver lib/domain/projection-window.ts.
+  const earliestVariableTransaction = variableTransactions.reduce<Date | null>(
+    (earliest, tx) =>
+      !earliest || tx.occurredAt < earliest ? tx.occurredAt : earliest,
+    null,
+  );
+  const variableMonths = variableExpenseDivisor(earliestVariableTransaction, now);
+
   const avgVariableExpenses = includeVariableExpenses
-    ? safeNumber(totalVariableOutflow.div(3))
+    ? safeNumber(totalVariableOutflow.div(variableMonths))
     : 0;
 
   // Ajustes do restante do mês corrente: a projeção mensal começa no mês

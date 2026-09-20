@@ -469,13 +469,38 @@ export type MonthlyCloseStep = {
   completedAt?: string | null
 }
 
-function monthRange(monthKey: string) {
+/**
+ * Janela de um mês, com a distinção que faltava entre "o mês" e "o que já
+ * aconteceu do mês".
+ *
+ * O problema: o Fechamento Mensal do mês CORRENTE ia até o último instante do
+ * dia 30 — futuro, portanto — enquanto o Dashboard usa `mtd`, que corta em
+ * hoje. As duas telas diziam "este mês" e mostravam números diferentes, e não
+ * havia como o usuário saber qual estava certa (as duas estavam, para
+ * perguntas diferentes).
+ *
+ * Agora a janela carrega as duas datas:
+ * - `to`: o fim do mês de calendário — é o que vale para "o que vence neste
+ *   mês", como a contagem de faturas;
+ * - `realizedTo`: o fim do mês ou agora, o que vier primeiro — é o que vale
+ *   para dinheiro que de fato entrou e saiu, e é o que faz o Fechamento bater
+ *   com o Dashboard.
+ */
+export function monthRange(monthKey: string, now = new Date()) {
   const [yearRaw, monthRaw] = monthKey.split("-")
   const year = Number(yearRaw)
   const month = Number(monthRaw)
   const from = new Date(year, month - 1, 1, 0, 0, 0, 0)
   const to = new Date(year, month, 0, 23, 59, 59, 999)
-  return { from, to }
+  const isCurrentMonth = now >= from && now <= to
+  return {
+    from,
+    to,
+    realizedTo: now < to ? now : to,
+    isCurrentMonth,
+    /** O mês ainda não terminou: os totais são parciais. */
+    isPartial: now < to,
+  }
 }
 
 export function currentMonthKey(now = new Date()) {
@@ -519,10 +544,14 @@ export async function completeMonthlyClose(monthKey: string, summary: Record<str
 
 export async function getMonthlyClosePayload(monthKey = currentMonthKey()) {
   const { config } = await getSettingsWithConfig()
-  const { from, to } = monthRange(monthKey)
+  const window = monthRange(monthKey)
+  const { from, to, realizedTo } = window
+  // Receita e despesa do Fechamento passam a usar a mesma janela do Dashboard
+  // (até agora, não até o fim do mês). Antes, "este mês" somava o que ainda
+  // nem tinha acontecido e as duas telas se contradiziam.
   const params = new URLSearchParams({
     from: from.toISOString(),
-    to: to.toISOString(),
+    to: realizedTo.toISOString(),
     showFutureSalary: "true",
     showFutureAccounts: "true",
   })
@@ -640,6 +669,16 @@ export async function getMonthlyClosePayload(monthKey = currentMonthKey()) {
     completedSteps: completed,
     totalSteps: steps.length,
     completedAt: state.completedAt ?? null,
+    // A janela vai no payload para a tela poder dizer o que está mostrando:
+    // "parcial, até hoje" enquanto o mês corre, "mês fechado" depois. Sem
+    // isso, o mesmo rótulo "este mês" serve dois números diferentes.
+    window: {
+      from: window.from.toISOString(),
+      to: window.to.toISOString(),
+      realizedTo: window.realizedTo.toISOString(),
+      isPartial: window.isPartial,
+      isCurrentMonth: window.isCurrentMonth,
+    },
   }
 
   return {
