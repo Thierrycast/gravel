@@ -56,7 +56,10 @@ INFRA_PATTERNS=(
   '192\.168\.[0-9]{1,3}\.[0-9]{1,3}'          # LAN
   '10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}'    # LAN
   '[a-z0-9-]+\.ts\.net'                        # host de tailnet
-  '<appdata>'                                # appdata do CasaOS
+  "/DATA"'/AppData'                          # appdata do CasaOS (literal partido de
+                                               # propósito: uma reescrita de
+                                               # histórico já apagou este padrão
+                                               # de dentro do próprio scanner)
 )
 
 FOUND=0
