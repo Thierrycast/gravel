@@ -92,6 +92,10 @@ function resolvePeriodRange(period: ReturnType<typeof usePeriod>) {
       return { from: new Date(to.getTime() - 90 * DAY_MS), to };
     case "180d":
       return { from: new Date(to.getTime() - 180 * DAY_MS), to };
+    case "3m":
+      return { from: new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth() - 2, 1)), to };
+    case "6m":
+      return { from: new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth() - 5, 1)), to };
     case "12m":
       return { from: new Date(to.getTime() - 365 * DAY_MS), to };
     case "ytd":

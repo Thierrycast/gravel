@@ -62,6 +62,32 @@ export function clampDateToPeriodStart(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
 }
 
+/**
+ * Início do mês que está `monthsBack` meses atrás de `to`, sempre no dia 1.
+ *
+ * É o que distingue "6 meses" de "180 dias". Subtrair 180 dias de 20/09 cai em
+ * 24/03; agrupando por mês, isso devolve SETE chaves (março a setembro) para
+ * um seletor que promete seis — e a média mensal sai dividida pelo número
+ * errado.
+ */
+function startOfMonthsBack(to: Date, monthsBack: number) {
+  return new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth() - (monthsBack - 1), 1));
+}
+
+/**
+ * Converte o seletor de período no limite inferior da janela.
+ *
+ * Períodos com sufixo `d` são dias corridos; com sufixo `m`, meses inteiros
+ * alinhados ao dia 1. Os dois existem porque servem a coisas diferentes: uma
+ * janela móvel de 30 dias faz sentido para "últimos 30 dias", e não faz para
+ * um gráfico agrupado por mês.
+ *
+ * Período desconhecido **estoura**. Antes caía no `default` e devolvia
+ * `undefined`, que o Prisma lê como "sem limite inferior": um valor novo no
+ * seletor passava a carregar o histórico inteiro, silenciosamente, com o
+ * payload da API explodindo junto. `all` continua devolvendo `undefined`,
+ * porque ali é intencional.
+ */
 export function resolvePeriodStart(period: string | null, to: Date) {
   switch (period) {
     case "7d":
@@ -75,6 +101,10 @@ export function resolvePeriodStart(period: string | null, to: Date) {
     case "365d":
     case "12m":
       return new Date(to.getTime() - 365 * 24 * 60 * 60 * 1000);
+    case "3m":
+      return startOfMonthsBack(to, 3);
+    case "6m":
+      return startOfMonthsBack(to, 6);
     case "mtd":
     case "month":
       return clampDateToPeriodStart(to);
@@ -83,8 +113,12 @@ export function resolvePeriodStart(period: string | null, to: Date) {
     case "ytd":
       return new Date(Date.UTC(to.getUTCFullYear(), 0, 1));
     case "all":
-    default:
       return undefined;
+    default:
+      if (!period) return undefined;
+      throw new Error(
+        `Período desconhecido: "${period}". Use um dos valores de PeriodKey ou "all".`,
+      );
   }
 }
 

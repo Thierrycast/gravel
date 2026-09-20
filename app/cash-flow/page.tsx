@@ -153,7 +153,9 @@ function monthTransactionsHref(dateStr: string, direction?: "INFLOW" | "OUTFLOW"
 
 export default function CashFlowPage() {
   const { format, formatCompact } = useCurrency();
-  const period = usePeriod("180d");
+  // 6m, não 180d: a página agrupa por mês, e 180 dias atrás cai no meio de
+  // março — sete barras num seletor que promete seis.
+  const period = usePeriod("6m");
   const router = useRouter();
 
   const { data: cashFlow, loading: cashFlowLoading, error: cashFlowError, refetch: refetchCashFlow } = useApi<CashFlowResponse>(

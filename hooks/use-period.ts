@@ -17,6 +17,8 @@ export type PeriodKey =
   | "mtd"
   | "30d"
   | "90d"
+  | "3m"
+  | "6m"
   | "180d"
   | "12m"
   | "ytd"
@@ -33,6 +35,11 @@ export const PERIOD_OPTIONS: PeriodOption[] = [
   { value: "mtd", label: "Este mês", shortLabel: "Mês" },
   { value: "30d", label: "Últimos 30 dias", shortLabel: "30d" },
   { value: "90d", label: "Últimos 90 dias", shortLabel: "90d" },
+  // Meses inteiros, alinhados ao dia 1. Não é o mesmo que 90d/180d: um
+  // gráfico agrupado por mês precisa de mês fechado, senão "6 meses" devolve
+  // sete barras.
+  { value: "3m", label: "Últimos 3 meses", shortLabel: "3m" },
+  { value: "6m", label: "Últimos 6 meses", shortLabel: "6m" },
   { value: "180d", label: "Últimos 6 meses", shortLabel: "6m" },
   { value: "12m", label: "Últimos 12 meses", shortLabel: "12m" },
   { value: "ytd", label: "Ano até agora", shortLabel: "Ano" },

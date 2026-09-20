@@ -5,9 +5,11 @@ import {
   classifyCashFlowTransaction,
   detectInternalTransferPairIds,
   extractTransferCounterparty,
+  formatBucket,
   isActiveInvestmentPosition,
   isOutstandingBill,
   normalizeBillStatus,
+  resolvePeriodStart,
 } from "./shared";
 
 function tx(overrides: {
@@ -386,5 +388,68 @@ describe("isOutstandingBill", () => {
         now,
       ),
     ).toBe(true);
+  });
+});
+
+describe("resolvePeriodStart", () => {
+  // 24/03 é a data que o relatório usa: 180 dias atrás de 20/09/2026.
+  const to = new Date(Date.UTC(2026, 8, 20, 23, 59, 59, 999));
+
+  it("períodos em dias contam dias corridos", () => {
+    expect(resolvePeriodStart("7d", to)?.toISOString()).toBe("2026-09-13T23:59:59.999Z");
+    expect(resolvePeriodStart("30d", to)?.toISOString()).toBe("2026-08-21T23:59:59.999Z");
+  });
+
+  it("6m começa no dia 1 do sexto mês para trás, não 180 dias atrás", () => {
+    // O bug: a página de fluxo de caixa pedia 180d, que cai em 24/03. O
+    // agrupamento por mês então devolvia SETE chaves (março a setembro) para
+    // um seletor que diz "6 meses" — e a média mensal saía dividida errado.
+    const seisMeses = resolvePeriodStart("6m", to);
+    expect(seisMeses?.toISOString()).toBe("2026-04-01T00:00:00.000Z");
+  });
+
+  it("6m cobre exatamente seis chaves de mês", () => {
+    const from = resolvePeriodStart("6m", to)!;
+    const meses = new Set<string>();
+    const cursor = new Date(from);
+    while (cursor <= to) {
+      meses.add(formatBucket(cursor, "month"));
+      cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+    }
+    expect(meses.size).toBe(6);
+    expect([...meses]).toEqual([
+      "2026-04",
+      "2026-05",
+      "2026-06",
+      "2026-07",
+      "2026-08",
+      "2026-09",
+    ]);
+  });
+
+  it("3m também é alinhado ao mês", () => {
+    expect(resolvePeriodStart("3m", to)?.toISOString()).toBe("2026-07-01T00:00:00.000Z");
+  });
+
+  it("6m atravessa a virada de ano", () => {
+    const janeiro = new Date(Date.UTC(2027, 0, 15));
+    expect(resolvePeriodStart("6m", janeiro)?.toISOString()).toBe("2026-08-01T00:00:00.000Z");
+  });
+
+  it("mtd começa no dia 1 do mês corrente", () => {
+    expect(resolvePeriodStart("mtd", to)?.toISOString()).toBe("2026-09-01T00:00:00.000Z");
+  });
+
+  it("'all' e ausência de período seguem sem limite inferior", () => {
+    expect(resolvePeriodStart("all", to)).toBeUndefined();
+    expect(resolvePeriodStart(null, to)).toBeUndefined();
+  });
+
+  it("período desconhecido estoura em vez de virar 'desde sempre'", () => {
+    // Antes caía no default e devolvia undefined. O Prisma lê `gte: undefined`
+    // como "sem limite", então um seletor com valor novo passava a carregar o
+    // histórico inteiro — silenciosamente, e com o payload explodindo.
+    expect(() => resolvePeriodStart("6meses", to)).toThrow(/desconhecido/i);
+    expect(() => resolvePeriodStart("ultimos-30", to)).toThrow(/desconhecido/i);
   });
 });

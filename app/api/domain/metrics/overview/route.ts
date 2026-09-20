@@ -34,6 +34,14 @@ export async function GET(request: Request) {
         prevTo = new Date(now.getTime() - 180 * 86400000)
         prevFrom = new Date(prevTo.getTime() - 180 * 86400000)
         break
+      // Períodos em meses: a janela anterior é o mesmo número de meses antes.
+      case "3m":
+      case "6m": {
+        const months = period === "3m" ? 3 : 6
+        prevTo = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - months + 1, 1) - 1)
+        prevFrom = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - months * 2 + 1, 1))
+        break
+      }
       case "12m":
       case "365d":
         prevTo = new Date(now.getTime() - 365 * 86400000)
