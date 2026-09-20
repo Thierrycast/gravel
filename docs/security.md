@@ -193,7 +193,7 @@ sobrava era infra.
    quando havia 69. Para auditar histórico, chame `/usr/bin/git` direto (ou
    `rtk proxy`). O mesmo proxy engoliu a primeira execução do `filter-repo`, que
    simplesmente não rodou sem erro visível.
-2. **A reescrita atinge o próprio scanner.** O padrão `/DATA/AppData` dentro de
+2. **A reescrita atinge o próprio scanner.** O padrão do caminho de appdata dentro de
    `scripts/secret-scan.sh` foi substituído pelo placeholder junto com todo o
    resto, e o gate ficou cego para exatamente o que devia pegar. O literal agora
    é montado partido (`"/DATA"'/AppData'`) para sobreviver à próxima reescrita.

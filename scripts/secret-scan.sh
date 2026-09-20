@@ -10,7 +10,7 @@
 #   scripts/secret-scan.sh            # tudo que está versionado
 #
 # Instalar o hook:
-#   ln -sf ../../scripts/secret-scan.sh .git/hooks/pre-commit
+#   ja instalado: .githooks/pre-commit, encadeado pelo gate do lab (core.hooksPath)
 #
 # Escapar de um falso positivo (raro, e pense duas vezes):
 #   git commit --no-verify
