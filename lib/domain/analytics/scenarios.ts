@@ -2,8 +2,9 @@ import { Prisma } from "@prisma/client";
 import { getUsdBrlRate } from "@/lib/exchange-rate";
 import { prisma } from "@/lib/prisma";
 import { getUserSettings } from "../queries";
+import { projectNetWorth } from "./net-worth-projection";
 import { getOverviewMetrics } from "./overview";
-import { buildMetricFilters, decimal, sumDecimals } from "./shared";
+import { buildMetricFilters, sumDecimals } from "./shared";
 
 export async function getNetWorthMetrics(searchParams?: URLSearchParams) {
   const filters = buildMetricFilters(searchParams ?? new URLSearchParams(), {
@@ -75,49 +76,22 @@ export async function getNetWorthMetrics(searchParams?: URLSearchParams) {
     (settings.showFutureSalary && settings.monthlySalary > 0) ||
     activeScenarios.length > 0
   ) {
-    let projectedNW = currentNetWorth;
-    let scenarioNW = currentNetWorth;
-    const now = new Date();
+    // A projeção vive em ./net-worth-projection.ts, testável sem banco. Antes
+    // a linha do cenário era reatribuída à base a cada mês, então um evento só
+    // existia no mês em que acontecia.
+    const projected = projectNetWorth({
+      currentNetWorth,
+      monthlySalary: settings.monthlySalary,
+      includeSalary: Boolean(settings.showFutureSalary),
+      scenarios: activeScenarios,
+      lookaheadMonths: 12,
+    });
 
-    const lookaheadMonths = 12;
-
-    for (let i = 1; i <= lookaheadMonths; i++) {
-      const projDate = new Date(now);
-      projDate.setMonth(projDate.getMonth() + i);
-      projDate.setDate(1);
-
-      const monthStart = new Date(
-        projDate.getFullYear(),
-        projDate.getMonth(),
-        1,
-      );
-      const monthEnd = new Date(
-        projDate.getFullYear(),
-        projDate.getMonth() + 1,
-        0,
-      );
-
-      if (settings.showFutureSalary) {
-        projectedNW = projectedNW.plus(
-          new Prisma.Decimal(settings.monthlySalary),
-        );
-      }
-
-      scenarioNW = projectedNW;
-
-      const monthScenarios = activeScenarios.filter((scenario) => {
-        const date = new Date(scenario.date);
-        return date >= monthStart && date <= monthEnd;
-      });
-
-      for (const scenario of monthScenarios) {
-        scenarioNW = scenarioNW.plus(decimal(scenario.amount));
-      }
-
+    for (const point of projected) {
       points.push({
-        date: projDate,
-        netWorth: projectedNW,
-        scenarioNetWorth: scenarioNW.toNumber(),
+        date: point.date,
+        netWorth: point.netWorth,
+        scenarioNetWorth: point.scenarioNetWorth.toNumber(),
         source: "snapshot",
       });
     }

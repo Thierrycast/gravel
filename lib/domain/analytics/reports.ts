@@ -1,5 +1,6 @@
 
 import { createBrlConverter } from "@/lib/domain/currency";
+import { summarizeBills } from "./bills-summary";
 import { getUsdBrlRate } from "@/lib/exchange-rate";
 import { prisma } from "@/lib/prisma";
 import {
@@ -8,9 +9,7 @@ import {
   classifyCashFlowTransaction,
   decimal,
   detectInternalTransferPairIds,
-  normalizeBillStatus,
   percentOf,
-  startOfLocalDay,
   sumDecimals,
   ZERO,
 } from "./shared";
@@ -18,92 +17,29 @@ import {
 export async function getBillsSummaryMetrics(searchParams: URLSearchParams) {
   const filters = buildMetricFilters(searchParams, { limit: 12 });
   const now = new Date();
-  const dueIn7 = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-  const dueIn30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
   const hasDateWindow =
     searchParams.has("from") ||
     searchParams.has("to") ||
     searchParams.has("period");
 
-  const bills = await prisma.domainBill.findMany({
-    where: {
-      sourceProvider: filters.provider,
-      domainAccountId: filters.accountId,
-      dueDate: hasDateWindow
-        ? {
-            gte: filters.from,
-            lte: filters.to,
-          }
-        : undefined,
-    },
-    orderBy: [{ dueDate: "asc" }, { totalAmount: "desc" }],
-  });
+  const [bills, usdBrlRate] = await Promise.all([
+    prisma.domainBill.findMany({
+      where: {
+        sourceProvider: filters.provider,
+        domainAccountId: filters.accountId,
+        dueDate: hasDateWindow ? { gte: filters.from, lte: filters.to } : undefined,
+      },
+      orderBy: [{ dueDate: "asc" }, { totalAmount: "desc" }],
+    }),
+    getUsdBrlRate(),
+  ]);
 
-  const normalizedBills = bills.map((bill) => ({
-    ...bill,
-    status: normalizeBillStatus(
-      bill.status,
-      bill.dueDate,
-      bill.totalAmount,
-      now,
-    ),
-  }));
-
-  const totalAmount = sumDecimals(
-    normalizedBills.map((bill) => bill.totalAmount),
-  );
-  const minimumPayment = sumDecimals(
-    normalizedBills.map((bill) => bill.minimumPaymentAmount),
-  );
-  const paid = normalizedBills.filter(
-    (bill) => bill.status === "PAID" || bill.status === "CLOSED",
-  );
-  const overdue = normalizedBills.filter((bill) => bill.status === "OVERDUE");
-  const open = normalizedBills.filter((bill) => bill.status === "OPEN");
-  const upcoming = normalizedBills
-    .filter(
-      (bill) =>
-        bill.dueDate &&
-        bill.dueDate >= startOfLocalDay(now) &&
-        bill.status === "OPEN",
-    )
-    .slice(0, filters.limit);
+  // A matemática vive em ./bills-summary.ts, testável sem banco. Aqui ficou só
+  // a consulta.
+  const summary = summarizeBills(bills, now, usdBrlRate, filters.limit);
 
   return {
-    totalAmount,
-    minimumPayment,
-    openAmount: sumDecimals(open.map((bill) => bill.totalAmount)),
-    paidAmount: sumDecimals(paid.map((bill) => bill.totalAmount)),
-    overdueAmount: sumDecimals(overdue.map((bill) => bill.totalAmount)),
-    dueIn7DaysAmount: sumDecimals(
-      normalizedBills
-        .filter(
-          (bill) =>
-            bill.status === "OPEN" &&
-            bill.dueDate &&
-            bill.dueDate >= now &&
-            bill.dueDate <= dueIn7,
-        )
-        .map((bill) => bill.totalAmount),
-    ),
-    dueIn30DaysAmount: sumDecimals(
-      normalizedBills
-        .filter(
-          (bill) =>
-            bill.status === "OPEN" &&
-            bill.dueDate &&
-            bill.dueDate >= now &&
-            bill.dueDate <= dueIn30,
-        )
-        .map((bill) => bill.totalAmount),
-    ),
-    counts: {
-      bills: normalizedBills.length,
-      open: open.length,
-      overdue: overdue.length,
-      paid: paid.length,
-    },
-    upcoming,
+    ...summary,
     appliedFilters: {
       from: filters.from,
       to: filters.to,
