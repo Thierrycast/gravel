@@ -85,7 +85,7 @@ Se quiser manter validação estrita de `Host` no endpoint remoto, defina també
 
 ```bash
 MCP_BIND_HOST=0.0.0.0 \
-MCP_ALLOWED_HOSTS=seu-host-publico,seu-host.<host>.ts.net,localhost \
+MCP_ALLOWED_HOSTS=seu-host-publico,<seu-host>.ts.net,localhost \
 PORT=3001 \
 pnpm run mcp -- --sse
 ```

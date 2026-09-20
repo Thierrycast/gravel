@@ -10,10 +10,10 @@
  *
  * const orb = mountVoiceOrb(document.querySelector("#orb")!, { visual: "liquid-blob" });
  * const voz = new VoiceSession({
- *   endpoint: { baseUrl: "http://<host-do-lab>:8010", apiKey: "" },
+ *   endpoint: { baseUrl: "http://192.0.2.10:8010", apiKey: "" },
  *   models: { transcription: "groq/whisper-large-v3-turbo", speech: "tts-1" },
  *   voice: "piper:pt_BR-cadu-medium",
- *   streamingUrl: "ws://<host-do-lab>:8010/stt/stream",
+ *   streamingUrl: "ws://192.0.2.10:8010/stt/stream",
  *   handlers: {
  *     onState: (estado) => orb.setState(estado),
  *     onMetrics: (metrics) => orb.setMetrics(metrics),

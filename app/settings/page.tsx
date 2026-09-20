@@ -804,7 +804,7 @@ function SettingsContent() {
                   <Input
                     id="ntfyTopic"
                     type="url"
-                    placeholder="http://<servidor>:3380/lab-gravel"
+                    placeholder="http://servidor:3380/meu-topico"
                     value={formData.ntfyTopicUrl}
                     onChange={(e) => setFormData({ ...formData, ntfyTopicUrl: e.target.value })}
                   />

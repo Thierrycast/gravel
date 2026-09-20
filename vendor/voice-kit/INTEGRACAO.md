@@ -97,13 +97,13 @@ servidor → { "type": "error",   "message": "..." }
 
 ```ts
 {
-  endpoint: { baseUrl: "http://<host-do-lab>:8010", apiKey: "" },
+  endpoint: { baseUrl: "http://192.0.2.10:8010", apiKey: "" },
   models: {
     transcription: "groq/whisper-large-v3-turbo",
     speech: "tts-1",
   },
   voice: "piper:pt_BR-cadu-medium",     // com prefixo do motor, sempre
-  streamingUrl: "ws://<host-do-lab>:8010/stt/stream",   // vazio desliga o texto ao vivo
+  streamingUrl: "ws://192.0.2.10:8010/stt/stream",   // vazio desliga o texto ao vivo
   streamSpeech: true,                    // toca enquanto gera
   language: "pt",
 }
@@ -217,7 +217,7 @@ você não precisa de `chrome.runtime.getURL` nem declarar o arquivo em `web_acc
 > conteúdo misto. Numa extensão, `connect-src` do manifest tem de listar o host **e o `ws://`**:
 >
 > ```
-> connect-src 'self' https: ws://<host-do-lab>:* wss: http://localhost:* http://127.0.0.1:*;
+> connect-src 'self' https: ws://192.0.2.10:* wss: http://localhost:* http://127.0.0.1:*;
 > ```
 >
 > Sem o `ws://` explícito, o WebSocket falha e o `onclose` não diz por quê.

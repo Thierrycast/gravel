@@ -1,0 +1,72 @@
+# Modelo versionado do compose do Gravel.
+#
+# O arquivo real (docker-compose.yml) NÃO vai para o git: o CasaOS o reescreve
+# com segredos literais e com endereços da máquina do lab. Copie este modelo,
+# preencha as variáveis num .env ao lado (também fora do git) e aplique pelo
+# CasaOS.
+#
+# Regra da casa: nada que identifique a infraestrutura pessoal entra no
+# repositório — IP privado, host de tailnet, caminho do registry, porta atrelada
+# à máquina, secret. Ver docs/security.md.
+name: gravel
+services:
+  gravel:
+    image: ${GRAVEL_IMAGE}              # ex.: <registry>/gravel:0.1.6 (tag imutável, nunca "latest")
+    container_name: gravel
+    init: true
+    restart: unless-stopped
+    mem_limit: 320m
+    ports:
+      - 127.0.0.1:${GRAVEL_HTTP_PORT}:3000
+      - ${LAB_HOST_IP}:${GRAVEL_HTTP_PORT}:3000   # IP da máquina do lab
+      - 127.0.0.1:${GRAVEL_MCP_PORT}:3001
+    volumes:
+      - ${GRAVEL_DATA_DIR}:/app/data              # ex.: <appdata>/gravel/data
+    env_file:
+      - ${GRAVEL_SECRETS_ENV}                     # arquivo de segredos, fora do git
+    environment:
+      DATABASE_URL: file:/app/data/prod.db
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      TZ: ${TZ}
+      NODE_OPTIONS: --max-old-space-size=192
+      # --- integrações: URLs públicas de terceiro podem ficar literais ---
+      PLUGGY_API_BASE: https://api.pluggy.ai
+      PLUGGY_API_KEY_HEADER: X-API-KEY
+      PLUGGY_AUTH_PATH: /auth
+      PLUGGY_CONNECT_TOKEN_PATH: /connect_token
+      PLUGGY_API_KEY_TTL_SECONDS: "7200"
+      BINANCE_API_BASE: https://api.binance.com
+      BINANCE_RECV_WINDOW: "5000"
+      # --- endereços do lab: sempre por variável ---
+      PLUGGY_WEBHOOK_URL: ${PLUGGY_WEBHOOK_URL}   # ex.: https://<host-publico>/hooks/pluggy
+      SPEECH_API_BASE_URL: ${SPEECH_API_BASE_URL}
+      AI_BASE_URL: ${AI_BASE_URL}
+      AI_MODEL: ${AI_MODEL}
+      AI_PROVIDER: openai-compatible
+      # --- segredos: SEMPRE vazios aqui; valor só no env_file ---
+      APP_SECRETS_ENCRYPTION_KEY: ""
+      INTERNAL_API_KEY: ""
+      AI_API_KEY: ""
+      PLUGGY_CLIENT_ID: ""
+      PLUGGY_CLIENT_SECRET: ""
+      PLUGGY_WEBHOOK_SECRET: ""
+      BINANCE_API_KEY: ""
+      BINANCE_API_SECRET: ""
+      LOGO_DEV_PUBLISHABLE_KEY: ""
+      LOGO_DEV_SECRET_KEY: ""
+      VAPID_PUBLIC_KEY: ""
+      VAPID_PRIVATE_KEY: ""
+      NEXT_PUBLIC_VAPID_PUBLIC_KEY: ""
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - ${GRAVEL_NETWORK}
+networks:
+  ${GRAVEL_NETWORK}:
+    external: true

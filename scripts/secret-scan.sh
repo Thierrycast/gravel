@@ -47,6 +47,18 @@ PATTERNS=(
 # ${INTERPOLACAO} e placeholders óbvios passam.
 SECRET_VARS='(PLUGGY_CLIENT_SECRET|PLUGGY_WEBHOOK_SECRET|BINANCE_API_KEY|BINANCE_API_SECRET|INTERNAL_API_KEY|LOGO_DEV_SECRET_KEY|APP_SECRETS_ENCRYPTION_KEY|VAPID_PRIVATE_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY)'
 
+# Identificadores da infraestrutura pessoal. Segredo não é o único vazamento:
+# IP privado, host de tailnet e caminho de appdata dizem onde a máquina mora, e
+# em 2026-09-20 o ROADMAP.md ainda carregava o IP do servidor de fala. Vão para
+# variável de ambiente; no .env.example entra placeholder.
+INFRA_PATTERNS=(
+  '100\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\.[0-9]{1,3}\.[0-9]{1,3}'  # CGNAT/tailnet
+  '192\.168\.[0-9]{1,3}\.[0-9]{1,3}'          # LAN
+  '10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}'    # LAN
+  '[a-z0-9-]+\.ts\.net'                        # host de tailnet
+  '<appdata>'                                # appdata do CasaOS
+)
+
 FOUND=0
 
 report() {
@@ -59,12 +71,24 @@ for f in "${FILES[@]}"; do
   # .env.example é o modelo: só documenta nomes, valores ficam vazios.
   case "$f" in
     pnpm-lock.yaml|*.lock|.git/*|*.test.ts) continue ;;
+    # o próprio scanner declara os literais que procura
+    scripts/secret-scan.sh) continue ;;
   esac
 
   for pat in "${PATTERNS[@]}"; do
     while IFS=: read -r line _; do
       [ -n "${line:-}" ] && report "$f:$line — padrão de credencial ($pat)"
     done < <(grep -nEo "$pat" "$f" 2>/dev/null | cut -d: -f1 | sort -u | sed 's/$/:/')
+  done
+
+  # Infra pessoal. 192.0.2.x/198.51.100.x/203.0.113.x são as faixas de
+  # documentação (RFC 5737) e passam de propósito: é o que usar no exemplo.
+  for pat in "${INFRA_PATTERNS[@]}"; do
+    while IFS=: read -r line _; do
+      [ -n "${line:-}" ] && report "$f:$line — endereço da infraestrutura pessoal ($pat)"
+    done < <(grep -nE "$pat" "$f" 2>/dev/null \
+      | grep -vE '192\.0\.2\.|198\.51\.100\.|203\.0\.113\.' \
+      | cut -d: -f1 | sort -u | sed 's/$/:/')
   done
 
   # VAR=valor com conteúdo real. Ignora vazio, "", ${...} e placeholders.
@@ -99,7 +123,7 @@ done
 if [ "$FOUND" -ne 0 ]; then
   cat >&2 <<MSG
 
-${YELLOW}Commit bloqueado: há segredo em arquivo versionado.${RESET}
+${YELLOW}Commit bloqueado: há segredo ou endereço da infra em arquivo versionado.${RESET}
 
 Segredos vivem em ~/.config/gravel/secrets.env (fora do git). Se este for um
 falso positivo, ajuste os padrões em scripts/secret-scan.sh — não use
@@ -108,5 +132,5 @@ MSG
   exit 1
 fi
 
-[ "$MODE" = "--staged" ] || printf '%s✓ nenhum segredo em arquivo versionado (%s arquivos)%s\n' "$GREEN" "${#FILES[@]}" "$RESET"
+[ "$MODE" = "--staged" ] || printf '%s✓ nenhum segredo nem endereço de infra em arquivo versionado (%s arquivos)%s\n' "$GREEN" "${#FILES[@]}" "$RESET"
 exit 0

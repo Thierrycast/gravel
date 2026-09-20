@@ -144,7 +144,7 @@ docker compose up --build -d
 
 O `docker-compose.yml` cria o volume `gravel_data`, define healthcheck e usa
 `/app/data/prod.db`. A aplicação escuta em `3000` no container e publica
-`8421` somente em loopback e no IP Tailscale do argos. A UI normal usa
+`8421` somente em loopback e no IP da tailnet do servidor. A UI normal usa
 `https://<host>.lab.home` pelo Traefik; dados financeiros não ficam mais
 abertos diretamente para toda a LAN. O MCP em `8422` permanece só em loopback.
 
@@ -167,7 +167,7 @@ docker run -p 8421:3000 \
 
 Se precisar trocar a porta externa, altere apenas o lado esquerdo do mapeamento (`HOST:CONTAINER`). Evite `3000` e `3001` no host para não colidir com ambientes de desenvolvimento locais.
 
-> **Reserva de porta no host do CasaOS (<servidor>):** `8422` é do Gravel (MCP server,
+> **Reserva de porta no host do CasaOS:** `8422` é do Gravel (MCP server,
 > container `3001`) — não reatribuir a outro app. Em 2026-07, o Vigor foi reinstalado
 > apontando também para `8422`, e toda vez que o CasaOS tentava religar o Gravel o bind
 > falhava ("port is already allocated"); depois de falhas repetidas o CasaOS perdeu o
