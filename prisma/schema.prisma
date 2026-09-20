@@ -405,7 +405,7 @@ model UserSetting {
   vaultMasterPassword     String?
   vaultInactivityMin      Int      @default(0)
   notificationWebhookUrl  String?
-  /// Tópico ntfy completo (ex.: http://<servidor>:3380/gravel). ntfy recebe a
+  /// Tópico ntfy completo (ex.: http://servidor:3380/gravel). ntfy recebe a
   /// mensagem como corpo em texto puro, não como JSON — por isso é um destino
   /// próprio e não dá para reaproveitar o campo de webhook Slack/Discord.
   ntfyTopicUrl            String?

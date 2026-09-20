@@ -11,7 +11,7 @@
  */
 
 export type VoiceEndpoint = {
-  /** Sem barra no fim; a função normaliza de todo jeito. Ex.: `http://<host-do-lab>:8010`. */
+  /** Sem barra no fim; a função normaliza de todo jeito. Ex.: `http://speech-api:8000`. */
   baseUrl: string;
   /** Vazio quando o servidor não pede autenticação, como num acesso por tailnet. */
   apiKey: string;

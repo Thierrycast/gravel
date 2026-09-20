@@ -89,3 +89,10 @@ validation-copy-*/
 
 # Lixo de build: diff gerado, nao versionar
 diff.txt
+
+# Compose gerado pelo CasaOS: carrega segredos vivos e infra da máquina.
+# O modelo versionado é docker-compose.example.yml (só ${VARIAVEL}).
+# Regra da casa — ver docs/security.md
+/docker-compose.yml
+/docker-compose.legacy.yml
+*.bak

@@ -194,3 +194,30 @@ coisa a existir, e o chat nasce em cima dele.
   confirmação explícita na tela antes de aplicar, e trilha de quem pediu.
 - Reaproveitar `mcp/security.ts` (`WRITE_TOOLS`, escopo read/write), que já
   separa leitura de escrita para o MCP.
+## 🚨 Achados da Auditoria Profunda (Set/2026)
+Durante uma auditoria profunda por subagentes especializados, os seguintes débitos e bugs críticos foram encontrados e mapeados para correção futura:
+
+### 1. Falhas Críticas de Segurança (API)
+- **Falta de Autenticação Global:** As rotas `/api/domain/*`, `/api/pluggy/*`, e `/api/settings/*` não possuem middleware de proteção, permitindo vazamento de dados na rede local.
+- **Vazamento no Webhook:** O `GET /api/webhooks/pluggy` não checa autenticação e expõe IDs e payloads.
+- **Timing Attack:** A comparação da chave interna (`INTERNAL_API_KEY`) no `lib/admin/internal-auth.ts` usa desigualdade de strings (`!==`) em vez de comparação de tempo constante (`crypto.timingSafeEqual`).
+- **TOCTOU no Webhook:** No `app/api/webhooks/pluggy/route.ts`, o `findUnique` antes do `upsert` permite processamento duplicado de webhooks em caso de requisições simultâneas.
+- **Falta de Schemas:** Validações de payload (`transactions/create`) são manuais; falta `zod`.
+
+### 2. Bugs Lógicos e Matemáticos (Analytics)
+- **Conversão de Câmbio Cega:** `lib/domain/analytics/` checa se não é BRL e aplica taxa de USD cegamente para euros, libras, etc. E pior, ignora "USDT" na conversão, somando criptos 1:1 com BRL no Patrimônio Líquido.
+- **Dívida de Cartão inflando Assets:** Em `overview.ts`, faturas de cartão são processadas como `positiveAccounts` e não são deduzidas da composição do Net Worth, inflacionando o percentual de ativos.
+- **Projeção de Scenarios Quebrada:** Em `scenarios.ts`, as simulações não acumulam/rendem. Elas resetam para a linha base imediatamente após o mês do aporte.
+- **Datas Limites (Truncation):** `period=180d` converte o fim para string ISO que acaba cortando o último dia. O `dueIn7DaysAmount` exclui contas vencendo exatamente no momento do request (hoje).
+
+### 3. Falsos Positivos e Falhas de Regra de Negócio (Core Logic)
+- **Notificações em Loop:** `checkBudgetAnomalies()` dispara Push/Telegram incondicionalmente quando invocada pela tela de Inbox. Atualizar o dashboard resulta em flood de alertas.
+- **Detecção de Parcelas Errada:** Expressão regular engole datas brasileiras ("01/12" = Parcela 1 de 12) gerando assinaturas falsas.
+- **Salário Subestimado:** O código em `derived.ts` reduz transações salariais à maior do mês e chuta hardcoded `MONTHLY`, quebrando completamente projeções para quem recebe por quinzena (adiantamentos).
+- **Datas Deslizando:** Falta de `anchorDay` faz cobranças caírem pro dia 28 em fevereiro e se manterem lá pra sempre em projeções futuras.
+
+### 4. Dívida Técnica Frontend (React UI)
+- **Desempenho e Suspense:** `app/cash-flow/page.tsx` e `app/portfolio/page.tsx` usam `useSearchParams` sem envelopamento `<Suspense>`, causando de-opt fatal no SSR do Next.js.
+- **Componentes Gigantes:** `/transactions` tem +1600 linhas misturando filtros complexos de URL, UI, mutations e tabelas de dados de forma insustentável. O mesmo com múltiplos blocos do Recharts inseridos inline em `cash-flow`.
+- **Headers Ausentes:** `fetch` no POST de `app/crypto/page.tsx` omitiu o `Content-Type: application/json`.
+- **Falta Error Boundaries:** Telas não possuem `error.tsx` local, ou seja, se qualquer erro estourar num gráfico de cash-flow, a UI central inteira desmonta.

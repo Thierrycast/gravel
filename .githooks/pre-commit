@@ -1,0 +1,11 @@
+#!/bin/sh
+# Checagem própria do Gravel, encadeada pelo gate do lab (core.hooksPath).
+#
+# O gitleaks do lab pega padrão de credencial e endereço de infra. Este aqui
+# pega o que é específico daqui: valor literal nas variáveis de segredo do app
+# (PLUGGY_*, BINANCE_*, VAPID_*, INTERNAL_API_KEY...), que não têm prefixo
+# reconhecível e por isso passam batido num scanner genérico.
+#
+# O symlink antigo em .git/hooks/pre-commit ficava inerte desde que o lab passou
+# a usar core.hooksPath — era um gate que ninguém rodava.
+exec "$(git rev-parse --show-toplevel)/scripts/secret-scan.sh" --staged

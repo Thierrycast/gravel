@@ -153,3 +153,49 @@ Trocar `PLUGGY_WEBHOOK_SECRET` exige reregistrar o webhook:
 ---
 
 *Documentado por: Claude Code (claude-opus-5) — 2026-08-09.*
+
+## Rodada de 2026-09-20 — o compose sai do git, e o histórico perde a infra
+
+O incidente de agosto foi resolvido no conteúdo, não na causa: o
+`docker-compose.yml` continuou **versionado**, e o CasaOS reescreve esse arquivo
+com valor literal toda vez que a app é aplicada. Em 2026-09-20 ele estava de
+novo com `AI_API_KEY`, `INTERNAL_API_KEY`, `PLUGGY_WEBHOOK_SECRET` e
+`VAPID_PRIVATE_KEY` em texto puro na árvore de trabalho — a um `git add -A` de
+repetir agosto. Desta vez nenhuma dessas chaves chegou a entrar em commit
+(verificado com `git log -S` em cada uma).
+
+O que mudou:
+
+- `docker-compose.yml` e `docker-compose.legacy.yml` saíram do índice e entraram
+  no `.gitignore`, junto com `*.bak`. O modelo versionado é
+  `docker-compose.example.yml`, só com `${VARIAVEL}`. **O compose de produção não
+  volta para o git** — é o CasaOS que manda nele, não o repositório.
+- 23 ocorrências de infraestrutura pessoal saíram da árvore (IP de tailnet, IP de
+  LAN, host `.ts.net`, caminho de appdata). Viraram placeholder, nome de serviço
+  da rede docker, ou faixa de documentação (RFC 5737 — `192.0.2.x`).
+- O histórico inteiro (231 commits) foi reescrito com `git filter-repo`, em duas
+  passadas: `--replace-text` para o conteúdo dos blobs e `--message-callback`
+  para as mensagens de commit — o `--replace-text` sozinho não toca mensagem, e
+  quatro delas citavam o IP do servidor. Backup em
+  `~/backups/gravel-pre-rewrite-*.tar.gz`.
+- `scripts/secret-scan.sh` passou a barrar **endereço de infra**, não só segredo.
+  A primeira coisa que ele achou foi um host `.ts.net` em `docs/mcp.md` que a
+  varredura manual tinha deixado passar.
+
+Nenhuma credencial foi encontrada no histórico (gitleaks com a config do lab:
+`no leaks found`) — o saneamento de agosto tinha funcionado para segredo. O que
+sobrava era infra.
+
+### Duas armadilhas que custaram tempo, registradas para o próximo
+
+1. **O proxy do `rtk` trunca a saída do git em 50 linhas.** Verificar histórico
+   com `git log -p --all | grep` dá **falso negativo** — deu "0 ocorrências"
+   quando havia 69. Para auditar histórico, chame `/usr/bin/git` direto (ou
+   `rtk proxy`). O mesmo proxy engoliu a primeira execução do `filter-repo`, que
+   simplesmente não rodou sem erro visível.
+2. **A reescrita atinge o próprio scanner.** O padrão do caminho de appdata dentro de
+   `scripts/secret-scan.sh` foi substituído pelo placeholder junto com todo o
+   resto, e o gate ficou cego para exatamente o que devia pegar. O literal agora
+   é montado partido (`"/DATA"'/AppData'`) para sobreviver à próxima reescrita.
+
+*Documentado por: Claude Code (claude-opus-5) — 2026-09-20.*

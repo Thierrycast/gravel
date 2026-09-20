@@ -16,7 +16,7 @@
 import { prisma } from "@/lib/prisma"
 
 export type SpeechConfig = {
-  /** Sem barra no fim. Ex.: `http://<host-do-lab>:8010`. */
+  /** Sem barra no fim. Ex.: `http://speech-api:8000`. */
   baseUrl: string
   /** Derivado do baseUrl: http→ws, https→wss. */
   streamingUrl: string
