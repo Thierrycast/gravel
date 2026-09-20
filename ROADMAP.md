@@ -140,6 +140,10 @@ Checklist da revisão de ponta a ponta solicitada. Itens são marcados conforme 
 - Cartões sem fechamento/vencimento configurados continuam nas heurísticas antigas — configurar cada cartão em /settings › Cartões de crédito.
 - O deploy em produção aplica o schema automaticamente (`prisma db push` no entrypoint); os campos novos de billing entram sem passo manual.
 
+## Pendências de produto — anotações (2026-09-09)
+
+- [x] **Limites de crédito em `/accounts`** — feito em 2026-09-10 (`lib/domain/credit.ts`, `0.1.4`). O `creditData` já vinha em todo `GET /accounts` e ficava gravado cru em `PluggyPayloadSnapshot`; passou a subir para `PluggyAccountRecord` e `DomainAccount`. Três regras que ficaram no código com teste: `disaggregatedCreditLimits` é ignorado (as linhas repetem o mesmo limite por modalidade e por cartão adicional — somá-las quadruplicaria o limite do Nubank); cartão que o banco reporta com limite `0` fica fora da soma e é nomeado na tela; usado é `limite − disponível`, não o saldo da fatura. `scripts/backfill-credit-data.ts` preenche o histórico sem chamar a Pluggy.
+
 ---
 
 ## Achados da análise (em andamento)
@@ -150,3 +154,43 @@ Checklist da revisão de ponta a ponta solicitada. Itens são marcados conforme 
 - Faturas Pluggy (`DomainBill`) existem até o ciclo anterior; a fatura corrente é sintetizada via `bills-fallback.ts` usando o saldo total do cartão (soma de tudo em aberto) — causa raiz do problema 3.
 - Transações futuras de parcelas já existem em `DomainTransaction` (até 2027) — dá para agrupar por ciclo de fatura com precisão.
 - Projeção (`getProjectionPayload`) mistura 4 fontes de estimativa (regras, bills, parcelas detectadas, transações futuras) com riscos de dupla contagem.
+
+## Feature planejada — chat de IA multimodal (anotação `vibe_1788751248151_fq609tmo6`)
+
+Pedido dele, na íntegra: chat popup no canto inferior direito, que também abra
+em tela cheia; multimodal (texto, imagem, áudio); usando as ferramentas que já
+existem no MCP do app; OmniRoute como porta de entrada de muitos modelos, com
+**guard para não vazar dado sensível**; e a speech-api do lab para TTS/STT, que
+tem WebSocket e abriria modo de voz ao vivo.
+
+O que decide o desenho: **este app é o extrato bancário dele inteiro.** Qualquer
+token que sai daqui para um provedor externo leva saldo, gasto e nome de
+estabelecimento. Então o guard não é etapa final de polimento — é a primeira
+coisa a existir, e o chat nasce em cima dele.
+
+### Fase 1 — chat de texto com ferramentas de leitura (entregue em 2026-09-10)
+
+- Guard de saída (`lib/ai/guard.ts`) rodando **antes** de qualquer envio: mascara
+  identificador (número de conta, CPF/CNPJ, e-mail, chave Pix, token), corta
+  payload cru de provedor e registra o que saiu.
+- Ferramentas **somente leitura**, curadas: visão geral, contas com limite,
+  faturas, transações recentes, orçamento do mês. Nada de escrita na Fase 1 —
+  ferramenta que altera dado exige confirmação humana, e isso é Fase 3.
+- Popup no canto inferior direito + tela cheia em `/chat`, com histórico
+  persistido.
+- Provedor pelo caminho que já existe (`lib/ai/provider.ts`): OmniRoute entra
+  como `openai-compatible`, e há a opção de apontar para modelo local.
+
+### Fase 2 — multimodal e voz
+
+- Imagem (foto de comprovante, print de fatura) e áudio (ditar um lançamento).
+- STT/TTS pela speech-api (`http://<host-do-lab>:8010`), que é do lab e não sai
+  da tailnet — é o caminho **preferido** justamente por isso.
+- Modo de voz ao vivo pelo WebSocket da speech-api.
+
+### Fase 3 — ferramentas de escrita
+
+- Criar/editar transação, pagar fatura, marcar item do inbox: tudo com
+  confirmação explícita na tela antes de aplicar, e trilha de quem pediu.
+- Reaproveitar `mcp/security.ts` (`WRITE_TOOLS`, escopo read/write), que já
+  separa leitura de escrita para o MCP.

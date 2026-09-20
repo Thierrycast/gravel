@@ -8,6 +8,7 @@ RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY vendor ./vendor
 # Copy prisma schema early so postinstall (prisma generate) works
 COPY prisma ./prisma/
 

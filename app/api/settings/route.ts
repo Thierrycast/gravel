@@ -8,6 +8,17 @@ import { getUserSettings } from "@/lib/domain/queries"
 
 type DashboardConfig = {
   salaryPatterns?: string[]
+  ai?: {
+    provider?: "anthropic" | "openai-compatible"
+    baseUrl?: string
+    model?: string
+  }
+  // Endereço do speech-api (voz do chat). Fica aqui, e não em `NEXT_PUBLIC_*`,
+  // porque é infraestrutura pessoal dele e este repo tem remote no GitHub.
+  speech?: {
+    baseUrl?: string
+    voice?: string
+  }
   [key: string]: unknown
 }
 
@@ -104,11 +115,12 @@ export async function GET() {
   })
 
   let salaryPatterns: string[] = []
+  let dashboardConfig: DashboardConfig = {}
   if (settings.dashboardConfigJson) {
     try {
-      const parsed = JSON.parse(settings.dashboardConfigJson)
-      if (Array.isArray(parsed.salaryPatterns)) {
-        salaryPatterns = parsed.salaryPatterns
+      dashboardConfig = JSON.parse(settings.dashboardConfigJson)
+      if (Array.isArray(dashboardConfig.salaryPatterns)) {
+        salaryPatterns = dashboardConfig.salaryPatterns
       }
     } catch {}
   }
@@ -144,11 +156,27 @@ export async function GET() {
     // enviava ao cliente em toda visita à tela de configurações, e o formulário
     // a carregava num input. O cliente só precisa saber se ela existe.
     vaultMasterPassword: undefined,
+    anthropicApiKey: undefined,
     hasVaultMasterPassword: Boolean(settings.vaultMasterPassword),
     salaryPatterns,
     salarySources,
     salarySuggestions,
     effectiveMonthlySalary: effectiveSettings.monthlySalary,
+    // O padrão vem do ambiente do deploy, não de "anthropic" fixo aqui.
+    //
+    // Com o padrão fixo, abrir /settings e salvar qualquer coisa gravava
+    // `provider: "anthropic"` sem ele ter escolhido nada — e como o que está
+    // salvo vence o ambiente em `resolveAiConfig`, o app passou a mandar a
+    // chave do OmniRoute para a Anthropic e tomar 401 no briefing e no chat.
+    // A tela tem de mostrar o que o app realmente usa.
+    aiProvider:
+      dashboardConfig.ai?.provider ??
+      (process.env.AI_PROVIDER === "openai-compatible" ? "openai-compatible" : "anthropic"),
+    aiBaseUrl: dashboardConfig.ai?.baseUrl ?? process.env.AI_BASE_URL?.trim() ?? "",
+    aiModel:
+      dashboardConfig.ai?.model ?? process.env.AI_MODEL?.trim() ?? "claude-haiku-4-5-20251001",
+    speechBaseUrl: dashboardConfig.speech?.baseUrl ?? "",
+    speechVoice: dashboardConfig.speech?.voice ?? "",
   }
 
   return NextResponse.json(serialized)
@@ -168,13 +196,26 @@ export async function PATCH(request: Request) {
     vaultMasterPassword,
     vaultInactivityMin,
     notificationWebhookUrl,
+    ntfyTopicUrl,
+    ntfyToken,
     telegramBotToken,
     telegramChatId,
-    anthropicApiKey,
+    aiProvider,
+    aiBaseUrl,
+    aiModel,
+    speechBaseUrl,
+    speechVoice,
   } = body
 
   let updatedConfigJson = dashboardConfigJson
-  if (salaryPatterns !== undefined) {
+  if (
+    salaryPatterns !== undefined ||
+    aiProvider !== undefined ||
+    aiBaseUrl !== undefined ||
+    aiModel !== undefined ||
+    speechBaseUrl !== undefined ||
+    speechVoice !== undefined
+  ) {
     const current = await prisma.userSetting.findFirst({
       where: { id: "default" },
     })
@@ -184,10 +225,25 @@ export async function PATCH(request: Request) {
         config = JSON.parse(current.dashboardConfigJson)
       } catch {}
     }
-    config.salaryPatterns = salaryPatterns
+    if (salaryPatterns !== undefined) config.salaryPatterns = salaryPatterns
+    if (aiProvider !== undefined || aiBaseUrl !== undefined || aiModel !== undefined) {
+      config.ai = {
+        ...config.ai,
+        ...(aiProvider !== undefined ? { provider: aiProvider } : {}),
+        ...(aiBaseUrl !== undefined ? { baseUrl: String(aiBaseUrl).trim() } : {}),
+        ...(aiModel !== undefined ? { model: String(aiModel).trim() } : {}),
+      }
+    }
+    if (speechBaseUrl !== undefined || speechVoice !== undefined) {
+      config.speech = {
+        ...config.speech,
+        ...(speechBaseUrl !== undefined ? { baseUrl: String(speechBaseUrl).trim() } : {}),
+        ...(speechVoice !== undefined ? { voice: String(speechVoice).trim() } : {}),
+      }
+    }
     updatedConfigJson = JSON.stringify(config)
 
-    const salaryCat = await prisma.domainCategory.findFirst({
+    const salaryCat = salaryPatterns !== undefined ? await prisma.domainCategory.findFirst({
       where: {
         OR: [
           { slug: "seed-salary" },
@@ -195,7 +251,7 @@ export async function PATCH(request: Request) {
           { name: { contains: "salário" } },
         ],
       },
-    })
+    }) : null
     if (salaryCat) {
       for (const pattern of salaryPatterns) {
         await prisma.domainTransaction.updateMany({
@@ -237,9 +293,10 @@ export async function PATCH(request: Request) {
           : undefined,
       vaultInactivityMin: vaultInactivityMin !== undefined ? vaultInactivityMin : undefined,
       notificationWebhookUrl: notificationWebhookUrl !== undefined ? (notificationWebhookUrl || null) : undefined,
+      ntfyTopicUrl: ntfyTopicUrl !== undefined ? (ntfyTopicUrl || null) : undefined,
+      ntfyToken: ntfyToken !== undefined ? (ntfyToken || null) : undefined,
       telegramBotToken: telegramBotToken !== undefined ? (telegramBotToken || null) : undefined,
       telegramChatId: telegramChatId !== undefined ? (telegramChatId || null) : undefined,
-      anthropicApiKey: anthropicApiKey !== undefined ? (anthropicApiKey || null) : undefined,
     },
   })
 
@@ -263,6 +320,7 @@ export async function PATCH(request: Request) {
       ...settings,
       // Idem GET: o hash não volta para o cliente.
       vaultMasterPassword: undefined,
+      anthropicApiKey: undefined,
       hasVaultMasterPassword: Boolean(settings.vaultMasterPassword),
     }),
   )

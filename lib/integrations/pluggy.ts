@@ -42,8 +42,15 @@ type ApiKeyCache = {
   expiresAt: number
 }
 
+type AuthFailureCache = {
+  expiresAt: number
+}
+
+const authFailureTtlMs = 5 * 60 * 1000
+
 declare global {
   var pluggyApiKeyCache: ApiKeyCache | undefined
+  var pluggyAuthFailureCache: AuthFailureCache | undefined
 }
 
 function readApiKeyCache() {
@@ -54,8 +61,9 @@ function writeApiKeyCache(entry: ApiKeyCache) {
   globalThis.pluggyApiKeyCache = entry
 }
 
-function clearApiKeyCache() {
+export function clearPluggyApiKeyCache() {
   globalThis.pluggyApiKeyCache = undefined
+  globalThis.pluggyAuthFailureCache = undefined
 }
 
 function isCacheValid(entry?: ApiKeyCache) {
@@ -92,9 +100,21 @@ function normalizeApiKeyResponse(data: ApiKeyResponse) {
 export class PluggyNotConfiguredError extends Error {
   constructor() {
     super(
-      "Pluggy não configurado. Cadastre as credenciais em /settings → Segurança.",
+      "Pluggy não configurado. Cadastre o Client ID e o Client Secret em Chaves e credenciais.",
     )
     this.name = "PluggyNotConfiguredError"
+  }
+}
+
+export class PluggyCredentialsError extends Error {
+  readonly statusCode = 401
+  readonly code = "CLIENT_KEYS_UNAUTHORIZED"
+
+  constructor() {
+    super(
+      "O Pluggy recusou o Client ID ou o Client Secret. Atualize as duas credenciais em Configurações → Chaves e credenciais.",
+    )
+    this.name = "PluggyCredentialsError"
   }
 }
 
@@ -137,8 +157,20 @@ export async function createApiKey() {
   })
 
   if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`Pluggy auth error: ${response.status} ${text}`)
+    const body = await response.json().catch(() => ({}))
+    if (response.status === 401) {
+      throw new PluggyCredentialsError()
+    }
+    const message =
+      typeof body?.message === "string"
+        ? body.message
+        : `Falha ao autenticar no Pluggy (HTTP ${response.status})`
+    throw new PluggyApiError({
+      statusCode: response.status,
+      message,
+      code: typeof body?.code === "string" ? body.code : null,
+      body,
+    })
   }
 
   return response.json()
@@ -150,7 +182,22 @@ export async function getApiKey() {
     return cached.apiKey
   }
 
-  const payload = (await createApiKey()) as ApiKeyResponse
+  const cachedFailure = globalThis.pluggyAuthFailureCache
+  if (cachedFailure && Date.now() < cachedFailure.expiresAt) {
+    throw new PluggyCredentialsError()
+  }
+
+  let payload: ApiKeyResponse
+  try {
+    payload = (await createApiKey()) as ApiKeyResponse
+  } catch (error) {
+    if (error instanceof PluggyCredentialsError) {
+      globalThis.pluggyAuthFailureCache = {
+        expiresAt: Date.now() + authFailureTtlMs,
+      }
+    }
+    throw error
+  }
   const normalized = normalizeApiKeyResponse(payload)
 
   if (!normalized) {
@@ -190,7 +237,7 @@ async function _pluggyRequest(path: string, options: PluggyRequestOptions = {}) 
   })
 
   if (response.status === 401) {
-    clearApiKeyCache()
+    clearPluggyApiKeyCache()
     const retryKey = await getApiKey()
     const retryResponse = await fetch(url.toString(), {
       method: options.method ?? "GET",
@@ -240,6 +287,69 @@ export class PluggyApiError extends Error {
 
   get isTransient() {
     return this.statusCode >= 500 && this.statusCode < 600
+  }
+}
+
+export type PluggyErrorDetails = {
+  statusCode: number
+  code: string
+  message: string
+  actionPath: string | null
+  retryable: boolean
+}
+
+/** Mensagem segura e acionável para APIs e telas; nunca inclui payload bruto. */
+export function getPluggyErrorDetails(error: unknown): PluggyErrorDetails {
+  if (error instanceof PluggyCredentialsError) {
+    return {
+      statusCode: 401,
+      code: "PLUGGY_CREDENTIALS_INVALID",
+      message: error.message,
+      actionPath: "/settings?tab=credenciais",
+      retryable: false,
+    }
+  }
+
+  if (error instanceof PluggyNotConfiguredError) {
+    return {
+      statusCode: 409,
+      code: "PLUGGY_NOT_CONFIGURED",
+      message: error.message,
+      actionPath: "/settings?tab=credenciais",
+      retryable: false,
+    }
+  }
+
+  if (error instanceof PluggyApiError) {
+    const webhookUrlInvalid =
+      error.statusCode === 400 &&
+      error.message.toLowerCase().includes("webhook") &&
+      error.message.toLowerCase().includes("url")
+    return {
+      statusCode: webhookUrlInvalid
+        ? 409
+        : error.isRateLimit
+          ? 429
+          : error.isTransient
+            ? 503
+            : 502,
+      code: webhookUrlInvalid
+        ? "PLUGGY_WEBHOOK_URL_INVALID"
+        : (error.code ?? "PLUGGY_API_ERROR"),
+      message: webhookUrlInvalid
+        ? "A URL de webhook enviada ao Pluggy não é uma URL HTTPS pública válida. Verifique PLUGGY_WEBHOOK_URL no deploy."
+        : error.message,
+      actionPath: null,
+      retryable: !webhookUrlInvalid && (error.isRateLimit || error.isTransient),
+    }
+  }
+
+  return {
+    statusCode: 500,
+    code: "PLUGGY_UNEXPECTED_ERROR",
+    message: "Não foi possível comunicar com o Pluggy. Consulte os detalhes do serviço.",
+    actionPath: null,
+    retryable: true,
   }
 }
 
@@ -608,12 +718,7 @@ export async function createConnectToken(options?: {
     cache: "no-store",
   })
 
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`Pluggy connect token error: ${response.status} ${text}`)
-  }
-
-  return response.json()
+  return handlePluggyResponse(response)
 }
 
 // ── Webhooks ────────────────────────────────────────────────────────────────

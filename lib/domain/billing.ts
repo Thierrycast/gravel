@@ -1,5 +1,6 @@
 import { DomainAccountKind, Prisma } from "@prisma/client";
 
+import { getInstitutionLogo } from "@/lib/domain/utils";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -52,6 +53,12 @@ export type CardStatementsPayload = {
   accountId: string;
   accountName: string;
   institutionName: string | null;
+  /**
+   * Logo da instituição, derivada com o MESMO helper que /api/domain/accounts
+   * usa (getInstitutionLogo). Sem isto a tela de faturas mostrava só as
+   * iniciais enquanto a de contas mostrava a logo do mesmo banco.
+   */
+  imageUrl: string | null;
   configured: boolean;
   closingDay: number | null;
   dueDay: number | null;
@@ -470,6 +477,7 @@ export async function getCardStatements(options?: {
         accountId: card.id,
         accountName: card.nickname ?? card.name,
         institutionName: card.institutionName,
+        imageUrl: getInstitutionLogo(card.institutionName ?? card.name),
         configured: false,
         closingDay: null,
         dueDay,
@@ -494,6 +502,7 @@ export async function getCardStatements(options?: {
       accountId: card.id,
       accountName: card.nickname ?? card.name,
       institutionName: card.institutionName,
+      imageUrl: getInstitutionLogo(card.institutionName ?? card.name),
       configured: true,
       closingDay,
       dueDay,

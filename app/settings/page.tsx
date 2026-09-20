@@ -62,9 +62,15 @@ type SettingsFormData = {
   vaultMasterPassword: string
   vaultInactivityMin: number
   notificationWebhookUrl: string
+  ntfyTopicUrl: string
+  ntfyToken: string
   telegramBotToken: string
   telegramChatId: string
-  anthropicApiKey: string
+  aiProvider: "anthropic" | "openai-compatible"
+  aiBaseUrl: string
+  aiModel: string
+  speechBaseUrl: string
+  speechVoice: string
 }
 
 type SalarySource = {
@@ -87,9 +93,10 @@ type SettingsResponse = SettingsFormData & {
   salarySources?: SalarySource[]
   salarySuggestions?: SalarySuggestion[]
   notificationWebhookUrl?: string | null
+  ntfyTopicUrl?: string | null
+  ntfyToken?: string | null
   telegramBotToken?: string | null
   telegramChatId?: string | null
-  anthropicApiKey?: string | null
 }
 
 const SECTIONS = [
@@ -207,7 +214,7 @@ function CardBillingRow({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border bg-muted/20 p-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="grid gap-3 rounded-xl border bg-muted/20 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
       <div className="min-w-0">
         <p className="flex items-center gap-2 text-sm font-semibold">
           {account.name}
@@ -222,7 +229,7 @@ function CardBillingRow({
           {account.institution || "Cartão de crédito"}
         </p>
       </div>
-      <div className="flex items-end gap-2">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2">
         <div className="space-y-1">
           <Label className="text-[11px] text-muted-foreground">Fechamento</Label>
           <Input
@@ -230,7 +237,7 @@ function CardBillingRow({
             min="1"
             max="31"
             placeholder="dia"
-            className="h-8 w-20 text-sm"
+            className="h-8 min-w-0 w-full text-sm"
             value={closingDay}
             onChange={(e) => setClosingDay(e.target.value)}
           />
@@ -242,12 +249,12 @@ function CardBillingRow({
             min="1"
             max="31"
             placeholder={suggestedDueDay ? `${suggestedDueDay}?` : "dia"}
-            className="h-8 w-20 text-sm"
+            className="h-8 min-w-0 w-full text-sm"
             value={dueDay}
             onChange={(e) => setDueDay(e.target.value)}
           />
         </div>
-        <Button size="sm" className="h-8" disabled={saving} onClick={save}>
+        <Button size="sm" className="h-8 whitespace-nowrap" disabled={saving} onClick={save}>
           {saving ? "..." : "Salvar"}
         </Button>
       </div>
@@ -370,9 +377,15 @@ function SettingsContent() {
     vaultMasterPassword: "",
     vaultInactivityMin: 0,
     notificationWebhookUrl: "",
+    ntfyTopicUrl: "",
+    ntfyToken: "",
     telegramBotToken: "",
     telegramChatId: "",
-    anthropicApiKey: "",
+    aiProvider: "anthropic",
+    aiBaseUrl: "",
+    aiModel: "claude-haiku-4-5-20251001",
+    speechBaseUrl: "",
+    speechVoice: "",
   })
 
   const creditCards = (accountsData?.results ?? []).filter(isCreditCard)
@@ -394,9 +407,15 @@ function SettingsContent() {
         vaultMasterPassword: "",
         vaultInactivityMin: settings.vaultInactivityMin,
         notificationWebhookUrl: settings.notificationWebhookUrl || "",
+        ntfyTopicUrl: settings.ntfyTopicUrl || "",
+        ntfyToken: settings.ntfyToken || "",
         telegramBotToken: settings.telegramBotToken || "",
         telegramChatId: settings.telegramChatId || "",
-        anthropicApiKey: settings.anthropicApiKey || "",
+        aiProvider: settings.aiProvider || "anthropic",
+        aiBaseUrl: settings.aiBaseUrl || "",
+        aiModel: settings.aiModel || "claude-haiku-4-5-20251001",
+        speechBaseUrl: settings.speechBaseUrl || "",
+        speechVoice: settings.speechVoice || "",
       }
       setFormData(next)
       setBaseline(JSON.stringify(next))
@@ -588,11 +607,11 @@ function SettingsContent() {
                   {salarySuggestions.map((sug) => (
                     <div
                       key={sug.pattern}
-                      className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3 transition-all hover:border-primary/30"
+                      className="flex flex-col gap-3 rounded-lg border bg-background p-3 transition-all hover:border-primary/30 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="min-w-0 flex-1">
-                        <span className="font-semibold text-xs block truncate text-foreground">{sug.pattern}</span>
-                        <span className="text-[10px] text-muted-foreground block truncate">
+                        <span className="block break-words text-xs font-semibold text-foreground">{sug.pattern}</span>
+                        <span className="mt-0.5 block break-words text-[10px] text-muted-foreground">
                           Média: {format(sug.averageAmount)}/mês · Última: {sug.lastDescription || sug.pattern} ({new Date(sug.lastDate).toLocaleDateString("pt-BR")})
                         </span>
                       </div>
@@ -646,22 +665,22 @@ function SettingsContent() {
                 {salarySources.map((source) => (
                   <div
                     key={source.pattern}
-                    className="flex items-center justify-between gap-4 rounded-xl border bg-muted/30 p-3.5 transition-all hover:bg-muted/50"
+                    className="flex flex-col gap-3 rounded-xl border bg-muted/30 p-3.5 transition-all hover:bg-muted/50 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="min-w-0 flex-1 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm truncate">{source.pattern}</span>
-                        <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Ativa</span>
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <span className="min-w-0 break-words text-sm font-semibold">{source.pattern}</span>
+                        <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Ativa</span>
                       </div>
                       {source.lastDescription ? (
-                        <p className="text-xs text-muted-foreground truncate">
+                        <p className="line-clamp-2 break-words text-xs text-muted-foreground">
                           Última: {source.lastDescription} · {new Date(source.lastDate!).toLocaleDateString("pt-BR")}
                         </p>
                       ) : (
                         <p className="text-xs text-muted-foreground italic">Nenhuma transação recebida ainda no período de busca.</p>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex items-center gap-3 self-end sm:self-auto">
                       {source.lastAmount !== null && (
                         <span className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
                           {format(source.lastAmount)}
@@ -773,6 +792,40 @@ function SettingsContent() {
 
             <div className="space-y-4">
               <div>
+                <p className="text-sm font-medium">ntfy (servidor do lab)</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Cole o tópico completo do seu ntfy. Diferente do webhook acima, o ntfy recebe a
+                  mensagem em texto puro — título, prioridade e ícone vão nos headers.
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="ntfyTopic">URL do tópico</Label>
+                  <Input
+                    id="ntfyTopic"
+                    type="url"
+                    placeholder="http://<servidor>:3380/lab-gravel"
+                    value={formData.ntfyTopicUrl}
+                    onChange={(e) => setFormData({ ...formData, ntfyTopicUrl: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ntfyToken">Token (se o tópico for protegido)</Label>
+                  <Input
+                    id="ntfyToken"
+                    type="password"
+                    placeholder="tk_..."
+                    value={formData.ntfyToken}
+                    onChange={(e) => setFormData({ ...formData, ntfyToken: e.target.value })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+              <div>
                 <p className="text-sm font-medium">Telegram</p>
                 <p className="text-xs text-muted-foreground mt-0.5">Crie um bot em @BotFather para obter o token.</p>
               </div>
@@ -803,16 +856,56 @@ function SettingsContent() {
             <Separator />
 
             <div className="space-y-2">
-              <Label htmlFor="anthropicKey">Anthropic API Key</Label>
+              <Label htmlFor="aiProvider">Provider do briefing</Label>
+              <select
+                id="aiProvider"
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={formData.aiProvider}
+                onChange={(event) => setFormData({ ...formData, aiProvider: event.target.value as SettingsFormData["aiProvider"] })}
+              >
+                <option value="anthropic">Anthropic (legado)</option>
+                <option value="openai-compatible">OpenAI-compatible</option>
+              </select>
               <Input
-                id="anthropicKey"
-                type="password"
-                placeholder="sk-ant-..."
-                value={formData.anthropicApiKey}
-                onChange={(e) => setFormData({ ...formData, anthropicApiKey: e.target.value })}
+                aria-label="Modelo do briefing"
+                placeholder="Modelo"
+                value={formData.aiModel}
+                onChange={(event) => setFormData({ ...formData, aiModel: event.target.value })}
+              />
+              {formData.aiProvider === "openai-compatible" && (
+                <Input
+                  aria-label="Base URL do provider"
+                  type="url"
+                  placeholder="http://servidor-local:porta/v1"
+                  value={formData.aiBaseUrl}
+                  onChange={(event) => setFormData({ ...formData, aiBaseUrl: event.target.value })}
+                />
+              )}
+              <p className="text-xs text-muted-foreground">
+                A chave é cadastrada no cofre, em Credenciais. Nenhum endpoint é ativado automaticamente.
+              </p>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-2">
+              <Label htmlFor="speechBaseUrl">Voz do assistente (speech-api)</Label>
+              <Input
+                id="speechBaseUrl"
+                type="url"
+                placeholder="http://servidor:8010"
+                value={formData.speechBaseUrl}
+                onChange={(event) => setFormData({ ...formData, speechBaseUrl: event.target.value })}
+              />
+              <Input
+                aria-label="Voz usada na fala"
+                placeholder="piper:pt_BR-cadu-medium"
+                value={formData.speechVoice}
+                onChange={(event) => setFormData({ ...formData, speechVoice: event.target.value })}
               />
               <p className="text-xs text-muted-foreground">
-                Necessária para o Briefing Automático Mensal em /insights.
+                Em branco, o assistente funciona só por texto — sem botão de microfone morto na tela.
+                O endereço é servido ao navegador em runtime e não entra no build nem em commit.
               </p>
             </div>
 
@@ -847,6 +940,42 @@ function SettingsContent() {
                   Notificações push ativadas neste dispositivo.
                 </p>
               )}
+            </div>
+
+            <Separator />
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium">Testar entrega</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Dispara uma notificação pelos mesmos caminhos das reais e diz quais destinos
+                  estavam configurados. Salve antes de testar.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="shrink-0"
+                onClick={async () => {
+                  try {
+                    const res = await fetch("/api/notifications/test", { method: "POST" })
+                    const data = await res.json()
+                    if (!data.success) throw new Error(data.error || "falhou")
+                    const ligados = Object.entries(data.destinos as Record<string, boolean | number>)
+                      .filter(([, on]) => Boolean(on))
+                      .map(([nome]) => nome)
+                    toast.success(
+                      ligados.length
+                        ? `Disparado para: ${ligados.join(", ")}`
+                        : "Disparado, mas nenhum destino está configurado",
+                    )
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Falha ao disparar teste")
+                  }
+                }}
+              >
+                Enviar notificação de teste
+              </Button>
             </div>
           </div>
         )
@@ -906,39 +1035,46 @@ function SettingsContent() {
       case "dados":
         return (
           <div className="space-y-6">
-            <div className="space-y-3">
-              <Label>Exportação</Label>
-              <Button variant="outline" asChild className="gap-2 w-full sm:w-auto">
+            <section className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <h3 className="text-sm font-medium">Exportação</h3>
+                <p className="text-xs text-muted-foreground">
+                  Baixe uma cópia das transações para análise externa. O arquivo não altera seus dados.
+                </p>
+              </div>
+              <Button variant="outline" asChild className="w-full shrink-0 gap-2 sm:w-auto">
                 <a href="/api/domain/transactions/export" download>
                   <Download className="size-4" />
                   Exportar transações (CSV)
                 </a>
               </Button>
-            </div>
+            </section>
 
             <Separator />
 
-            <div className="space-y-3">
-              <div>
-                <Label>Cache local</Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Se valores parecerem desatualizados, limpe o cache. Os dados do banco de dados não são afetados.
-                </p>
+            <section className="border-t border-destructive/20 pt-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-medium">Limpar cache local</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Remove cópias salvas neste dispositivo e recarrega a interface. Os dados do banco não são afetados.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full shrink-0 gap-2 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive sm:w-auto"
+                  disabled={clearingCache}
+                  onClick={clearLocalCache}
+                >
+                  {clearingCache ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="size-4" />
+                  )}
+                  Limpar cache
+                </Button>
               </div>
-              <Button
-                variant="outline"
-                className="gap-2 w-full sm:w-auto"
-                disabled={clearingCache}
-                onClick={clearLocalCache}
-              >
-                {clearingCache ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="size-4" />
-                )}
-                Limpar cache local
-              </Button>
-            </div>
+            </section>
           </div>
         )
     }

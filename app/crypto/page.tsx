@@ -360,7 +360,7 @@ function AllocationDonut({ results }: { results: CryptoAsset[] }) {
 
   const chartConfig = Object.fromEntries(
     data.map((item, index) => {
-      const color = item.name === "Outros" ? "var(--muted-foreground)" : `var(--chart-${(index % 5) + 1})`
+      const color = item.name === "Outros" ? "var(--chart-neutral)" : `var(--chart-${(index % 8) + 1})`
       return [item.name, { label: item.name, color }]
     })
   ) as ChartConfig

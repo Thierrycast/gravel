@@ -14,6 +14,7 @@ import {
 import crypto from "node:crypto";
 import { prisma } from "../lib/prisma.js";
 import { normalizeText } from "../lib/domain/utils.js";
+import { canCallTool, resolveMcpScope, validBearer } from "./security.js";
 
 import { serializeDecimal } from "../cli/core/serialize.js";
 import {
@@ -56,6 +57,7 @@ import {
  */
 
 function createServer() {
+  const scope = resolveMcpScope(process.env.MCP_SCOPE);
   const server = new Server(
     {
       name: "gravel-finance",
@@ -661,7 +663,7 @@ const TOOLS: Tool[] = [
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
-    tools: TOOLS,
+    tools: TOOLS.filter((tool) => canCallTool(scope, tool.name)),
   };
 });
 
@@ -669,6 +671,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
+    if (!canCallTool(scope, name)) {
+      throw new Error(`A ferramenta ${name} exige MCP_SCOPE=write.`);
+    }
     const params = new URLSearchParams();
     if (args) {
       for (const [key, value] of Object.entries(args)) {
@@ -1588,8 +1593,9 @@ async function runServer() {
 
   if (sseMode) {
     const port = Number(portEnv || 3001);
-    const bindHost = process.env.MCP_BIND_HOST || "0.0.0.0";
+    const bindHost = process.env.MCP_BIND_HOST || "127.0.0.1";
     const allowedHosts = parseCsvEnv(process.env.MCP_ALLOWED_HOSTS);
+    const accessToken = process.env.MCP_ACCESS_TOKEN?.trim() || "";
     const { SSEServerTransport } = await import("@modelcontextprotocol/sdk/server/sse.js");
     const { createMcpExpressApp } = await import("@modelcontextprotocol/sdk/server/express.js");
 
@@ -1597,6 +1603,19 @@ async function runServer() {
       host: bindHost,
       ...(allowedHosts.length > 0 ? { allowedHosts } : {}),
     });
+    if (accessToken) {
+      app.use((
+        request: { headers: { authorization?: string } },
+        response: { status(code: number): { send(body: string): void } },
+        next: () => void
+      ) => {
+        if (!validBearer(request.headers.authorization, accessToken)) {
+          response.status(401).send("Unauthorized");
+          return;
+        }
+        next();
+      });
+    }
     const transports = new Map<string, InstanceType<typeof SSEServerTransport>>();
     type StatusResponse = {
       headersSent: boolean;

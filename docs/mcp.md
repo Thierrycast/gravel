@@ -74,7 +74,7 @@ Se o seu cliente de IA (ex: Claude Desktop) roda em uma máquina cliente e o Gra
 O Gravel MCP suporta o protocolo HTTP Server-Sent Events (SSE). Para iniciar o servidor MCP como um endpoint de rede HTTP, execute informando a porta (`PORT` ou `MCP_PORT`) e a flag `--sse`:
 
 ```bash
-MCP_BIND_HOST=0.0.0.0 PORT=3001 pnpm run mcp -- --sse
+MCP_BIND_HOST=127.0.0.1 MCP_SCOPE=read PORT=3001 pnpm run mcp -- --sse
 ```
 
 Isso iniciará o servidor HTTP de escuta na porta especificada. Para conectar um cliente compatível (como o Cursor), registre o servidor com as seguintes configurações:
@@ -91,6 +91,10 @@ pnpm run mcp -- --sse
 ```
 
 Resumo da política:
+* O padrão é `MCP_BIND_HOST=127.0.0.1` e `MCP_SCOPE=read`.
+* `MCP_ACCESS_TOKEN`, quando definido, exige `Authorization: Bearer <token>` em todas as rotas HTTP do MCP.
+* `MCP_SCOPE=write` deve ser ativado explicitamente para ferramentas que alteram dados.
+* No CasaOS, a porta `8422` é publicada somente em `127.0.0.1`; acesso remoto deve passar por proxy/túnel autenticado.
 * `MCP_BIND_HOST=0.0.0.0`: aceita conexões remotas e desliga a proteção automática de localhost da SDK.
 * `MCP_ALLOWED_HOSTS=...`: reativa uma allowlist explícita de `Host` para cenários expostos em rede.
 * Se o cliente estiver vindo por Tailscale IP/hostname, esse valor precisa estar na allowlist quando `MCP_ALLOWED_HOSTS` for usada.

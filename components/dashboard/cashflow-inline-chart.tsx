@@ -30,10 +30,10 @@ const TOOLTIP_LABEL_STYLE: React.CSSProperties = {
 };
 
 const CASHFLOW_COLORS: Record<string, string> = {
-  income:      "var(--chart-2)",
-  expense:     "var(--chart-4)",
-  investments: "var(--chart-3)",
-  net:         "#1d4ed8",
+  income:      "var(--chart-6)",
+  expense:     "var(--chart-8)",
+  investments: "var(--chart-1)",
+  net:         "var(--chart-7)",
 };
 
 const CASHFLOW_LABELS: Record<string, string> = {

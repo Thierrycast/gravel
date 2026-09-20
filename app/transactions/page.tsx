@@ -1050,9 +1050,9 @@ function TransactionsContent() {
                             variant="outline"
                             className="gap-1.5 py-1 px-2.5 font-mono text-sm border-border"
                             style={{
-                              borderColor: `${getCategoryColor(transaction.categoryName)}80`,
+                              borderColor: `color-mix(in srgb, ${getCategoryColor(transaction.categoryName)} 50%, transparent)`,
                               color: getCategoryColor(transaction.categoryName),
-                              backgroundColor: `${getCategoryColor(transaction.categoryName)}15`,
+                              backgroundColor: `color-mix(in srgb, ${getCategoryColor(transaction.categoryName)} 8%, transparent)`,
                             }}
                           >
                             <span aria-hidden className="text-base">
@@ -1158,7 +1158,7 @@ function TransactionsContent() {
                             className="shrink-0 max-w-[45%] truncate text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border border-current/20"
                             style={{
                               color: getCategoryColor(transaction.categoryName),
-                              backgroundColor: `${getCategoryColor(transaction.categoryName)}15`,
+                              backgroundColor: `color-mix(in srgb, ${getCategoryColor(transaction.categoryName)} 8%, transparent)`,
                             }}
                           >
                             {transaction.categoryName}

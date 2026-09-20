@@ -183,7 +183,7 @@ function CategoryBadge({
   return (
     <div
       className={`${sizeClasses} flex shrink-0 items-center justify-center rounded-full`}
-      style={{ backgroundColor: `${color}20` }}
+      style={{ backgroundColor: `color-mix(in srgb, ${color} 13%, transparent)` }}
     >
       <span>{emoji}</span>
     </div>
@@ -692,9 +692,6 @@ function CategoriesPageContent() {
   const [activeTab, setActiveTab] = useState<TabKey>("categorias");
   const period = usePeriod("mtd");
 
-  const [showSalary, setShowSalary] = useState(
-    searchParams.get("showFutureSalary") !== "false",
-  );
   const [showFuture, setShowFuture] = useState(
     searchParams.get("showFutureAccounts") !== "false",
   );
@@ -714,7 +711,6 @@ function CategoriesPageContent() {
       ...period.params,
       limit: "30",
       showFutureAccounts: String(showFuture),
-      showFutureSalary: String(showSalary),
     },
   );
 
@@ -825,22 +821,6 @@ function CategoriesPageContent() {
           activeTab === "categorias" ? (
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-4 border-r pr-6 border-border/60">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    id="show-salary"
-                    checked={showSalary}
-                    onCheckedChange={(val) => {
-                      setShowSalary(val);
-                      updateParam("showFutureSalary", val);
-                    }}
-                  />
-                  <Label
-                    htmlFor="show-salary"
-                    className="text-xs font-medium cursor-pointer"
-                  >
-                    Salários
-                  </Label>
-                </div>
                 <div className="flex items-center gap-2">
                   <Switch
                     id="show-future"

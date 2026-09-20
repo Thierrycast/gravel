@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { useApi } from "@/hooks/use-api";
 import { usePeriod } from "@/hooks/use-period";
 import { formatDate, formatDateFull, formatPercent } from "@/lib/format";
+import { summarizeCreditLimits } from "@/lib/domain/credit";
 import { useCurrency } from "@/lib/currency-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -100,6 +101,63 @@ function getTypeLabel(kind: string): string {
 
 function isCreditAccount(account: Account): boolean {
   return account.kind === "CARD" || account.kind === "CREDIT";
+}
+
+/**
+ * Limite do cartão, como o banco informa.
+ *
+ * Pedido dele: *"poderia mostrar os limites de crédito totais em cada cartão"*.
+ * Fica junto da fatura porque as duas coisas respondem perguntas diferentes —
+ * a fatura é o que ele deve, o limite é o quanto ainda pode gastar.
+ *
+ * Cartão sem limite informado não desenha bloco vazio: o banco não mandou, e
+ * área que não diz nada sai da tela.
+ */
+function CreditLimitBlock({
+  account,
+  format,
+}: {
+  account: Account;
+  format: (value: number) => string;
+}) {
+  const limit = account.creditLimit ?? null;
+  if (limit === null || limit <= 0) return null;
+
+  const available = account.availableCreditLimit ?? null;
+  // Usado é a conta do banco (limite − disponível), não o saldo da fatura: a
+  // fatura aberta não inclui parcela futura nem compra ainda não faturada.
+  const used = available === null ? null : limit - available;
+  const usedPercent = used === null ? null : (used / limit) * 100;
+
+  return (
+    <div className="space-y-1.5 border-t pt-3">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">Limite</span>
+        <span className="font-semibold tabular-nums">{format(limit)}</span>
+      </div>
+      {available !== null ? (
+        <>
+          <Progress value={Math.min(Math.max(usedPercent ?? 0, 0), 100)} />
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>
+              {formatPercent(usedPercent ?? 0)} usado
+              {used !== null ? ` · ${format(used)}` : ""}
+            </span>
+            <span className="tabular-nums">{format(available)} livre</span>
+          </div>
+        </>
+      ) : (
+        <div className="text-[11px] text-muted-foreground">
+          O banco informou o limite, mas não o disponível.
+        </div>
+      )}
+      {account.creditDataAt && (
+        <div className="text-[10px] text-muted-foreground">
+          Limite informado pelo banco em {formatDate(account.creditDataAt)}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function AccountCardSkeleton() {
@@ -210,6 +268,18 @@ export default function AccountsPage() {
   const totalCredit =
     Math.abs(allocationData?.summary.byKind.CARD ?? 0) +
     Math.abs(allocationData?.summary.byKind.CREDIT ?? 0);
+  // Soma dos limites — o "estimativa de crédito somando os créditos" que ele
+  // pediu. A regra de quem entra na soma está em `lib/domain/credit.ts`.
+  const creditSummary = summarizeCreditLimits(
+    accounts.filter(isCreditAccount).map((account) => ({
+      id: account.id,
+      name: account.name,
+      creditLimit: account.creditLimit ?? null,
+      availableCreditLimit: account.availableCreditLimit ?? null,
+      balance: account.balance,
+      creditDataAt: account.creditDataAt ?? null,
+    })),
+  );
   const totalBank =
     (allocationData?.summary.byKind.BANK ?? 0) +
     (allocationData?.summary.byKind.CASH ?? 0) +
@@ -381,7 +451,7 @@ export default function AccountsPage() {
 
       {/* Summary Cards */}
       {!loading && allocationData && (
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader>
               <CardDescription>Saldo líquido nas contas</CardDescription>
@@ -414,12 +484,68 @@ export default function AccountsPage() {
               </CardTitle>
             </CardHeader>
           </Card>
+          {/* Limite somado. Só aparece quando algum banco informou limite —
+              cartão nenhum informando, o card seria uma linha de zeros. */}
+          {creditSummary.countedAccounts > 0 && (
+            <Card>
+              <CardHeader>
+                <CardDescription>
+                  Limite de crédito{" "}
+                  <span className="text-muted-foreground">
+                    ({creditSummary.countedAccounts}{" "}
+                    {creditSummary.countedAccounts === 1 ? "cartão" : "cartões"})
+                  </span>
+                </CardDescription>
+                <CardTitle className="break-words font-mono text-2xl">
+                  {format(creditSummary.totalLimit)}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 pt-0">
+                {creditSummary.usedRatio !== null && (
+                  <>
+                    <Progress
+                      value={Math.min(Math.max(creditSummary.usedRatio, 0), 100)}
+                    />
+                    <div className="flex flex-wrap items-center justify-between gap-x-2 text-xs text-muted-foreground">
+                      <span>
+                        {formatPercent(creditSummary.usedRatio)} usado ·{" "}
+                        {format(creditSummary.totalUsed)}
+                      </span>
+                      <span className="tabular-nums">
+                        {format(creditSummary.totalAvailable)} livre
+                      </span>
+                    </div>
+                  </>
+                )}
+                {/* Nomear quem ficou de fora: total que esconde o que não entrou
+                    parece completo sem ser. */}
+                {creditSummary.missingLimitNames.length > 0 && (
+                  <div className="text-[11px] text-muted-foreground">
+                    Fora da soma, sem limite informado pelo banco:{" "}
+                    {creditSummary.missingLimitNames.join(", ")}.
+                  </div>
+                )}
+                {creditSummary.missingAvailableNames.length > 0 && (
+                  <div className="text-[11px] text-muted-foreground">
+                    Sem disponível informado (limite conta, uso não):{" "}
+                    {creditSummary.missingAvailableNames.join(", ")}.
+                  </div>
+                )}
+                {creditSummary.oldestDataAt && (
+                  <div className="text-[10px] text-muted-foreground">
+                    Dado mais antigo do banco:{" "}
+                    {formatDate(creditSummary.oldestDataAt)}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
       {loading && (
-        <div className="grid gap-4 md:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
             <Card key={i}>
               <CardHeader>
                 <Skeleton className="h-3 w-24" />
@@ -678,6 +804,12 @@ export default function AccountsPage() {
                                 </>
                               )}
                             </div>
+                          )}
+                          {credit && (
+                            <CreditLimitBlock
+                              account={account}
+                              format={format}
+                            />
                           )}
                         </CardContent>
                       </Card>

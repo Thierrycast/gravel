@@ -86,6 +86,12 @@ model DomainAccount {
   realtimeBalance       Decimal?
   realtimeBalanceAt     DateTime?
   realtimeBalanceStatus String?
+  // Limite do cartão como o banco informa. `creditDataAt` é o horário do
+  // conector, não o do nosso sync: limite é número que o usuário confere com o
+  // app do banco, e mostrar sem data seria pedir para ele confiar no escuro.
+  creditLimit          Decimal?
+  availableCreditLimit Decimal?
+  creditDataAt         DateTime?
   metadataJson     String?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
@@ -399,6 +405,12 @@ model UserSetting {
   vaultMasterPassword     String?
   vaultInactivityMin      Int      @default(0)
   notificationWebhookUrl  String?
+  /// Tópico ntfy completo (ex.: http://<servidor>:3380/gravel). ntfy recebe a
+  /// mensagem como corpo em texto puro, não como JSON — por isso é um destino
+  /// próprio e não dá para reaproveitar o campo de webhook Slack/Discord.
+  ntfyTopicUrl            String?
+  /// Token de acesso do ntfy, se o tópico for protegido (Bearer).
+  ntfyToken               String?
   telegramBotToken        String?
   telegramChatId          String?
   anthropicApiKey         String?
@@ -776,6 +788,18 @@ model PluggyAccountRecord {
   taxNumber         String?
   currencyCode      String?
   balance           Decimal?
+  // `creditData` do payload da Pluggy, achatado. Vinha sendo jogado fora: o
+  // limite do cartão chegava em todo sync, ficava no snapshot cru e nunca
+  // subia para o domínio, então a tela não tinha como mostrar.
+  creditLimit          Decimal?
+  availableCreditLimit Decimal?
+  minimumPayment       Decimal?
+  creditLevel          String?
+  creditBrand          String?
+  creditStatus         String?
+  isLimitFlexible      Boolean?
+  balanceCloseDate     DateTime?
+  balanceDueDate       DateTime?
   providerCreatedAt DateTime?
   providerUpdatedAt DateTime?
   createdAt         DateTime  @default(now())
@@ -1060,4 +1084,21 @@ model PushSubscription {
   p256dh    String
   auth      String
   createdAt DateTime @default(now())
+}
+
+/// Histórico do chat de IA.
+///
+/// Guardado no banco porque conversa que some no refresh não serve para
+/// acompanhar decisão — ele pergunta "e aquilo que falamos ontem?". Junto vai a
+/// trilha de auditoria: qual provedor viu o quê, quantos identificadores foram
+/// mascarados e quantos bytes saíram.
+model AiChatMessage {
+  id            String   @id @default(cuid())
+  role          String
+  content       String
+  toolCallsJson String?
+  auditJson     String?
+  createdAt     DateTime @default(now())
+
+  @@index([createdAt])
 }

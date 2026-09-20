@@ -1193,6 +1193,11 @@ export async function refreshDerivedCaches() {
         })),
       });
     }
+  }, {
+    // Mesma proteção dos projetores: o timeout padrão de 5s derruba o refresh
+    // inteiro com P2028 quando o banco está sob carga de sync.
+    maxWait: 15_000,
+    timeout: 120_000,
   });
 
   return {

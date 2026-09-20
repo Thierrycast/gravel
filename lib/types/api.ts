@@ -101,6 +101,13 @@ export interface Account {
   lastTransactionAt?: string | null;
   billingClosingDay?: number | null;
   billingDueDay?: number | null;
+  /** Limite do cartão como o banco informa (`creditData` da Pluggy). */
+  creditLimit?: number | null;
+  availableCreditLimit?: number | null;
+  /** Horário do conector para o limite — não é o do nosso sync. */
+  creditDataAt?: string | null;
+  realtimeBalanceAt?: string | null;
+  realtimeBalanceStatus?: string | null;
 }
 
 export interface AccountsResponse {
@@ -135,6 +142,7 @@ export interface CardStatementsPayload {
   accountId: string;
   accountName: string;
   institutionName: string | null;
+  imageUrl: string | null;
   configured: boolean;
   closingDay: number | null;
   dueDay: number | null;

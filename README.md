@@ -142,7 +142,11 @@ A maneira mais rápida de rodar a aplicação em produção:
 docker compose up --build -d
 ```
 
-O `docker-compose.yml` criará um volume nomeado (`gravel_data`) para proteger o arquivo SQLite, definirá healthchecks HTTP e setará o banco em `/app/data/prod.db`. A aplicação continua escutando na porta `3000` dentro do container, mas a porta publicada no host fica fora da faixa de desenvolvimento por padrão: `8421` (configurável via `APP_PORT`).
+O `docker-compose.yml` cria o volume `gravel_data`, define healthcheck e usa
+`/app/data/prod.db`. A aplicação escuta em `3000` no container e publica
+`8421` somente em loopback e no IP Tailscale do argos. A UI normal usa
+`https://<host>.lab.home` pelo Traefik; dados financeiros não ficam mais
+abertos diretamente para toda a LAN. O MCP em `8422` permanece só em loopback.
 
 ### Docker Puro
 
@@ -173,6 +177,25 @@ Se precisar trocar a porta externa, altere apenas o lado esquerdo do mapeamento 
 > (`docker build -t gravel:0.1.0 .`) e reinstalado via `casaos-cli app-management install
 > -f docker-compose.yml`. Dados (`gravel_gravel_data`) nunca foram afetados.
 > *Documentado por: Claude Code (claude-sonnet-5) — 2026-07-17.*
+
+> **Rebuild 0.1.6 — 2026-09-18:** três defeitos vistos no log do container foram corrigidos
+> e a imagem subiu como `gravel:0.1.6` (a `0.1.0` continua no host para rollback).
+> (1) `rebuildInstallmentGroups` rodava centenas de `update` sequenciais dentro de uma
+> transação **interativa** do Prisma e estourava o timeout padrão de 5s, derrubando o sync
+> inteiro com `P2028` — virou uma transação **em lote** (`$transaction([...])`), que agora
+> reconstrói 1040 lançamentos / 81 grupos em ~0,5s. (2) `refreshDerivedCaches` e a remoção
+> via webhook ganharam `maxWait: 15s / timeout: 120s`, como os projetores já tinham.
+> (3) Valores de preenchimento (`COLE_O_NOVO_AQUI`, `<sua-chave>`, `changeme`...) agora contam
+> como credencial **ausente** em `normalizeSecretValue`, e `reconcilePluggyWebhook` desiste
+> cedo quando a Pluggy não está configurada — antes o app se julgava configurado, batia na
+> Binance a cada 60s e enchia o log de `401 API-key format invalid`.
+> O `build.context` do compose apontava para um `/tmp/casaos-compose-app-*` que não existe
+> mais; passou a apontar para o diretório do repo. Deploy: `docker build -t gravel:0.1.6 .`
+> + `casaos-cli app-management apply gravel -f docker-compose.yml`.
+> ⚠️ As credenciais da Binance e o `PLUGGY_CLIENT_SECRET` seguem como placeholder em
+> `~/.config/gravel/secrets.env` — os dois provedores ficam desligados (em silêncio) até
+> alguém colar as chaves reais.
+> *Documentado por: Claude Code (claude-opus-5) — 2026-09-18.*
 
 > **Dica de Permissões:** Caso opte por um bind mount local (`-v ./data:/app/data`), certifique-se de que o diretório pertence ao usuário de ID `1001` (aplicando um `chmod`), uma vez que o container roda usando um usuário não-root por segurança.
 

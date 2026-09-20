@@ -354,7 +354,7 @@ export default function CashFlowPage() {
                     axisLine={false}
                     tick={{
                       fontSize: 11,
-                      fill: "hsl(var(--muted-foreground))",
+                      fill: "var(--muted-foreground)",
                     }}
                   />
                   <YAxis
@@ -362,7 +362,7 @@ export default function CashFlowPage() {
                     axisLine={false}
                     tick={{
                       fontSize: 11,
-                      fill: "hsl(var(--muted-foreground))",
+                      fill: "var(--muted-foreground)",
                     }}
                     tickFormatter={formatCompact}
                     width={48}
@@ -423,7 +423,7 @@ export default function CashFlowPage() {
                     axisLine={false}
                     tick={{
                       fontSize: 11,
-                      fill: "hsl(var(--muted-foreground))",
+                      fill: "var(--muted-foreground)",
                     }}
                   />
                   <YAxis
@@ -431,7 +431,7 @@ export default function CashFlowPage() {
                     axisLine={false}
                     tick={{
                       fontSize: 11,
-                      fill: "hsl(var(--muted-foreground))",
+                      fill: "var(--muted-foreground)",
                     }}
                     tickFormatter={formatCompact}
                     width={48}
@@ -500,7 +500,7 @@ export default function CashFlowPage() {
                     axisLine={false}
                     tick={{
                       fontSize: 11,
-                      fill: "hsl(var(--muted-foreground))",
+                      fill: "var(--muted-foreground)",
                     }}
                   />
                   <YAxis
@@ -508,7 +508,7 @@ export default function CashFlowPage() {
                     axisLine={false}
                     tick={{
                       fontSize: 11,
-                      fill: "hsl(var(--muted-foreground))",
+                      fill: "var(--muted-foreground)",
                     }}
                     tickFormatter={formatCompact}
                     width={48}
@@ -569,18 +569,18 @@ export default function CashFlowPage() {
                     dataKey="label"
                     tickLine={false}
                     axisLine={false}
-                    tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                    tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
                   />
                   <YAxis
                     tickLine={false}
                     axisLine={false}
-                    tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                    tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
                     tickFormatter={formatCompact}
                     width={48}
                   />
                   <ReferenceLine
                     y={0}
-                    stroke="hsl(var(--border))"
+                    stroke="var(--border)"
                     strokeDasharray="3 3"
                   />
                   <ChartTooltip

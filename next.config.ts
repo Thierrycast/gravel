@@ -13,13 +13,17 @@ const securityHeaders = [
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  // `microphone=()` bloqueava `getUserMedia` na origem inteira — com ela, o
+  // botão de falar do chat abriria e não capturaria nada. `self` mantém o
+  // microfone fora de iframe de terceiro, que era o ponto da regra.
+  { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=()" },
 ];
 
 const buildCpus = Number(process.env.NEXT_BUILD_CPUS ?? "")
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  transpilePackages: ["voice-kit"],
   devIndicators: false,
   experimental: {
     // Load route modules on demand instead of preloading every entry at boot —
@@ -30,6 +34,10 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "img.logo.dev" },
+      // Logos de instituição do Pluggy (getPluggyLogoUrl). Faltava aqui: /accounts
+      // renderiza com <img> e nunca passou pelo next/image, mas /bills usa
+      // LogoImage (next/image), que valida o hostname mesmo com unoptimized.
+      { protocol: "https", hostname: "cdn.pluggy.ai" },
       { protocol: "https", hostname: "raw.githubusercontent.com" },
     ],
   },

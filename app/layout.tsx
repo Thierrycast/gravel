@@ -55,6 +55,7 @@ import { CurrencySelector } from "@/components/currency-selector";
 import { PrivacyToggle } from "@/components/privacy-toggle";
 import { CurrencyProvider } from "@/lib/currency-context";
 import { BottomNav } from "@/components/bottom-nav";
+import { ChatDock } from "@/components/chat/chat-dock";
 
 export const metadata: Metadata = {
   title: "Gravel Finance",
@@ -159,6 +160,7 @@ export default async function RootLayout({
                     </div>
                   </main>
                   <BottomNav />
+                  <ChatDock />
                 </div>
               </SidebarProvider>
               </TooltipProvider>

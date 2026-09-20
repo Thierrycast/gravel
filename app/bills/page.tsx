@@ -7,6 +7,7 @@ import {
   Calendar,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   CreditCard,
   History,
@@ -23,6 +24,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { PageError } from "@/components/page-error";
 import { PageHeader } from "@/components/page-header";
+import { LogoImage } from "@/components/logo-image";
 import type {
   CardStatement,
   CardStatementsPayload,
@@ -156,17 +158,47 @@ function CardSection({
   payingBillId: string | null;
 }) {
   const [showPast, setShowPast] = useState(false);
+  const [selectedStatementId, setSelectedStatementId] = useState<string | null>(null);
   // Futuras zeradas são ruído (parcelamentos ainda sem lançamentos).
   const upcomingWithValue = card.upcoming.filter((s) => s.amount > 0);
   const upcomingTotal = upcomingWithValue.reduce((sum, s) => sum + s.amount, 0);
   const overdue = card.past.filter((s) => s.status === "OVERDUE");
+  const cycleStatements = [
+    ...card.past.slice().reverse(),
+    ...(card.current ? [card.current] : []),
+    ...upcomingWithValue,
+  ];
+  const selectedStatement =
+    cycleStatements.find((statement) => statement.id === selectedStatementId) ??
+    card.current ??
+    cycleStatements[0] ??
+    null;
+  const selectedStatementIndex = selectedStatement
+    ? cycleStatements.findIndex((statement) => statement.id === selectedStatement.id)
+    : -1;
+  const previousStatement =
+    selectedStatementIndex > 0 ? cycleStatements[selectedStatementIndex - 1] : null;
+  const nextStatement =
+    selectedStatementIndex >= 0 && selectedStatementIndex < cycleStatements.length - 1
+      ? cycleStatements[selectedStatementIndex + 1]
+      : null;
 
   return (
     <section className="rounded-xl border bg-card">
       {/* Card header */}
       <div className="flex items-center gap-3 p-4 sm:p-5">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
-          {getInitials(card.accountName)}
+        <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-xs font-bold text-muted-foreground">
+          {card.imageUrl ? (
+            <LogoImage
+              src={card.imageUrl}
+              alt={card.institutionName ?? card.accountName}
+              className="size-full rounded-full"
+              fallback={getInitials(card.accountName)}
+              fallbackClassName="text-xs font-bold text-muted-foreground"
+            />
+          ) : (
+            getInitials(card.accountName)
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -215,27 +247,51 @@ function CardSection({
         </div>
       ) : (
         <>
-          {/* Current statement — compacto quando não há valor em aberto */}
-          {card.current && card.current.amount > 0 ? (
+          {/* O ciclo atual abre por padrão; as setas permitem inspecionar os vizinhos. */}
+          {selectedStatement ? (
             <div className="border-t p-4 sm:p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                    Fatura atual
+                    {selectedStatement.id === card.current?.id ? "Ciclo atual" : "Ciclo selecionado"}
                   </p>
                   <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight">
-                    {formatAmount(card.current.amount)}
+                    {formatAmount(selectedStatement.amount)}
                   </p>
                   <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Calendar className="size-3" />
-                    vence {formatDate(card.current.dueDate)} (
-                    {daysUntilLabel(card.current.dueDate)})
+                    {formatDate(selectedStatement.periodStart)} – {formatDate(selectedStatement.periodEnd)} · vence {formatDate(selectedStatement.dueDate)} (
+                    {daysUntilLabel(selectedStatement.dueDate)})
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <StatusBadge status={card.current.status} />
+                  <div className="flex items-center rounded-md border">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 rounded-r-none"
+                      disabled={!previousStatement}
+                      onClick={() => setSelectedStatementId(previousStatement?.id ?? null)}
+                      aria-label="Ver fatura do ciclo anterior"
+                    >
+                      <ChevronLeft className="size-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 rounded-l-none"
+                      disabled={!nextStatement}
+                      onClick={() => setSelectedStatementId(nextStatement?.id ?? null)}
+                      aria-label="Ver fatura do próximo ciclo"
+                    >
+                      <ChevronRight className="size-4" />
+                    </Button>
+                  </div>
+                  <StatusBadge status={selectedStatement.status} />
                   <Button asChild variant="outline" size="sm" className="h-7 text-xs">
-                    <Link href={cycleTransactionsHref(card.current)}>
+                    <Link href={cycleTransactionsHref(selectedStatement)}>
                       Ver transações
                     </Link>
                   </Button>
@@ -365,6 +421,17 @@ export default function BillsPage() {
     const open = cards.reduce((sum, card) => sum + card.totalOpen, 0);
     return { current, upcoming, overdue, open };
   }, [cards, configured]);
+  const nearestDue = useMemo(() => {
+    const statements = configured.flatMap((card) =>
+      [card.current, ...card.upcoming]
+        .filter((statement): statement is CardStatement => Boolean(statement && statement.amount > 0))
+        .map((statement) => ({ card, statement })),
+    );
+    return statements.sort(
+      (first, second) =>
+        new Date(first.statement.dueDate).getTime() - new Date(second.statement.dueDate).getTime(),
+    )[0] ?? null;
+  }, [configured]);
 
   async function markBillAsPaid(billId: string) {
     setPayingBillId(billId);
@@ -430,6 +497,15 @@ export default function BillsPage() {
                   {format(totals.upcoming)}
                 </span>
               </span>
+              {nearestDue && (
+                <span>
+                  Próximo vencimento: {formatDate(nearestDue.statement.dueDate)} ·{" "}
+                  <span className="font-semibold tabular-nums text-foreground">
+                    {format(nearestDue.statement.amount)}
+                  </span>{" "}
+                  <span className="text-muted-foreground">({nearestDue.card.accountName})</span>
+                </span>
+              )}
               {totals.overdue > 0 && (
                 <span className="font-semibold text-red-400">
                   Vencidas: {format(totals.overdue)}

@@ -478,6 +478,10 @@ async function handleTransactionsDeleted(
       where: { id: { in: domainTransactionIds } },
     })
     return { records: records.count, domain: domain.count }
+  }, {
+    // Remoções em massa podem passar dos 5s padrão e derrubar o webhook com P2028.
+    maxWait: 15_000,
+    timeout: 120_000,
   })
 
   const reprojected = await reprojectPluggy()

@@ -1,0 +1,33 @@
+{
+  "name": "voice-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Voz ao vivo, STT/TTS e visual reativo ao áudio — extraído da Vela. Sem dependência além de React (opcional).",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./vanilla": "./src/vanilla.ts",
+    "./core/*": "./src/core/*.ts",
+    "./visuals/*": "./src/visuals/*.ts",
+    "./react/*": "./src/react/*.tsx"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "react": "^19.2.8",
+    "typescript": "^6.0.3"
+  }
+}

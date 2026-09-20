@@ -84,76 +84,98 @@ const CATEGORY_EMOJI: Record<string, string> = {
 }
 
 // Stable color palette for categories — each category gets a consistent color
+// Categorical palette slots — see app/globals.css (--chart-1..8, --chart-neutral).
+// Colour follows the ENTITY (the category), never its rank, so the same category
+// keeps the same hue on every screen. Slots are grouped by spending domain; the
+// "meta" rows (transfers, taxes, uncategorised) deliberately take the neutral
+// slot so they never compete with real spending for a categorical hue.
 const CATEGORY_COLORS: Record<string, string> = {
-  "serviços": "#f43f5e",
-  "serviços digitais": "#f43f5e",
-  "compras": "#ec4899",
-  "compras online": "#ec4899",
-  "jogos e videogames": "#a855f7",
-  "jogos": "#a855f7",
-  "investimentos": "#6366f1",
-  "empréstimos e financiamento": "#8b5cf6",
-  "telecomunicação": "#3b82f6",
-  "telefone": "#3b82f6",
-  "universidade": "#0ea5e9",
-  "educação": "#0ea5e9",
-  "livros": "#0ea5e9",
-  "livraria": "#0ea5e9",
-  "livrarias": "#0ea5e9",
-  "supermercado": "#10b981",
-  "mercado": "#10b981",
-  "restaurantes, bares e lanchonetes": "#f59e0b",
-  "restaurantes": "#f59e0b",
-  "alimentos e bebidas": "#f97316",
-  "alimentação": "#f97316",
-  "sem categoria de saida": "#6b7280",
-  "sem categoria": "#6b7280",
-  "doações": "#ef4444",
-  "farmácia": "#14b8a6",
-  "saúde": "#14b8a6",
-  "dentista": "#14b8a6",
-  "dentistas": "#14b8a6",
-  "odonto": "#14b8a6",
-  "odontologia": "#14b8a6",
-  "impostos sobre operações financeiras": "#64748b",
-  "impostos": "#64748b",
-  "transporte": "#06b6d4",
-  "uber": "#06b6d4",
-  "moradia": "#d946ef",
-  "aluguel": "#d946ef",
-  "streaming": "#8b5cf6",
-  "assinaturas": "#7c3aed",
-  "internet": "#2563eb",
-  "energia": "#eab308",
-  "água": "#0284c7",
-  "seguros": "#475569",
-  "pets": "#a3e635",
-  "viagem": "#0891b2",
-  "beleza": "#f472b6",
-  "vestuário": "#c084fc",
-  "vestiário": "#c084fc",
-  "lazer": "#34d399",
-  "entretenimento": "#fb923c",
-  "pagamento de cartão de crédito": "#94a3b8",
-  "transferência entre minhas contas": "#0284c7",
-  "transferencia entre minhas contas": "#0284c7",
-  "transferência mesma titularidade": "#0284c7",
-  "transferencia mesma titularidade": "#0284c7",
-  "transferência entre contas": "#0284c7",
-  "transferencia entre contas": "#0284c7",
-  "transferência interna": "#0284c7",
-  "transferencia interna": "#0284c7",
-  "transferência": "#94a3b8",
-  "transferências": "#94a3b8",
-  "transferência - pix": "#94a3b8",
-  "pix": "#94a3b8",
+  // 1 · blue — mobilidade e telecom
+  "transporte": "var(--chart-1)",
+  "uber": "var(--chart-1)",
+  "viagem": "var(--chart-1)",
+  "telecomunicação": "var(--chart-1)",
+  "telefone": "var(--chart-1)",
+  "internet": "var(--chart-1)",
+
+  // 2 · orange — comer fora
+  "restaurantes, bares e lanchonetes": "var(--chart-2)",
+  "restaurantes": "var(--chart-2)",
+  "alimentos e bebidas": "var(--chart-2)",
+  "alimentação": "var(--chart-2)",
+
+  // 3 · aqua — saúde e cuidados
+  "farmácia": "var(--chart-3)",
+  "saúde": "var(--chart-3)",
+  "dentista": "var(--chart-3)",
+  "dentistas": "var(--chart-3)",
+  "odonto": "var(--chart-3)",
+  "odontologia": "var(--chart-3)",
+  "pets": "var(--chart-3)",
+
+  // 4 · yellow — moradia e contas de casa
+  "moradia": "var(--chart-4)",
+  "aluguel": "var(--chart-4)",
+  "energia": "var(--chart-4)",
+  "água": "var(--chart-4)",
+
+  // 5 · magenta — compras e aparência
+  "compras": "var(--chart-5)",
+  "compras online": "var(--chart-5)",
+  "vestuário": "var(--chart-5)",
+  "vestiário": "var(--chart-5)",
+  "beleza": "var(--chart-5)",
+
+  // 6 · green — mercado
+  "supermercado": "var(--chart-6)",
+  "mercado": "var(--chart-6)",
+
+  // 7 · violet — lazer, assinaturas e educação
+  "lazer": "var(--chart-7)",
+  "entretenimento": "var(--chart-7)",
+  "streaming": "var(--chart-7)",
+  "assinaturas": "var(--chart-7)",
+  "jogos e videogames": "var(--chart-7)",
+  "jogos": "var(--chart-7)",
+  "universidade": "var(--chart-7)",
+  "educação": "var(--chart-7)",
+  "livros": "var(--chart-7)",
+  "livraria": "var(--chart-7)",
+  "livrarias": "var(--chart-7)",
+
+  // 8 · red — serviços, dívida e doações
+  "serviços": "var(--chart-8)",
+  "serviços digitais": "var(--chart-8)",
+  "empréstimos e financiamento": "var(--chart-8)",
+  "investimentos": "var(--chart-8)",
+  "doações": "var(--chart-8)",
+
+  // neutral — movimentos que não são despesa de verdade
+  "sem categoria de saida": "var(--chart-neutral)",
+  "sem categoria": "var(--chart-neutral)",
+  "impostos sobre operações financeiras": "var(--chart-neutral)",
+  "impostos": "var(--chart-neutral)",
+  "seguros": "var(--chart-neutral)",
+  "pagamento de cartão de crédito": "var(--chart-neutral)",
+  "transferência entre minhas contas": "var(--chart-neutral)",
+  "transferencia entre minhas contas": "var(--chart-neutral)",
+  "transferência mesma titularidade": "var(--chart-neutral)",
+  "transferencia mesma titularidade": "var(--chart-neutral)",
+  "transferência entre contas": "var(--chart-neutral)",
+  "transferencia entre contas": "var(--chart-neutral)",
+  "transferência interna": "var(--chart-neutral)",
+  "transferencia interna": "var(--chart-neutral)",
+  "transferência": "var(--chart-neutral)",
+  "transferências": "var(--chart-neutral)",
+  "transferência - pix": "var(--chart-neutral)",
+  "pix": "var(--chart-neutral)",
 }
 
-// Fallback palette for categories not in the map
+// Fallback for categories not in the map: the same eight validated slots, walked
+// in fixed order. Never a generated hue — a ninth unmapped category reuses slot 1.
 const FALLBACK_COLORS = [
-  "#f43f5e", "#ec4899", "#a855f7", "#6366f1", "#3b82f6",
-  "#06b6d4", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",
-  "#0ea5e9", "#14b8a6", "#f97316", "#d946ef", "#84cc16",
+  "var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)",
+  "var(--chart-5)", "var(--chart-6)", "var(--chart-7)", "var(--chart-8)",
 ]
 
 export function getCategoryEmoji(name: string): string {
