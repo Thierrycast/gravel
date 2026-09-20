@@ -1,5 +1,5 @@
-import { Prisma } from "@prisma/client";
-import { isBrlCurrency } from "@/lib/domain/currency";
+
+import { createBrlConverter } from "@/lib/domain/currency";
 import { getUsdBrlRate } from "@/lib/exchange-rate";
 import { prisma } from "@/lib/prisma";
 import {
@@ -129,6 +129,10 @@ export async function getSpendingByCategoryMetrics(
     getUsdBrlRate(),
   ]);
 
+  // Um conversor por chamada: converte o que conhece e anota o que não
+  // conhece, em vez de somar euro como se fosse dólar.
+  const toBrl = createBrlConverter(usdBrlRate);
+
   const internalTransferPairIds = detectInternalTransferPairIds(allTxs);
 
   const groups = new Map<string, {
@@ -158,10 +162,7 @@ export async function getSpendingByCategoryMetrics(
         averageAmount: ZERO,
       };
 
-      let amount = decimal(tx.amount).abs();
-      if (tx.currencyCode && !isBrlCurrency(tx.currencyCode)) {
-        amount = amount.mul(new Prisma.Decimal(usdBrlRate));
-      }
+      const amount = toBrl(decimal(tx.amount).abs(), tx.currencyCode);
       current.amount = current.amount.plus(amount);
       current.count += 1;
       current.averageAmount = current.amount.div(current.count);
@@ -211,6 +212,10 @@ export async function getSpendingByMerchantMetrics(
     getUsdBrlRate(),
   ]);
 
+  // Um conversor por chamada: converte o que conhece e anota o que não
+  // conhece, em vez de somar euro como se fosse dólar.
+  const toBrl = createBrlConverter(usdBrlRate);
+
   const internalTransferPairIds = detectInternalTransferPairIds(allTxs);
 
   const transactions = allTxs.filter((tx) => {
@@ -256,10 +261,7 @@ export async function getSpendingByMerchantMetrics(
       averageAmount: ZERO,
     };
 
-    let amount = transaction.amount.abs();
-    if (transaction.currencyCode && !isBrlCurrency(transaction.currencyCode)) {
-      amount = amount.mul(new Prisma.Decimal(usdBrlRate));
-    }
+    const amount = toBrl(transaction.amount.abs(), transaction.currencyCode);
     current.amount = current.amount.plus(amount);
     current.count += 1;
     current.averageAmount = current.amount.div(current.count);
@@ -301,6 +303,10 @@ export async function getSpendingTrendsMetrics(searchParams: URLSearchParams) {
     }),
     getUsdBrlRate(),
   ]);
+
+  // Um conversor por chamada: converte o que conhece e anota o que não
+  // conhece, em vez de somar euro como se fosse dólar.
+  const toBrl = createBrlConverter(usdBrlRate);
   const internalTransferPairIds = detectInternalTransferPairIds(allTxs);
 
   const buckets = new Map<string, Map<string, number>>();
@@ -318,10 +324,7 @@ export async function getSpendingTrendsMetrics(searchParams: URLSearchParams) {
       const catName = tx.domainCategory?.name ?? "Sem categoria";
       const monthKey = `${tx.occurredAt.getUTCFullYear()}-${String(tx.occurredAt.getUTCMonth() + 1).padStart(2, "0")}`;
       const monthly = buckets.get(catName) ?? new Map<string, number>();
-      let amount = Math.abs(Number(tx.amount));
-      if (tx.currencyCode && !isBrlCurrency(tx.currencyCode)) {
-        amount *= usdBrlRate;
-      }
+      const amount = toBrl(decimal(tx.amount).abs(), tx.currencyCode).toNumber();
       monthly.set(monthKey, (monthly.get(monthKey) ?? 0) + amount);
       buckets.set(catName, monthly);
     }

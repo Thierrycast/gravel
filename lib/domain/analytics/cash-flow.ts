@@ -1,5 +1,5 @@
-import { DomainTransactionDirection, Prisma } from "@prisma/client";
-import { isBrlCurrency } from "@/lib/domain/currency";
+import { DomainTransactionDirection } from "@prisma/client";
+import { createBrlConverter } from "@/lib/domain/currency";
 import { getUsdBrlRate } from "@/lib/exchange-rate";
 import { prisma } from "@/lib/prisma";
 import { getUserSettings } from "../queries";
@@ -27,6 +27,10 @@ export async function getCashFlowMetrics(searchParams: URLSearchParams) {
     getUserSettings(searchParams),
     getUsdBrlRate(),
   ]);
+
+  // Um conversor por chamada: converte o que conhece e anota o que não
+  // conhece, em vez de somar euro como se fosse dólar.
+  const toBrl = createBrlConverter(usdBrlRate);
 
   const categoryMap = new Map(
     categories.map((category) => [category.id, category]),
@@ -70,11 +74,9 @@ export async function getCashFlowMetrics(searchParams: URLSearchParams) {
     );
 
     // Converte para BRL como o overview faz, para os buckets do fluxo de
-    // caixa baterem com os KPIs da visão geral.
-    let amount = transaction.amount.abs();
-    if (transaction.currencyCode && !isBrlCurrency(transaction.currencyCode)) {
-      amount = amount.mul(new Prisma.Decimal(usdBrlRate));
-    }
+    // caixa baterem com os KPIs da visão geral. A conversão é a compartilhada:
+    // a versão local tratava euro como dólar.
+    const amount = toBrl(transaction.amount.abs(), transaction.currencyCode);
 
     if (classification === "investment") {
       current.investments =
