@@ -537,22 +537,71 @@ async function handleConnectorStatus(
 export const MAX_WEBHOOK_ATTEMPTS = 5
 
 /**
- * Processa um evento já persistido na fila e atualiza o estado. Idempotente:
- * um evento já `SUCCESS` é ignorado.
+ * Um evento em RUNNING por mais que isto é considerado órfão: o processo morreu
+ * entre marcar RUNNING e terminar. Um evento da Pluggy leva segundos; cinco
+ * minutos é folga larga para não roubar um trabalho que ainda está de pé.
+ */
+const STALE_RUNNING_MS = 5 * 60 * 1000
+
+/**
+ * Condição de reivindicação de um evento da fila.
+ *
+ * Separada da query para poder ser testada sem banco — e porque a lógica não é
+ * óbvia: `status` nasce `RUNNING` por default do schema, então "está RUNNING"
+ * sozinho não distingue "ninguém pegou ainda" de "alguém está processando".
+ * Quem separa os dois é `attempts`, que só passa de zero quando alguém
+ * reivindica de fato.
+ *
+ * É reivindicável quando não terminou com sucesso E:
+ *  - `attempts = 0` — recém-inserido, ninguém pegou;
+ *  - `ERROR` — falhou, o redreno do scheduler pode tentar de novo;
+ *  - RUNNING parado há tempo demais — o dono morreu.
+ */
+export function buildWebhookClaimFilter(now: Date = new Date()) {
+  return {
+    status: { not: OpsRunStatus.SUCCESS },
+    OR: [
+      { attempts: 0 },
+      { status: OpsRunStatus.ERROR },
+      { updatedAt: { lt: new Date(now.getTime() - STALE_RUNNING_MS) } },
+    ],
+  }
+}
+
+/**
+ * Processa um evento já persistido na fila e atualiza o estado.
+ *
+ * A reivindicação é **atômica**. Antes era ler-depois-escrever: `findUnique`
+ * conferia o status e um `update` marcava RUNNING. Dois disparos simultâneos do
+ * mesmo evento — o que a Pluggy provoca sozinha, reenviando até 9 vezes —
+ * passavam os dois pela conferência e rodavam `handleWebhookEvent` em paralelo
+ * sobre o mesmo item. Agora a transição para RUNNING é um único UPDATE com a
+ * condição embutida: o banco serializa, exatamente um chamador recebe
+ * `count = 1`, e o outro vai embora sem trabalho.
  */
 export async function processQueuedWebhookEvent(eventRowId: string) {
+  const claimed = await prisma.pluggyWebhookEvent.updateMany({
+    where: { id: eventRowId, ...buildWebhookClaimFilter() },
+    data: { status: OpsRunStatus.RUNNING, attempts: { increment: 1 } },
+  })
+
+  if (claimed.count === 0) {
+    // Ou não existe, ou já terminou, ou outra execução está com ele.
+    const existing = await prisma.pluggyWebhookEvent.findUnique({
+      where: { id: eventRowId },
+      select: { status: true },
+    })
+    if (!existing) return { skipped: true, reason: "not-found" as const }
+    if (existing.status === OpsRunStatus.SUCCESS) {
+      return { skipped: true, reason: "already-processed" as const }
+    }
+    return { skipped: true, reason: "already-claimed" as const }
+  }
+
   const row = await prisma.pluggyWebhookEvent.findUnique({
     where: { id: eventRowId },
   })
   if (!row) return { skipped: true, reason: "not-found" as const }
-  if (row.status === OpsRunStatus.SUCCESS) {
-    return { skipped: true, reason: "already-processed" as const }
-  }
-
-  await prisma.pluggyWebhookEvent.update({
-    where: { id: row.id },
-    data: { status: OpsRunStatus.RUNNING, attempts: { increment: 1 } },
-  })
 
   try {
     const payload = parseWebhookPayload(JSON.parse(row.payloadJson))
