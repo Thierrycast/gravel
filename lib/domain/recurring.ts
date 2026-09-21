@@ -70,6 +70,23 @@ function monthDelta(from: Date, to: Date) {
   );
 }
 
+/**
+ * Aplica o dia-âncora sobre a data base, clampando ao último dia do mês dela.
+ * `anchorDay` fora de 1-31 é ignorado — metadata velha não pode quebrar a
+ * projeção.
+ */
+function withAnchorDay(date: Date, anchorDay?: number | null) {
+  if (!anchorDay || !Number.isInteger(anchorDay) || anchorDay < 1 || anchorDay > 31) {
+    return date;
+  }
+  const result = new Date(date);
+  const lastDay = new Date(
+    Date.UTC(result.getUTCFullYear(), result.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  result.setUTCDate(Math.min(anchorDay, lastDay));
+  return result;
+}
+
 function addMonthsClamped(date: Date, months: number) {
   const result = new Date(date);
   const originalDay = result.getUTCDate();
@@ -85,12 +102,20 @@ function addMonthsClamped(date: Date, months: number) {
 /**
  * Datas de ocorrência da regra dentro de um mês. Respeita a periodicidade:
  * semanais podem ocorrer 4-5x, trimestrais/anuais só nos meses certos.
+ *
+ * `anchorDay` (1-31) é o dia que a regra realmente quer. Sem ele, o dia sai de
+ * `nextDate` — e `nextDate` vem da última transação, que o banco pode ter
+ * antecipado. Uma conta do dia 31 cobrada em 28 de fevereiro passava a ser
+ * projetada no dia 28 para sempre, porque a âncora tinha virado 28. Com
+ * `anchorDay`, fevereiro continua sendo a exceção que ele é: clampa para 28
+ * naquele mês e volta para 31 no mês seguinte.
  */
 export function occurrenceDatesInMonth(
   interval: string | null | undefined,
   nextDate: Date,
   monthStart: Date,
   monthEnd: Date,
+  anchorDay?: number | null,
 ): Date[] {
   if (monthEnd < nextDate && monthDelta(nextDate, monthStart) < 0) return [];
 
@@ -118,7 +143,7 @@ export function occurrenceDatesInMonth(
       const period = interval === "QUARTERLY" ? 3 : 12;
       const delta = monthDelta(nextDate, monthStart);
       if (delta < 0 || delta % period !== 0) return [];
-      const occurrence = addMonthsClamped(nextDate, delta);
+      const occurrence = addMonthsClamped(withAnchorDay(nextDate, anchorDay), delta);
       return occurrence >= monthStart && occurrence <= monthEnd
         ? [occurrence]
         : [];
@@ -127,7 +152,7 @@ export function occurrenceDatesInMonth(
     default: {
       const delta = monthDelta(nextDate, monthStart);
       if (delta < 0) return [];
-      const occurrence = addMonthsClamped(nextDate, delta);
+      const occurrence = addMonthsClamped(withAnchorDay(nextDate, anchorDay), delta);
       return occurrence >= monthStart && occurrence <= monthEnd
         ? [occurrence]
         : [];
@@ -145,6 +170,8 @@ type RuleMetadata = {
   lastOccurrenceAt?: string | null;
   sourceTransactionIds?: string[];
   isInstallment?: boolean;
+  /** Dia do mês que a regra realmente quer (1-31). Ver occurrenceDatesInMonth. */
+  anchorDay?: number | null;
 };
 
 function parseRuleMetadata(value?: string | null): RuleMetadata {
