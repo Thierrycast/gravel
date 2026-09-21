@@ -11,20 +11,15 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRight,
   BadgeDollarSign,
-  CalendarClock,
   ChevronLeft,
   ChevronRight,
-  Copy,
   Download,
-  Link2,
   Receipt,
   Search,
-  TrendingUp,
   Users,
   X,
 } from "lucide-react";
 
-import { toast } from "sonner";
 
 import { PageError } from "@/components/page-error";
 import { PageHeader } from "@/components/page-header";
@@ -36,20 +31,10 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
 } from "@/components/ui/sheet";
 import {
   Table,
@@ -61,8 +46,10 @@ import {
 } from "@/components/ui/table";
 import { useApi } from "@/hooks/use-api";
 import { usePeriod } from "@/hooks/use-period";
+import { useUrlFilter } from "@/hooks/use-url-filter";
+import { TransactionEditSheet } from "@/components/transactions/transaction-edit-sheet";
 import { getCategoryEmoji, getCategoryColor } from "@/lib/category-emoji";
-import { amountToneClass, formatDate, formatDateFull } from "@/lib/format";
+import { amountToneClass, formatDate } from "@/lib/format";
 import { useCurrency } from "@/lib/currency-context";
 import { cn } from "@/lib/utils";
 import {
@@ -227,36 +214,6 @@ function TransferRouteBadge({
   );
 }
 
-function CopyDebugId({
-  id,
-  label = "ID",
-}: {
-  id: string;
-  label?: string;
-}) {
-  async function copyId() {
-    try {
-      await navigator.clipboard.writeText(id);
-      toast.success(`${label} copiado`);
-    } catch {
-      toast.error("Não foi possível copiar o ID");
-    }
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={copyId}
-      className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border/60 bg-muted/20 px-2 py-1 font-mono text-[10px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
-      title={`Copiar ${label.toLowerCase()}: ${id}`}
-    >
-      <span className="uppercase tracking-widest">{label}</span>
-      <span className="truncate">{id}</span>
-      <Copy className="size-3 shrink-0" />
-    </button>
-  );
-}
-
 export default function TransactionsPage() {
   return (
     <Suspense fallback={<LoadingState />}>
@@ -266,7 +223,7 @@ export default function TransactionsPage() {
 }
 
 function TransactionsContent() {
-  const { format, formatSigned } = useCurrency();
+  const { format } = useCurrency();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -283,24 +240,15 @@ function TransactionsContent() {
   const page = parsePositiveInt(searchParams.get("page"), 1);
   const pageSize = parsePositiveInt(searchParams.get("pageSize"), 25);
 
-  const [searchInput, setSearchInput] = useState(query);
-  const [minInput, setMinInput] = useState(minAmountStr);
-  const [maxInput, setMaxInput] = useState(maxAmountStr);
+  // URL como fonte única. Antes eram três useState espelhando a URL mais um
+  // efeito com debounce empurrando de volta — sincronização em duas vias, que
+  // fazia o cursor pular e perder caractere ao digitar rápido.
+  const [searchInput, setSearchInput] = useUrlFilter("q", { resetParams: ["search", "page"] });
+  const [minInput, setMinInput] = useUrlFilter("minAmount");
+  const [maxInput, setMaxInput] = useUrlFilter("maxAmount");
   const [selectedTransaction, setSelectedTransaction] =
     useState<Transaction | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [draft, setDraft] = useState({
-    categoryId: "",
-    merchantName: "",
-    description: "",
-  });
-  const [savingOverride, setSavingOverride] = useState(false);
-  const [savingLend, setSavingLend] = useState(false);
-  const [lendDraft, setLendDraft] = useState({
-    friendName: "",
-    dueDate: "",
-    description: "",
-  });
 
   const categories = useApi<LookupResponse<CategoryLookup>>(
     "/api/domain/categories",
@@ -400,54 +348,7 @@ function TransactionsContent() {
     window.location.href = `/api/domain/transactions/export?${params.toString()}`;
   }
 
-  useEffect(() => {
-    setSearchInput(query);
-  }, [query]);
 
-  useEffect(() => {
-    setMinInput(minAmountStr);
-  }, [minAmountStr]);
-
-  useEffect(() => {
-    setMaxInput(maxAmountStr);
-  }, [maxAmountStr]);
-
-  // Debounced URL update
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const nextQuery = searchInput.trim();
-      const nextMin = minInput.trim();
-      const nextMax = maxInput.trim();
-
-      if (
-        nextQuery === query.trim() &&
-        nextMin === minAmountStr &&
-        nextMax === maxAmountStr
-      )
-        return;
-
-      const next = new URLSearchParams(searchParams.toString());
-      
-      if (nextQuery) next.set("q", nextQuery);
-      else next.delete("q");
-
-      if (nextMin) next.set("minAmount", nextMin);
-      else next.delete("minAmount");
-
-      if (nextMax) next.set("maxAmount", nextMax);
-      else next.delete("maxAmount");
-
-      next.delete("search");
-      next.delete("page");
-
-      const qs = next.toString();
-      startTransition(() => {
-        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-      });
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [searchInput, minInput, maxInput, pathname, query, minAmountStr, maxAmountStr, router, searchParams]);
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams.toString());
@@ -537,92 +438,11 @@ function TransactionsContent() {
     });
   }
 
+  // Só seleciona e abre. Preencher o rascunho é da folha — a página não
+  // precisa conhecer a forma interna dela.
   function openTransaction(transaction: Transaction) {
-    const defaultDueDate = new Date(transaction.date);
-    defaultDueDate.setDate(defaultDueDate.getDate() + 30);
     setSelectedTransaction(transaction);
-    setDraft({
-      categoryId: transaction.categoryId ?? "",
-      merchantName: transaction.merchantName ?? "",
-      description: transaction.rawDescription ?? transaction.description ?? "",
-    });
-    setLendDraft({
-      friendName: "",
-      dueDate: Number.isNaN(defaultDueDate.getTime())
-        ? new Date().toISOString().slice(0, 10)
-        : defaultDueDate.toISOString().slice(0, 10),
-      description: transaction.rawDescription ?? transaction.description ?? "",
-    });
     setSheetOpen(true);
-  }
-
-  async function saveTransactionOverrides(extra?: Record<string, unknown>) {
-    if (!selectedTransaction) return;
-    setSavingOverride(true);
-    try {
-      const response = await fetch(
-        `/api/domain/transactions/${selectedTransaction.id}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            domainCategoryId: draft.categoryId || null,
-            merchantName: draft.merchantName.trim() || null,
-            description:
-              draft.description.trim() || selectedTransaction.description,
-            ...extra,
-          }),
-        },
-      );
-      if (response.ok) {
-        toast.success(extra?.markAsSalary ? "Transação marcada como salário" : "Transação atualizada");
-        setSheetOpen(false);
-        transactions.refetch();
-      } else {
-        toast.error("Erro ao salvar transação");
-      }
-    } catch (error) {
-      console.error("Failed to save transaction overrides", error);
-      toast.error("Erro ao salvar transação");
-    } finally {
-      setSavingOverride(false);
-    }
-  }
-
-  async function createLendFromSelectedTransaction() {
-    if (!selectedTransaction) return;
-    if (!lendDraft.friendName.trim()) {
-      toast.error("Informe o nome da pessoa");
-      return;
-    }
-
-    setSavingLend(true);
-    try {
-      const response = await fetch("/api/lends", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          friendName: lendDraft.friendName.trim(),
-          amount: Math.abs(selectedTransaction.amount),
-          dueDate: lendDraft.dueDate || new Date().toISOString(),
-          description:
-            lendDraft.description.trim() ||
-            selectedTransaction.rawDescription ||
-            selectedTransaction.description,
-          domainTransactionId: selectedTransaction.id,
-        }),
-      });
-
-      if (!response.ok) throw new Error("Falha ao criar empréstimo");
-
-      toast.success("Empréstimo criado e vinculado à transação");
-      setSheetOpen(false);
-      transactions.refetch();
-    } catch {
-      toast.error("Erro ao criar empréstimo");
-    } finally {
-      setSavingLend(false);
-    }
   }
 
   if (transactions.error) {
@@ -749,14 +569,6 @@ function TransactionsContent() {
         ]
       : []),
   ];
-  const selectedIsSelfTransfer = Boolean(selectedTransaction?.isSelfTransfer);
-  const selectedSignedAmount = selectedTransaction
-    ? selectedIsSelfTransfer
-      ? Math.abs(selectedTransaction.amount)
-      : selectedTransaction.direction === "INFLOW"
-        ? Math.abs(selectedTransaction.amount)
-        : -Math.abs(selectedTransaction.amount)
-    : 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -1201,400 +1013,14 @@ function TransactionsContent() {
         </section>
       ) : null}
 
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>
-              {selectedTransaction?.displayTitle ??
-                selectedTransaction?.description}
-            </SheetTitle>
-            <SheetDescription>
-              {selectedTransaction?.displaySubtitle ??
-                "Detalhes da transação selecionada."}
-            </SheetDescription>
-          </SheetHeader>
-
-          {selectedTransaction ? (
-            <div className="flex flex-1 flex-col gap-0 overflow-y-auto px-4 pb-6">
-              {/* Hero amount */}
-              <div className="py-4">
-                <div
-                  className={cn(
-                    "text-center text-3xl font-bold tabular-nums",
-                    selectedIsSelfTransfer
-                      ? "text-sky-500"
-                      : amountToneClass(selectedSignedAmount),
-                  )}
-                >
-                  {selectedIsSelfTransfer
-                    ? format(Math.abs(selectedTransaction.amount))
-                    : formatSigned(selectedSignedAmount, "always")}
-                </div>
-                {(selectedTransaction.isSalary || selectedIsSelfTransfer || selectedTransaction.linkedLend) && (
-                  <div className="mt-2 flex flex-wrap justify-center gap-1.5">
-                    {selectedTransaction.isSalary ? (
-                      <Badge className="gap-1 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400">
-                        <BadgeDollarSign className="size-3.5" />
-                        Salário configurado
-                      </Badge>
-                    ) : null}
-                    {selectedIsSelfTransfer ? (
-                      <Badge className="gap-1 bg-sky-500/10 text-sky-600 hover:bg-sky-500/10 dark:text-sky-400">
-                        ↔ Transferência entre contas
-                      </Badge>
-                    ) : null}
-                    {selectedTransaction.linkedLend ? (
-                      <Badge className="gap-1 bg-sky-500/10 text-sky-600 hover:bg-sky-500/10 dark:text-sky-400">
-                        <Users className="size-3.5" />
-                        {selectedTransaction.linkedLend.role === "payment-inflow"
-                          ? "Recebimento de empréstimo"
-                          : "Empréstimo a amigo"}
-                      </Badge>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-
-              <Separator />
-
-              {/* Info section */}
-              <div className="space-y-3 py-4 text-sm">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-                  Informações
-                </p>
-                <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground">Descrição</span>
-                  <span className="max-w-[60%] text-right font-medium">
-                    {selectedTransaction.rawDescription ??
-                      selectedTransaction.description}
-                  </span>
-                </div>
-                {installmentLabel(selectedTransaction) ? (
-                  <div className="flex justify-between gap-4">
-                    <span className="text-muted-foreground">Parcela</span>
-                    <span>{installmentLabel(selectedTransaction)}</span>
-                  </div>
-                ) : null}
-                <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground">Data</span>
-                  <span>{formatDateFull(selectedTransaction.date)}</span>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground">Conta</span>
-                  <span className="text-right">
-                    {selectedTransaction.accountName || "Sem conta"}
-                  </span>
-                </div>
-                {selectedIsSelfTransfer ? (
-                  <>
-                    <div className="flex justify-between gap-4">
-                      <span className="text-muted-foreground">Origem</span>
-                      <span className="text-right">
-                        {selectedTransaction.transferFromAccountName || "Não detectada"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between gap-4">
-                      <span className="text-muted-foreground">Destino</span>
-                      <span className="text-right">
-                        {selectedTransaction.transferToAccountName || "Não detectado"}
-                      </span>
-                    </div>
-                  </>
-                ) : null}
-                <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground">Categoria</span>
-                  <span className="text-right">
-                    {getCategoryEmoji(selectedTransaction.categoryName)}{" "}
-                    {selectedTransaction.categoryName}
-                  </span>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground">Direção</span>
-                  <span>
-                    {selectedTransaction.direction === "INFLOW"
-                      ? "Entrada"
-                      : selectedTransaction.direction === "TRANSFER"
-                        ? "Transferência"
-                        : "Saída"}
-                  </span>
-                </div>
-                {selectedTransaction.merchantName ? (
-                  <div className="flex justify-between gap-4">
-                    <span className="text-muted-foreground">Comerciante</span>
-                    <span className="max-w-[60%] text-right">
-                      {selectedTransaction.merchantName}
-                    </span>
-                  </div>
-                ) : null}
-                {selectedTransaction.linkedLend ? (
-                  <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
-                    <div className="mb-2 flex items-center gap-2 text-sky-600 dark:text-sky-400">
-                      <Link2 className="size-4" />
-                      <span className="text-xs font-semibold uppercase tracking-widest">
-                        Empréstimo vinculado
-                      </span>
-                    </div>
-                    <div className="space-y-1 text-xs text-muted-foreground">
-                      <div className="flex justify-between gap-3">
-                        <span>Pessoa</span>
-                        <span className="font-medium text-foreground">
-                          {selectedTransaction.linkedLend.friendName}
-                        </span>
-                      </div>
-                      <div className="flex justify-between gap-3">
-                        <span>Status</span>
-                        <span className="font-medium text-foreground">
-                          {selectedTransaction.linkedLend.status === "PAID"
-                            ? "Pago"
-                            : "Pendente"}
-                        </span>
-                      </div>
-                      <CopyDebugId id={selectedTransaction.linkedLend.id} label="LEND" />
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-
-              <Separator />
-
-              {/* Editable fields */}
-              <div className="space-y-3 py-4">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-                  Editar
-                </p>
-                <div className="space-y-1.5">
-                  <span className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                    Categoria
-                  </span>
-                  <Select
-                    value={draft.categoryId || "__none__"}
-                    onValueChange={(value) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        categoryId: value === "__none__" ? "" : value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Sem categoria" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Sem categoria</SelectItem>
-                      {(categories.data?.results ?? []).map((category) => (
-                        <SelectItem key={category.id} value={category.id}>
-                          {category.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <span className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                    Comerciante
-                  </span>
-                  <Input
-                    value={draft.merchantName}
-                    onChange={(event) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        merchantName: event.target.value,
-                      }))
-                    }
-                    placeholder="Nome do comerciante"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <span className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                    Descrição
-                  </span>
-                  <Input
-                    value={draft.description}
-                    onChange={(event) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        description: event.target.value,
-                      }))
-                    }
-                    placeholder="Descrição da transação"
-                  />
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Button
-                    variant="outline"
-                    disabled={savingOverride}
-                    onClick={() => saveTransactionOverrides()}
-                  >
-                    {savingOverride ? "Salvando..." : "Salvar ajustes"}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    disabled={savingOverride}
-                    onClick={() =>
-                      saveTransactionOverrides({
-                        markInternalTransfer: true,
-                        domainCategoryId: transferCategoryId,
-                      })
-                    }
-                  >
-                    Transferência interna
-                  </Button>
-                </div>
-                {selectedTransaction.direction === "INFLOW" &&
-                !selectedTransaction.isSalary &&
-                // Pagamento de fatura de cartão nunca é salário — esconder o
-                // botão evita padrões genéricos ("Pagamento recebido") que
-                // transformariam todo pagamento de cartão em renda.
-                !/pagamento\s+(de\s+)?(cart[aã]o|fatura)|fatura\s+de\s+cart[aã]o/i.test(
-                  selectedTransaction.categoryName ?? "",
-                ) &&
-                !/^pagamento\s*(recebido|de\s*fatura)/i.test(
-                  selectedTransaction.description ?? "",
-                ) ? (
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start gap-2 border-emerald-500/30 bg-emerald-500/5 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400"
-                    disabled={savingOverride}
-                    onClick={() => saveTransactionOverrides({ markAsSalary: true })}
-                  >
-                    <BadgeDollarSign className="size-4" />
-                    Marcar esta entrada como salário
-                  </Button>
-                ) : null}
-                {selectedTransaction.direction === "OUTFLOW" &&
-                selectedTransaction.categoryName.toLowerCase() !== "investimentos" &&
-                selectedTransaction.categoryName.toLowerCase() !== "investimento" ? (
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start gap-2 border-amber-500/30 bg-amber-500/5 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
-                    disabled={savingOverride}
-                    onClick={() => saveTransactionOverrides({ markAsInvestment: true })}
-                  >
-                    <TrendingUp className="size-4" />
-                    Marcar como investimento
-                  </Button>
-                ) : null}
-                {selectedTransaction.direction === "OUTFLOW" &&
-                !selectedTransaction.linkedLend ? (
-                  <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-3">
-                    <div className="mb-3 flex items-center gap-2 text-sky-600 dark:text-sky-400">
-                      <Users className="size-4" />
-                      <span className="text-xs font-semibold uppercase tracking-widest">
-                        Criar empréstimo desta saída
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      <Input
-                        value={lendDraft.friendName}
-                        onChange={(event) =>
-                          setLendDraft((prev) => ({
-                            ...prev,
-                            friendName: event.target.value,
-                          }))
-                        }
-                        placeholder="Nome da pessoa"
-                      />
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <Input
-                          type="date"
-                          value={lendDraft.dueDate}
-                          onChange={(event) =>
-                            setLendDraft((prev) => ({
-                              ...prev,
-                              dueDate: event.target.value,
-                            }))
-                          }
-                        />
-                        <Input
-                          value={lendDraft.description}
-                          onChange={(event) =>
-                            setLendDraft((prev) => ({
-                              ...prev,
-                              description: event.target.value,
-                            }))
-                          }
-                          placeholder="Motivo"
-                        />
-                      </div>
-                      <Button
-                        className="w-full gap-2"
-                        disabled={savingLend}
-                        onClick={createLendFromSelectedTransaction}
-                      >
-                        <Link2 className="size-4" />
-                        {savingLend ? "Vinculando..." : "Vincular empréstimo"}
-                      </Button>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-
-              <Separator />
-
-              {/* Actions */}
-              <div className="flex flex-col gap-2 py-4">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-                  Ações
-                </p>
-                <Button
-                  variant="outline"
-                  className="justify-start gap-2"
-                  onClick={async () => {
-                    if (!selectedTransaction) return;
-                    const currentDate = new Date(selectedTransaction.date);
-                    const nextMonth = new Date(currentDate);
-                    nextMonth.setMonth(currentDate.getMonth() + 1);
-                    try {
-                      const res = await fetch(
-                        `/api/domain/transactions/${selectedTransaction.id}`,
-                        {
-                          method: "PUT",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ occurredAt: nextMonth.toISOString() }),
-                        },
-                      );
-                      if (res.ok) { setSheetOpen(false); transactions.refetch(); }
-                    } catch (error) { console.error("Failed to update date", error); }
-                  }}
-                >
-                  <CalendarClock className="size-4" />
-                  Adiar para o próximo mês
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="justify-start gap-2 text-muted-foreground hover:text-destructive"
-                  onClick={async () => {
-                    if (!selectedTransaction) return;
-                    try {
-                      const res = await fetch(
-                        `/api/domain/transactions/${selectedTransaction.id}`,
-                        {
-                          method: "PUT",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ ignored: !selectedTransaction.ignored }),
-                        },
-                      );
-                      if (res.ok) { setSheetOpen(false); transactions.refetch(); }
-                    } catch (error) { console.error("Failed to toggle ignored", error); }
-                  }}
-                >
-                  <X className="size-4" />
-                  {selectedTransaction.ignored ? "Remover de ignorados" : "Ignorar transação"}
-                </Button>
-              </div>
-
-              <Separator />
-
-              {/* Debug */}
-              <div className="py-4">
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-                  Debug
-                </p>
-                <CopyDebugId id={selectedTransaction.id} label="TX" />
-              </div>
-            </div>
-          ) : null}
-        </SheetContent>
-      </Sheet>
+      <TransactionEditSheet
+        transaction={selectedTransaction}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        categories={categories.data?.results ?? []}
+        transferCategoryId={transferCategoryId}
+        onSaved={() => transactions.refetch()}
+      />
     </div>
   );
 }

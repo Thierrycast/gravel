@@ -512,6 +512,11 @@ export default function CryptoPage() {
     try {
       const res = await fetch("/api/crypto/cost-basis", {
         method: "POST",
+        // O handler usa request.json(), que é Fetch API e não checa o header —
+        // então a falta dele não quebrava nada, ao contrário do que a auditoria
+        // apontou. Vai explícito por higiene: é o contrato do que está sendo
+        // enviado, e um proxy no caminho pode passar a olhar.
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           asset: editingAsset.asset,
           averageCost: parseFloat(newCost),

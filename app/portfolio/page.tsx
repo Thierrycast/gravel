@@ -1,5 +1,6 @@
 "use client"
 
+import { Suspense } from "react"
 import type { ComponentType } from "react"
 import {
   Bitcoin,
@@ -274,7 +275,22 @@ interface NetWorthHistoryResponse {
   results: NetWorthPoint[]
 }
 
+
+/**
+ * `usePeriod` consome `useSearchParams`. Sem uma fronteira de Suspense, o Next
+ * tira a rota inteira do render estático e a hidratação parcial deixa de
+ * funcionar. `app/transactions/page.tsx` já fazia assim; estas duas páginas
+ * eram a exceção.
+ */
 export default function PortfolioPage() {
+  return (
+    <Suspense fallback={<LoadingState />}>
+      <PortfolioContent />
+    </Suspense>
+  );
+}
+
+function PortfolioContent() {
   const { currency, isPrivate } = useCurrency()
   const portfolio = useApi<PortfolioResponse>("/api/portfolio")
   const netWorthPeriod = usePeriod("12m")

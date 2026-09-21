@@ -1,20 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
+import { Suspense, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowDownRight, ArrowUpRight, Minus, Info, ExternalLink } from "lucide-react";
-import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  ReferenceLine,
-} from "recharts";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Info, ExternalLink } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -22,19 +11,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
 import { useApi } from "@/hooks/use-api";
 import { useCurrency } from "@/lib/currency-context";
-import { formatPercent } from "@/lib/format";
 import { usePeriod } from "@/hooks/use-period";
 import { PeriodSwitcher } from "@/components/period-switcher";
 import { PageHeader } from "@/components/page-header";
 import { PageError } from "@/components/page-error";
+import { ChangeBadge } from "@/components/cash-flow/change-badge";
+import { IncomeChart } from "@/components/cash-flow/income-chart";
+import { InvestmentsChart } from "@/components/cash-flow/investments-chart";
+import { ExpenseChart } from "@/components/cash-flow/expense-chart";
+import { NetResultChart } from "@/components/cash-flow/net-result-chart";
 
 
 interface CashFlowItem {
@@ -61,66 +48,10 @@ interface OverviewResponse {
 }
 
 
-const netChartConfig: ChartConfig = {
-  net: {
-    label: "Resultado Liquido",
-    color: "hsl(217 91% 60%)",
-  },
-};
-
-const expenseChartConfig: ChartConfig = {
-  expense: {
-    label: "Despesas",
-    color: "hsl(330 81% 60%)",
-  },
-};
-
-const investmentChartConfig: ChartConfig = {
-  investments: {
-    label: "Investimentos",
-    color: "hsl(43 96% 56%)",
-  },
-};
-
-const incomeChartConfig: ChartConfig = {
-  income: {
-    label: "Receitas",
-    color: "hsl(152 69% 53%)",
-  },
-};
-
-
 function formatMonth(dateStr: string) {
   const date = new Date(dateStr + "T00:00:00");
   if (Number.isNaN(date.getTime())) return "Sem data";
   return date.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" });
-}
-
-
-function ChangeBadge({
-  value,
-  invertColors = false,
-}: {
-  value: number | null | undefined;
-  invertColors?: boolean;
-}) {
-  if (value == null) return null;
-
-  const isPositive = invertColors ? value <= 0 : value >= 0;
-  const Icon = value > 0 ? ArrowUpRight : value < 0 ? ArrowDownRight : Minus;
-
-  return (
-    <span
-      className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-medium ${
-        isPositive
-          ? "bg-emerald-500/10 text-emerald-400"
-          : "bg-red-500/10 text-red-400"
-      }`}
-    >
-      <Icon className="size-3" />
-      {formatPercent(Math.abs(value))}
-    </span>
-  );
 }
 
 
@@ -151,8 +82,23 @@ function monthTransactionsHref(dateStr: string, direction?: "INFLOW" | "OUTFLOW"
   return `/transactions?${params.toString()}`;
 }
 
+
+/**
+ * `usePeriod` consome `useSearchParams`. Sem uma fronteira de Suspense, o Next
+ * tira a rota inteira do render estático e a hidratação parcial deixa de
+ * funcionar. `app/transactions/page.tsx` já fazia assim; estas duas páginas
+ * eram a exceção.
+ */
 export default function CashFlowPage() {
-  const { format, formatCompact } = useCurrency();
+  return (
+    <Suspense fallback={<LoadingSkeleton />}>
+      <CashFlowContent />
+    </Suspense>
+  );
+}
+
+function CashFlowContent() {
+  const { format } = useCurrency();
   // 6m, não 180d: a página agrupa por mês, e 180 dias atrás cai no meio de
   // março — sete barras num seletor que promete seis.
   const period = usePeriod("6m");
@@ -297,332 +243,38 @@ export default function CashFlowPage() {
           </div>
         </div>
 
-        {/* Charts grid */}
+        {/* Charts grid — cada card mora em components/cash-flow; a página só
+            decide o que entra e para onde o clique leva. */}
         <div className="grid gap-4 md:grid-cols-2">
-          {/* Receitas chart */}
-          <Card className="rounded-xl border bg-card">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1">
-                  <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                    Receitas
-                  </p>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="size-3 text-muted-foreground/60 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Evolução mensal das entradas de dinheiro</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <ChangeBadge value={overview?.summary?.incomeChange} />
-              </div>
-              <CardTitle className="text-xl font-bold tabular-nums text-emerald-400">
-                {format(totals.totalIncome)}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ChartContainer
-                config={incomeChartConfig}
-                className="h-56 w-full cursor-pointer"
-              >
-                <AreaChart
-                  data={chartData}
-                  onClick={(d) => d?.activePayload?.[0]?.payload?.date && router.push(monthTransactionsHref(d.activePayload[0].payload.date, "INFLOW"))}
-                >
-                  <defs>
-                    <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop
-                        offset="0%"
-                        stopColor="hsl(152 69% 53%)"
-                        stopOpacity={0.3}
-                      />
-                      <stop
-                        offset="100%"
-                        stopColor="hsl(152 69% 53%)"
-                        stopOpacity={0}
-                      />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    className="stroke-muted/30"
-                    vertical={false}
-                  />
-                  <XAxis
-                    dataKey="label"
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{
-                      fontSize: 11,
-                      fill: "var(--muted-foreground)",
-                    }}
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{
-                      fontSize: 11,
-                      fill: "var(--muted-foreground)",
-                    }}
-                    tickFormatter={formatCompact}
-                    width={48}
-                  />
-                  <ChartTooltip
-                    content={
-                      <ChartTooltipContent
-                        formatter={(value) => format(value as number)}
-                      />
-                    }
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="income"
-                    stroke="hsl(152 69% 53%)"
-                    strokeWidth={2}
-                    fill="url(#incomeGrad)"
-                  />
-                </AreaChart>
-              </ChartContainer>
-            </CardContent>
-          </Card>
+          <IncomeChart
+            data={chartData}
+            total={format(totals.totalIncome)}
+            change={overview?.summary?.incomeChange}
+            onMonthClick={(date) =>
+              router.push(monthTransactionsHref(date, "INFLOW"))
+            }
+          />
 
-          {/* Investimentos chart */}
-          <Card className="rounded-xl border bg-card">
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-1">
-                <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                  Investimentos
-                </p>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="size-3 text-muted-foreground/60 cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Aportes para corretoras separados das despesas</p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <CardTitle className="text-xl font-bold tabular-nums text-amber-400">
-                {format(totals.totalInvestments)}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ChartContainer
-                config={investmentChartConfig}
-                className="h-56 w-full"
-              >
-                <BarChart data={chartData} barCategoryGap="20%">
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    className="stroke-muted/30"
-                    vertical={false}
-                  />
-                  <XAxis
-                    dataKey="label"
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{
-                      fontSize: 11,
-                      fill: "var(--muted-foreground)",
-                    }}
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{
-                      fontSize: 11,
-                      fill: "var(--muted-foreground)",
-                    }}
-                    tickFormatter={formatCompact}
-                    width={48}
-                  />
-                  <ChartTooltip
-                    content={
-                      <ChartTooltipContent
-                        formatter={(value) => format(value as number)}
-                      />
-                    }
-                  />
-                  <Bar
-                    dataKey="investments"
-                    fill="hsl(43 96% 56%)"
-                    radius={[6, 6, 0, 0]}
-                  />
-                </BarChart>
-              </ChartContainer>
-            </CardContent>
-          </Card>
+          <InvestmentsChart
+            data={chartData}
+            total={format(totals.totalInvestments)}
+          />
 
-          {/* Despesas chart */}
-          <Card className="rounded-xl border bg-card">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1">
-                  <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                    Despesas
-                  </p>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="size-3 text-muted-foreground/60 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Evolução mensal das saídas de dinheiro</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <ChangeBadge
-                  value={overview?.summary?.expenseChange}
-                  invertColors
-                />
-              </div>
-              <CardTitle className="text-xl font-bold tabular-nums text-pink-400">
-                {format(totals.totalExpense)}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ChartContainer
-                config={expenseChartConfig}
-                className="h-56 w-full cursor-pointer"
-              >
-                <BarChart
-                  data={chartData}
-                  barCategoryGap="20%"
-                  onClick={(d) => d?.activePayload?.[0]?.payload?.date && router.push(monthTransactionsHref(d.activePayload[0].payload.date, "OUTFLOW"))}
-                >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    className="stroke-muted/30"
-                    vertical={false}
-                  />
-                  <XAxis
-                    dataKey="label"
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{
-                      fontSize: 11,
-                      fill: "var(--muted-foreground)",
-                    }}
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{
-                      fontSize: 11,
-                      fill: "var(--muted-foreground)",
-                    }}
-                    tickFormatter={formatCompact}
-                    width={48}
-                  />
-                  <ChartTooltip
-                    content={
-                      <ChartTooltipContent
-                        formatter={(value) => format(value as number)}
-                      />
-                    }
-                  />
-                  <Bar
-                    dataKey="expense"
-                    fill="hsl(330 81% 60%)"
-                    radius={[6, 6, 0, 0]}
-                  />
-                </BarChart>
-              </ChartContainer>
-            </CardContent>
-          </Card>
+          <ExpenseChart
+            data={chartData}
+            total={format(totals.totalExpense)}
+            change={overview?.summary?.expenseChange}
+            onMonthClick={(date) =>
+              router.push(monthTransactionsHref(date, "OUTFLOW"))
+            }
+          />
 
-          {/* Resultado Mensal chart */}
-          <Card className="rounded-xl border bg-card">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1">
-                  <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                    Resultado Mensal
-                  </p>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="size-3 text-muted-foreground/60 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Diferença entre receitas e despesas por mês</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <ChangeBadge value={overview?.summary?.netChange} />
-              </div>
-              <CardTitle className="text-xl font-bold tabular-nums text-blue-400">
-                {format(totals.totalNet)}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ChartContainer config={netChartConfig} className="h-56 w-full cursor-pointer">
-                <BarChart
-                  data={chartData}
-                  barCategoryGap="20%"
-                  onClick={(d) => d?.activePayload?.[0]?.payload?.date && router.push(monthTransactionsHref(d.activePayload[0].payload.date))}
-                >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    className="stroke-muted/30"
-                    vertical={false}
-                  />
-                  <XAxis
-                    dataKey="label"
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                    tickFormatter={formatCompact}
-                    width={48}
-                  />
-                  <ReferenceLine
-                    y={0}
-                    stroke="var(--border)"
-                    strokeDasharray="3 3"
-                  />
-                  <ChartTooltip
-                    content={
-                      <ChartTooltipContent
-                        formatter={(value) => format(value as number)}
-                      />
-                    }
-                  />
-                  <Bar
-                    dataKey="net"
-                    radius={[6, 6, 0, 0]}
-                    fill="hsl(217 91% 60%)"
-                    shape={(props: unknown) => {
-                      const { x, y, width, height, payload } = props as {
-                        x: number;
-                        y: number;
-                        width: number;
-                        height: number;
-                        payload: CashFlowItem;
-                      };
-                      const isNeg = payload.net < 0;
-                      const absHeight = Math.abs(height);
-                      const rectY = height < 0 ? y + height : y;
-                      return (
-                        <rect
-                          x={x}
-                          y={rectY}
-                          width={width}
-                          height={absHeight}
-                          rx={6}
-                          fill={isNeg ? "hsl(0 72% 51%)" : "hsl(217 91% 60%)"}
-                        />
-                      );
-                    }}
-                  />
-                </BarChart>
-              </ChartContainer>
-            </CardContent>
-          </Card>
+          <NetResultChart
+            data={chartData}
+            total={format(totals.totalNet)}
+            change={overview?.summary?.netChange}
+            onMonthClick={(date) => router.push(monthTransactionsHref(date))}
+          />
         </div>
 
         {/* Monthly breakdown table */}
