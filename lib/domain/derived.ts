@@ -17,7 +17,13 @@ import {
 } from "@/lib/domain/recurring";
 import { getUserSettings } from "@/lib/domain/queries";
 import { variableExpenseDivisor } from "@/lib/domain/projection-window";
+import { isFinancialChargeDescription } from "@/lib/domain/recurring-exclusions";
 import { matchesSalaryPatternValues } from "@/lib/domain/salary";
+import {
+  detectSalaryInterval,
+  reduceSalaryOccurrences,
+  salaryOccurrenceAmount,
+} from "@/lib/domain/salary-schedule";
 import { prisma } from "@/lib/prisma";
 
 const ZERO = new Prisma.Decimal(0);
@@ -38,6 +44,13 @@ type RecurringMetadata = {
   sourceTransactionIds?: string[];
   isInstallment?: boolean;
   currencyCode?: string | null;
+  /**
+   * Dia do mês que a regra realmente quer (1-31). Guardado separado de
+   * `nextDate` porque `nextDate` vem da última transação, e o banco antecipa:
+   * uma conta do dia 31 cobrada em 28/02 passava a ser projetada no dia 28
+   * para sempre.
+   */
+  anchorDay?: number | null;
 };
 
 function decimal(value?: DecimalLike) {
@@ -222,6 +235,20 @@ export async function refreshRecurringDerived(options?: {
       continue;
     }
 
+    // AUD-012/013: juros do rotativo, IOF e multa têm a assinatura que este
+    // motor procura — mesma descrição, ritmo mensal, valor parecido — e viravam
+    // "assinatura". Ninguém assina juros.
+    if (
+      isFinancialChargeDescription(
+        transaction.description,
+        transaction.normalizedDescription,
+        transaction.merchantName,
+        category?.name,
+      )
+    ) {
+      continue;
+    }
+
     const normalizedDescription =
       transaction.normalizedDescription ??
       normalizeText(transaction.description);
@@ -276,6 +303,8 @@ export async function refreshRecurringDerived(options?: {
     lastOccurrenceAt: Date;
     sourceTransactionIds: string[];
     isInstallment?: boolean;
+    /** Dia do mês que a regra realmente quer (1-31). */
+    anchorDay?: number | null;
   }>;
 
   for (const [key, group] of groups.entries()) {
@@ -288,25 +317,23 @@ export async function refreshRecurringDerived(options?: {
       (left, right) => left.occurredAt.getTime() - right.occurredAt.getTime(),
     );
 
-    // Grupo de salário: o padrão do usuário pode casar também transferências
-    // próprias menores no mesmo mês. Mantém só a maior entrada de cada mês
-    // (o salário), evitando que intervalos/valores irregulares descartem a
-    // detecção.
+    // Grupo de salário: o padrão do usuário também casa transferências
+    // próprias menores no mesmo mês, e sem filtro elas bagunçam a detecção.
+    // O filtro antigo ficava só com a MAIOR entrada do mês — e junto com o
+    // ruído descartava o segundo pagamento de quem recebe quinzenal ou tem
+    // adiantamento. Agora o corte é por ordem de grandeza: entrada pequena
+    // perto da maior do mês é ruído; entrada da mesma ordem é pagamento.
     if (isSalaryGroup && sorted.length > 1) {
-      const largestByMonth = new Map<string, (typeof sorted)[number]>();
-      for (const transaction of sorted) {
-        const monthOfTx = `${transaction.occurredAt.getUTCFullYear()}-${transaction.occurredAt.getUTCMonth()}`;
-        const current = largestByMonth.get(monthOfTx);
-        if (
-          !current ||
-          transaction.amount.abs().greaterThan(current.amount.abs())
-        ) {
-          largestByMonth.set(monthOfTx, transaction);
-        }
-      }
-      sorted = [...largestByMonth.values()].sort(
-        (left, right) => left.occurredAt.getTime() - right.occurredAt.getTime(),
+      const kept = new Set(
+        reduceSalaryOccurrences(
+          sorted.map((transaction) => ({
+            occurredAt: transaction.occurredAt,
+            amount: safeNumber(transaction.amount),
+            id: transaction.id,
+          })),
+        ).map((occurrence) => occurrence.id),
       );
+      sorted = sorted.filter((transaction) => kept.has(transaction.id));
     }
 
     const intervals = sorted.slice(1).map((current, index) => {
@@ -325,9 +352,14 @@ export async function refreshRecurringDerived(options?: {
     const { INTERVAL_THRESHOLDS } = RECURRING_DETECTION;
     
     if (isSalaryGroup) {
-      // Salário no Brasil é mensal; após reduzir à maior entrada por mês,
-      // não depende dos thresholds de intervalo.
-      detectedInterval = "MONTHLY";
+      // Não é mais "salário é sempre mensal". Quem recebe quinzenal ou tem
+      // adiantamento 40/60 tinha o segundo pagamento apagado da projeção.
+      detectedInterval = detectSalaryInterval(
+        sorted.map((transaction) => ({
+          occurredAt: transaction.occurredAt,
+          amount: safeNumber(transaction.amount),
+        })),
+      );
     } else {
       if (avgIntervalDays >= INTERVAL_THRESHOLDS.WEEKLY.min && avgIntervalDays <= INTERVAL_THRESHOLDS.WEEKLY.max)
         detectedInterval = "WEEKLY";
@@ -346,12 +378,17 @@ export async function refreshRecurringDerived(options?: {
     const amounts = sorted.map((transaction) =>
       Math.abs(safeNumber(transaction.amount)),
     );
-    // Mediana para salário: meses sem salário (só uma transferência pequena
-    // casando o padrão) não puxam a média para baixo.
-    const sortedAmounts = [...amounts].sort((a, b) => a - b);
-    const medianAmount = sortedAmounts[Math.floor(sortedAmounts.length / 2)];
+    // Salário mensal usa mediana (mês fraco não derruba a projeção); quinzenal
+    // usa média, senão a mediana escolheria sempre a parcela maior do 40/60 e
+    // a projeção sairia inflada. Ver lib/domain/salary-schedule.ts.
     const avgAmountNumber = isSalaryGroup
-      ? medianAmount
+      ? salaryOccurrenceAmount(
+          detectedInterval as "WEEKLY" | "BIWEEKLY" | "MONTHLY",
+          sorted.map((transaction) => ({
+            occurredAt: transaction.occurredAt,
+            amount: safeNumber(transaction.amount),
+          })),
+        )
       : amounts.reduce((total, current) => total + current, 0) /
         amounts.length;
     const maxDeviation = Math.max(
@@ -380,6 +417,14 @@ export async function refreshRecurringDerived(options?: {
         (1 - maxDeviation / Math.max(avgAmountNumber, 1)) * CONFIDENCE.PER_DEVIATION,
     );
 
+    // O maior dia do mês entre as ocorrências recupera a âncora verdadeira:
+    // se fevereiro clampou para 28 mas os outros meses caem em 31, a regra é
+    // do dia 31.
+    const anchorDay = sorted.reduce(
+      (largest, transaction) => Math.max(largest, transaction.occurredAt.getUTCDate()),
+      0,
+    );
+
     let nextDate = new Date(lastTransaction.occurredAt);
     if (detectedInterval === "WEEKLY")
       nextDate.setUTCDate(nextDate.getUTCDate() + 7);
@@ -393,6 +438,7 @@ export async function refreshRecurringDerived(options?: {
 
     detectedCandidates.push({
       currencyCode: lastTransaction.currencyCode ?? null,
+      anchorDay: anchorDay > 0 ? anchorDay : null,
       name:
         lastTransaction.merchantName ??
         lastTransaction.description ??
@@ -452,6 +498,11 @@ export async function refreshRecurringDerived(options?: {
       )
     )
       return false;
+    // Segunda barreira contra encargo virando assinatura. A primeira é na
+    // formação dos grupos; esta pega o candidato já montado, cujo nome pode ter
+    // vindo do merchant e não da descrição original.
+    if (isFinancialChargeDescription(candidate.name, candidate.descriptionPattern))
+      return false;
     return true;
   });
 
@@ -476,6 +527,7 @@ export async function refreshRecurringDerived(options?: {
           sourceTransactionIds: candidate.sourceTransactionIds,
           isInstallment: candidate.isInstallment ?? false,
           currencyCode: candidate.currencyCode ?? null,
+          anchorDay: candidate.anchorDay ?? null,
         } satisfies RecurringMetadata),
       },
     });
@@ -520,6 +572,7 @@ export async function getRecurringPayload(type?: "INCOME" | "EXPENSE") {
         currencyCode: metadata.currencyCode ?? null,
         interval: rule.interval ?? "MONTHLY",
         nextDate,
+        anchorDay: metadata.anchorDay ?? null,
         active: rule.active,
         accountId: metadata.accountId ?? null,
         merchantId: rule.merchantId,
@@ -784,6 +837,7 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
         rule.nextDate,
         pointDate,
         pointMonthEnd,
+        rule.anchorDay,
       );
       if (occurrences.length === 0) continue;
       const multiplier = new Prisma.Decimal(occurrences.length);

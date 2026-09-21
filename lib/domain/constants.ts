@@ -17,6 +17,36 @@ export const RECURRING_DETECTION = {
   },
 } as const;
 
+/**
+ * Encargos financeiros que o motor de recorrência não deve transformar em
+ * "assinatura".
+ *
+ * Juros do rotativo, IOF e multa por atraso têm exatamente a assinatura que o
+ * detector procura: mesma descrição normalizada, ritmo mensal, valor parecido.
+ * Só que ninguém "assina" juros — virar uma regra fixa faz a tela oferecer
+ * cancelar uma cobrança que não se cancela, e joga o encargo na projeção como
+ * se fosse gasto planejado.
+ *
+ * A comparação é por substring sobre o texto normalizado (sem acento, minúsculo).
+ */
+export const EXCLUDED_RECURRING_KEYWORDS = [
+  "juros",
+  "juros do rotativo",
+  "juros rotativo",
+  "juros de mora",
+  "encargos",
+  "encargo",
+  "iof",
+  "multa",
+  "multa por atraso",
+  "mora",
+  "tarifa de atraso",
+  "correcao monetaria",
+  "rotativo",
+  "parcelamento de fatura",
+  "refinanciamento de fatura",
+] as const;
+
 export const PROJECTION = {
   DEFAULT_MONTHS: 6,
   MIN_MONTHS: 1,

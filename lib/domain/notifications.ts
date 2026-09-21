@@ -1,7 +1,12 @@
 import * as fs from "fs"
 import * as path from "path"
 import webpush from "web-push"
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import {
+  SPENDING_TRANSACTION_SELECT,
+  filterOperationalSpending,
+} from "@/lib/domain/analytics/spending-query"
 import { getProjectionPayload } from "@/lib/domain/derived"
 
 const LOG_FILE_PATH = path.join(process.cwd(), ".agents", "logs", "notifications.log")
@@ -53,6 +58,54 @@ function encodeHeaderValue(value: string): string {
  * Grava localmente e envia via webhook Slack-compatible, ntfy, Telegram e Web
  * Push — cada um só se estiver configurado.
  */
+/**
+ * Reivindica o direito de enviar um alerta — uma vez só.
+ *
+ * `checkBudgetAnomalies()` é chamada por `getInboxPayload()`, que roda a cada
+ * abertura da Inbox. Antes disso aqui, cada refresh do app remandava os mesmos
+ * alertas por push, Telegram e ntfy; deixar a aba aberta virava spam. A chave
+ * carrega o mês, então o mesmo estouro volta a avisar no mês seguinte — que é
+ * o comportamento desejado, e não um efeito colateral.
+ *
+ * Devolve `true` só para quem gravou a linha. A corrida é resolvida pelo
+ * índice único: o segundo a tentar leva P2002 e sai calado.
+ */
+export async function claimNotificationDelivery(
+  key: string,
+  kind: string,
+  title?: string,
+) {
+  try {
+    await prisma.notificationDelivery.create({ data: { key, kind, title } })
+    return true
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return false
+    }
+    // Falha de banco não pode derrubar a Inbox. Não enviar é o lado seguro:
+    // alerta perdido incomoda menos que alerta repetido em looping.
+    console.error("[NOTIFICATION] não foi possível registrar a entrega:", error)
+    return false
+  }
+}
+
+/** Envia o alerta se — e só se — ele ainda não tiver sido enviado. */
+export async function deliverNotificationOnce(
+  key: string,
+  kind: string,
+  title: string,
+  message: string,
+  severity: "info" | "warning" | "critical",
+  metadata?: unknown,
+) {
+  if (!(await claimNotificationDelivery(key, kind, title))) return false
+  await triggerNotificationDelivery(title, message, severity, metadata)
+  return true
+}
+
 export async function triggerNotificationDelivery(
   title: string,
   message: string,
@@ -182,21 +235,21 @@ export async function checkBudgetAnomalies() {
     const historyEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999)
 
     const [currentTransactions, historyTransactions, categories] = await Promise.all([
+      // Traz INFLOW junto de propósito: o pareamento de transferência interna
+      // precisa das duas pernas para reconhecer que uma anula a outra.
       prisma.domainTransaction.findMany({
         where: {
           ignored: false,
-          direction: "OUTFLOW",
           occurredAt: { gte: startOfMonth, lte: now },
         },
-        select: { amount: true, domainCategoryId: true },
+        select: SPENDING_TRANSACTION_SELECT,
       }),
       prisma.domainTransaction.findMany({
         where: {
           ignored: false,
-          direction: "OUTFLOW",
           occurredAt: { gte: historyStart, lte: historyEnd },
         },
-        select: { amount: true, domainCategoryId: true },
+        select: SPENDING_TRANSACTION_SELECT,
       }),
       prisma.domainCategory.findMany({
         select: { id: true, name: true, parentId: true, slug: true },
@@ -204,10 +257,16 @@ export async function checkBudgetAnomalies() {
     ])
 
     const categoryMap = new Map(categories.map((c) => [c.id, c]))
-    
+
+    // A mesma política do fluxo de caixa. Sem ela, transferência entre contas
+    // próprias, pagamento de fatura e aporte entravam como gasto — e a
+    // categoria "Transferências" estourava o orçamento todo mês sozinha.
+    const currentSpending = filterOperationalSpending(currentTransactions)
+    const historySpending = filterOperationalSpending(historyTransactions)
+
     // Calcula gastos do mês atual por categoria
     const currentMap = new Map<string, number>()
-    for (const tx of currentTransactions) {
+    for (const tx of currentSpending) {
       if (!tx.domainCategoryId) continue
       const val = Math.abs(Number(tx.amount))
       currentMap.set(tx.domainCategoryId, (currentMap.get(tx.domainCategoryId) ?? 0) + val)
@@ -215,7 +274,7 @@ export async function checkBudgetAnomalies() {
 
     // Calcula gastos históricos acumulados por categoria nos 3 meses
     const historyMap = new Map<string, number>()
-    for (const tx of historyTransactions) {
+    for (const tx of historySpending) {
       if (!tx.domainCategoryId) continue
       const val = Math.abs(Number(tx.amount))
       historyMap.set(tx.domainCategoryId, (historyMap.get(tx.domainCategoryId) ?? 0) + val)
@@ -252,8 +311,11 @@ export async function checkBudgetAnomalies() {
           href: "/cash-flow",
         })
 
-        // Dispara o trigger de envio
-        await triggerNotificationDelivery(
+        // Uma vez por categoria por mês. A chave é a mesma do item da Inbox,
+        // que já carrega o monthKey.
+        await deliverNotificationOnce(
+          `budget-deviation-${category.slug}-${monthKey}`,
+          "budget-deviation",
           title,
           `${description} ${impact}`,
           currentVal > historyAverage * 1.50 ? "warning" : "info",
@@ -286,8 +348,9 @@ export async function checkBudgetAnomalies() {
           href: "/projection",
         })
 
-        // Dispara o trigger de envio
-        await triggerNotificationDelivery(
+        await deliverNotificationOnce(
+          `cash-risk-${criticalMonth.year}-${criticalMonth.month}`,
+          "cash-risk",
           title,
           `${description} ${impact}`,
           "critical",
