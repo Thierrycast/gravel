@@ -31,6 +31,45 @@ describe("installments", () => {
     })
   })
 
+  it.each([
+    ["Compra mercado 2/10", { current: 2, total: 10 }],
+    ["LOJA ABC 1/3", { current: 1, total: 3 }],
+    ["MAGAZINE 3 de 12", { current: 3, total: 12 }],
+    ["SUPERMERCADO PARC 02/06", { current: 2, total: 6 }],
+    ["PARCELA 4/8 LOJA", { current: 4, total: 8 }],
+  ])("continua reconhecendo parcela de verdade: %s", (texto, esperado) => {
+    expect(detectExplicitInstallment(texto)).toEqual(esperado)
+  })
+
+  it.each([
+    "Uber em 01/12",
+    "Compra em 01/12",
+    "Pagamento no dia 15/03",
+    "Recarga dia 2/10",
+    "Fatura venc 05/11",
+    "Lançamento data 01/12",
+  ])("não confunde data com parcela: %s", (texto) => {
+    // O bug: "Uber em 01/12" casava como parcela 1 de 12, e o motor projetava
+    // doze Ubers que nunca vão existir.
+    expect(detectExplicitInstallment(texto)).toBeNull()
+  })
+
+  it.each([
+    "Compra 01/12/2026",
+    "Compra 01/12/26",
+    "Assinatura 15/03/2027 renovada",
+  ])("não confunde data completa com parcela: %s", (texto) => {
+    expect(detectExplicitInstallment(texto)).toBeNull()
+  })
+
+  it("palavra de parcelamento vence a suspeita de data", () => {
+    // "em" sugere data, mas "parc" é explícito. O explícito ganha.
+    expect(detectExplicitInstallment("Compra em 3 parc 01/12")).toEqual({
+      current: 1,
+      total: 12,
+    })
+  })
+
   it("remove marcador de parcela da chave de descricao", () => {
     expect(stripInstallmentMarker("Compra mercado 2/10")).toBe("compra mercado")
   })
@@ -52,6 +91,54 @@ describe("installments", () => {
     expect(groups).toHaveLength(1)
     expect(groups[0]?.totalInstallments).toBe(2)
     expect(groups[0]?.source).toBe("similarity")
+  })
+
+  it("duplicata do banco com o mesmo índice não vira uma segunda série", () => {
+    // AUD-011: algumas consolidações repassam a mesma parcela duas vezes no
+    // mesmo mês. Como o corte exigia `current > anterior`, o índice igual
+    // quebrava a série e abria uma cadeia nova — duplicando o lançamento até
+    // o fim do parcelamento.
+    const groups = inferInstallmentGroups([
+      makeTransaction({
+        id: "tx-1",
+        description: "JOMAG FASHION 3/10",
+        occurredAt: new Date("2026-01-10T00:00:00.000Z"),
+      }),
+      makeTransaction({
+        id: "tx-2",
+        description: "JOMAG FASHION 3/10",
+        occurredAt: new Date("2026-01-12T00:00:00.000Z"),
+      }),
+      makeTransaction({
+        id: "tx-3",
+        description: "JOMAG FASHION 4/10",
+        occurredAt: new Date("2026-02-10T00:00:00.000Z"),
+      }),
+    ])
+
+    expect(groups).toHaveLength(1)
+    expect(groups[0]?.totalInstallments).toBe(10)
+    // A duplicata não entra na série: 3, 4 — não 3, 3, 4.
+    expect(groups[0]?.transactions.map((tx) => tx.id)).toEqual(["tx-1", "tx-3"])
+  })
+
+  it("a mesma parcela em meses distantes continua abrindo série nova", () => {
+    // Duas compras diferentes que por acaso têm o mesmo marcador. Meses longe
+    // um do outro: é outro parcelamento, não duplicata.
+    const groups = inferInstallmentGroups([
+      makeTransaction({
+        id: "tx-1",
+        description: "JOMAG FASHION 2/6",
+        occurredAt: new Date("2026-01-10T00:00:00.000Z"),
+      }),
+      makeTransaction({
+        id: "tx-2",
+        description: "JOMAG FASHION 2/6",
+        occurredAt: new Date("2026-08-10T00:00:00.000Z"),
+      }),
+    ])
+
+    expect(groups).toHaveLength(2)
   })
 
   it("nao agrupa valores diferentes por similaridade", () => {

@@ -680,6 +680,24 @@ model PluggyItem {
 /// Fila durável de eventos de webhook da Pluggy. O handler HTTP só grava aqui e
 /// responde 2XX (a Pluggy exige resposta em <5s, senão repete até 9x); o
 /// processamento acontece depois, e o scheduler redrena o que ficou pendente.
+/// Entrega de notificação já feita — a trava de idempotência dos alertas.
+///
+/// Existe porque checkBudgetAnomalies() dispara push/Telegram/ntfy direto, e é
+/// chamada por getInboxPayload(), que roda a cada abertura da Inbox. Sem
+/// registro do que já foi enviado, abrir o app duas vezes mandava o mesmo
+/// alerta duas vezes — e ficar com o app aberto virava spam.
+model NotificationDelivery {
+  id     String   @id @default(cuid())
+  /// Chave idempotente do alerta (ex.: `budget-deviation-mercado-2026-09`).
+  /// Inclui o mês: o mesmo estouro volta a avisar no mês seguinte, de propósito.
+  key    String   @unique
+  kind   String
+  title  String?
+  sentAt DateTime @default(now())
+
+  @@index([sentAt])
+}
+
 model PluggyWebhookEvent {
   id          String       @id @default(cuid())
   /// `eventId` da Pluggy — mesma chave em todos os reenvios do mesmo evento.

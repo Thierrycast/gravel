@@ -3,10 +3,11 @@ import { DomainTransactionDirection, Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import {
   classifyCashFlowTransaction,
+  detectInternalTransferPairIds,
   isSalaryLikeTransaction,
 } from "@/lib/domain/analytics/shared"
 import { getOverviewMetrics, getSpendingByCategoryMetrics } from "@/lib/domain/analytics"
-import { parseSalaryPatternsConfig } from "@/lib/domain/salary"
+import { isGenericIncomeLabel, parseSalaryPatternsConfig } from "@/lib/domain/salary"
 import { checkBudgetAnomalies } from "@/lib/domain/notifications"
 
 type ReviewStatus = "open" | "resolved" | "ignored"
@@ -284,7 +285,13 @@ export async function getInboxPayload() {
     }
   }
 
+  // AUD-002: sem parear as duas pernas, um Pix de R$ 3.000 entre contas do
+  // próprio usuário passava no teste de "entrada acima de 200" e era anunciado
+  // como possível salário.
+  const internalTransferPairIds = detectInternalTransferPairIds(transactions)
+
   const salaryCandidates = transactions.filter((tx) => {
+    if (internalTransferPairIds.has(tx.id)) return false
     if (tx.direction !== DomainTransactionDirection.INFLOW || amount(tx.amount) < 200) return false
     const category = tx.domainCategoryId ? categoryMap.get(tx.domainCategoryId) : null
     const parentCategory = category?.parentId ? categoryMap.get(category.parentId) : null
@@ -298,7 +305,13 @@ export async function getInboxPayload() {
   })
   const salaryGroups = new Map<string, typeof salaryCandidates>()
   for (const tx of salaryCandidates) {
-    const key = normalizeText(tx.merchantName ?? tx.description ?? tx.normalizedDescription)
+    const label = tx.merchantName ?? tx.description ?? tx.normalizedDescription
+    // CORE-3.3: quando o banco não informa contraparte, a chave vira o rótulo
+    // genérico do lançamento ("Pix Recebido") e depósitos de origens
+    // diferentes, em meses diferentes, caem no mesmo grupo — dois bastavam
+    // para a Inbox anunciar salário. Sem origem, não há o que agrupar.
+    if (isGenericIncomeLabel(label)) continue
+    const key = normalizeText(label)
     if (!key) continue
     salaryGroups.set(key, [...(salaryGroups.get(key) ?? []), tx])
   }
