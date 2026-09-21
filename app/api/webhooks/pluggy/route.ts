@@ -3,6 +3,7 @@ import { after } from "next/server"
 import { OpsRunStatus } from "@prisma/client"
 
 import { ensureInternalApiKey } from "@/lib/admin/internal-auth"
+import { markDomainSyncState } from "@/lib/admin/ops"
 import {
   parseWebhookPayload,
   processQueuedWebhookEvent,
@@ -31,7 +32,36 @@ export async function POST(req: Request) {
   if (expectedSecret) {
     const provided = req.headers.get(WEBHOOK_SECRET_HEADER) ?? ""
     if (!constantTimeEquals(provided, expectedSecret)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      // Um 401 aqui é indistinguível de silêncio: a Pluggy tenta 9 vezes,
+      // desiste, e o app nunca conta a ninguém que o dado bancário parou de
+      // chegar. Como a entrega só falha por configuração — e não por acaso —,
+      // a rejeição fica registrada com o motivo provável.
+      //
+      // Sem header nenhum quase sempre significa webhook cadastrado pelo
+      // PAINEL da Pluggy: o painel não deixa definir headers (é a própria doc
+      // deles que diz), então o registro precisa ser refeito pela API, com o
+      // campo `headers`. É o que reconcilePluggyWebhook faz sozinho assim que
+      // PLUGGY_CLIENT_SECRET for real.
+      const reason = provided
+        ? "secret-divergente"
+        : "sem-header-provavel-registro-pelo-painel"
+
+      console.error(
+        `[Pluggy Webhook] entrega REJEITADA (401): ${reason}. ` +
+          `A Pluggy tentará 9 vezes e desistirá; enquanto isso o dado bancário ` +
+          `só chega pelo sync periódico. Registre o webhook pela API (POST ` +
+          `/webhooks com o campo headers) — o painel não envia header.`,
+      )
+
+      await markDomainSyncState({
+        stateKey: "pluggy-webhook-rejected",
+        status: OpsRunStatus.ERROR,
+        meta: { reason, at: new Date().toISOString() },
+      }).catch(() => {
+        // Registrar o problema não pode virar um segundo problema.
+      })
+
+      return NextResponse.json({ error: "Unauthorized", reason }, { status: 401 })
     }
   } else {
     // Sem secret configurado o endpoint aceita qualquer chamada. Não é motivo
@@ -120,7 +150,7 @@ export async function GET(request: Request) {
   const unauthorized = ensureInternalApiKey(request)
   if (unauthorized) return unauthorized
 
-  const [recent, counts] = await Promise.all([
+  const [recent, counts, rejected] = await Promise.all([
     prisma.pluggyWebhookEvent.findMany({
       orderBy: { receivedAt: "desc" },
       take: 20,
@@ -139,9 +169,33 @@ export async function GET(request: Request) {
       by: ["status"],
       _count: { _all: true },
     }),
+    // Entregas recusadas por secret. Não viram evento na fila — sem isto,
+    // "nenhum evento recebido" parece com "a Pluggy não mandou nada", quando
+    // na verdade ela mandou e levou 401.
+    prisma.domainSyncState.findUnique({
+      where: { stateKey: "pluggy-webhook-rejected" },
+      select: { lastProjectedAt: true, metaJson: true },
+    }),
   ])
 
+  const lastRejection = rejected
+    ? {
+        at: rejected.lastProjectedAt,
+        ...(() => {
+          try {
+            return JSON.parse(rejected.metaJson ?? "{}") as Record<string, unknown>
+          } catch {
+            return {}
+          }
+        })(),
+        aviso:
+          "A Pluggy bateu e levou 401. O painel dela não envia header: o webhook " +
+          "precisa ser registrado pela API, com o campo `headers`.",
+      }
+    : null
+
   return NextResponse.json({
+    lastRejection,
     counts: Object.fromEntries(
       counts.map((row) => [row.status, row._count._all]),
     ),
