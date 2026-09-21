@@ -117,8 +117,26 @@ O `eventId` é único em `PluggyWebhookEvent`, então reenvio da Pluggy responde
 `{ ok: true, skipped: true }` sem reprocessar. Um evento que falhe fica na fila e
 o agendador tenta de novo (até 5 tentativas).
 
-`GET /api/webhooks/pluggy` (na LAN) lista os últimos eventos e o estado de cada
-um — é o primeiro lugar a olhar quando "o dado não atualiza".
+`GET /api/webhooks/pluggy` (na LAN, com `X-INTERNAL-API-KEY`) lista os últimos
+eventos e o estado de cada um — é o primeiro lugar a olhar quando "o dado não
+atualiza".
+
+**Entrega recusada por secret aparece em `lastRejection`.** Isso existe porque um
+401 aqui é indistinguível de silêncio: a Pluggy tenta 9 vezes, desiste, e antes
+disso nada no app contava que o dado tinha parado de chegar — a fila ficava
+vazia, e fila vazia parece "a Pluggy não mandou nada" quando na verdade ela
+mandou e foi recusada. Dois motivos possíveis:
+
+| `reason` | O que aconteceu | Conserto |
+|---|---|---|
+| `sem-header-provavel-registro-pelo-painel` | A Pluggy bateu sem `X-Webhook-Secret`. O Dashboard dela **não deixa definir headers** — quem cadastra por lá nunca envia o header. | Registrar pela API: `pnpm gravel sync webhook --register` |
+| `secret-divergente` | O header veio, mas não bate. Secret rotacionado de um lado só. | `pnpm gravel sync webhook --register --force` |
+
+Cadastrar a URL pelo Dashboard **não é suficiente** — ela fica registrada, a
+Pluggy entrega, e toda entrega leva 401. O registro tem que passar pela API, e é
+o que o reconciliador faz sozinho no boot assim que `PLUGGY_CLIENT_SECRET` for
+uma credencial real (com placeholder ele desiste cedo e loga
+`pluggy-nao-configurada`).
 
 ### Exposição no lab (Tailscale Funnel + Traefik)
 
