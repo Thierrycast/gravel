@@ -21,7 +21,8 @@
 #
 #   - arquivo que nunca deve ser versionado (.env, chave, banco, dump);
 #   - documento (CPF, CNPJ, RG, telefone);
-#   - identidade pessoal, lida de ~/.config/lab-guard/identity.conf;
+#   - identidade pessoal, lida de ~/.config/lab-guard/identity.conf, que
+#     separa o que barra do que só avisa (e-mail de contato é legítimo);
 #   - imagem — AVISO, não bloqueio, porque ícone e diagrama são legítimos.
 #     Vira bloqueio quando o nome cheira a captura de tela, que foi o caso real.
 #
@@ -146,8 +147,11 @@ for f in "${FILES[@]}"; do
   # Duas fontes, porque são dois mundos: na máquina, o arquivo em ~/.config
   # (600, fora de git). Em CI, onde esse arquivo não existe e não pode existir,
   # a variável LAB_GUARD_IDENTITY_PATTERNS — que no GitHub Actions vem de um
-  # secret do repositório. Os padrões são, eles mesmos, a informação protegida:
-  # nunca entram no repositório.
+  # secret do repositório. Os padrões são, eles mesmos, a informação protegida.
+  #
+  # E duas seções, porque o princípio não é "nunca", é "sem necessidade":
+  # [bloqueia] o que não tem motivo para estar em código; [avisa] o que pode ser
+  # legítimo — e-mail de contato num README é propósito, não vazamento.
   if [ -n "${LAB_GUARD_IDENTITY_PATTERNS:-}" ]; then
     printf '%s\n' "$LAB_GUARD_IDENTITY_PATTERNS" > "$TMP_IDENTITY"
     IDENTITY_SOURCE="$TMP_IDENTITY"
@@ -156,11 +160,20 @@ for f in "${FILES[@]}"; do
   fi
 
   if [ -r "$IDENTITY_SOURCE" ]; then
+    secao="bloqueia"   # sem cabeçalho declarado, o padrão é barrar
     while IFS= read -r pattern; do
-      case "$pattern" in ''|'#'*) continue ;; esac
+      case "$pattern" in
+        '[bloqueia]') secao="bloqueia"; continue ;;
+        '[avisa]')    secao="avisa";    continue ;;
+        ''|'#'*)      continue ;;
+      esac
       if printf '%s' "$body" | grep -qiE "$pattern"; then
-        block "$f — casa um padrão de identidade pessoal"
-        hint "ajuste em $IDENTITY_FILE (ou no secret LAB_GUARD_IDENTITY_PATTERNS)"
+        if [ "$secao" = "avisa" ]; then
+          warn "$f — identidade pessoal; ok se for de propósito (contato, autoria)"
+        else
+          block "$f — casa um padrão de identidade pessoal"
+          hint "ajuste em $IDENTITY_FILE (ou no secret LAB_GUARD_IDENTITY_PATTERNS)"
+        fi
       fi
     done < "$IDENTITY_SOURCE"
   fi
