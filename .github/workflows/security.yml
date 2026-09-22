@@ -1,0 +1,72 @@
+name: Segurança
+
+# Por que existe, além do hook local:
+#
+# Hook se contorna. `git commit --no-verify` e `git push --no-verify` passam
+# direto, e um agente com pressa faz isso sem pensar. O hook protege ESTA
+# máquina; o CI protege o REPOSITÓRIO, de qualquer máquina e de qualquer pessoa.
+#
+# E há um motivo concreto: em 2026 um repositório deste lab ficou público por
+# três meses e meio com extrato bancário de terceiros no histórico. O gate da
+# época rodava só na máquina, e só procurava credencial.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+# Só leitura: este workflow não escreve nada, e não deve poder.
+permissions:
+  contents: read
+
+jobs:
+  segredos:
+    name: Segredos e endereços de infraestrutura
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # O HISTÓRICO inteiro. Um segredo commitado há seis meses e removido
+          # depois continua lá — foi assim que ninguém viu as imagens.
+          fetch-depth: 0
+
+      - name: Instalar gitleaks
+        run: |
+          VERSION=8.28.0
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: Varrer o histórico
+        run: gitleaks detect --config .gitleaks.toml --redact --verbose
+
+  dados-pessoais:
+    name: Dado pessoal, documento e imagem
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guarda do lab
+        # Os padrões de identidade são, eles mesmos, a informação protegida:
+        # vêm de um secret do repositório, nunca do código. Sem o secret o
+        # passo roda mesmo assim e cobre documento, arquivo proibido e imagem.
+        env:
+          LAB_GUARD_IDENTITY_PATTERNS: ${{ secrets.LAB_GUARD_IDENTITY_PATTERNS }}
+          LAB_GUARD_IDENTITY: /dev/null
+        run: bash scripts/lab-guard.sh --tracked
+
+  # Uma cópia vendorizada que envelhece em silêncio é pior que não ter cópia.
+  sincronia:
+    name: A cópia vendorizada está igual ao original?
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Avisar se o cabeçalho de origem sumiu
+        run: |
+          if ! grep -q "CÓPIA VENDORIZADA" scripts/lab-guard.sh; then
+            echo "::error::scripts/lab-guard.sh perdeu o cabeçalho que diz de onde veio."
+            echo "Original: ~/dev/lab-standards/githooks/lib/lab-guard.sh"
+            exit 1
+          fi
+          echo "✓ cabeçalho presente"

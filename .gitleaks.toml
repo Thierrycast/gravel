@@ -1,0 +1,53 @@
+# Regras de segredo do lab. Estende o conjunto padrao do gitleaks (que ja cobre
+# AWS, GitHub, Slack, chaves privadas, JWT e ~170 outros) e acrescenta os
+# identificadores da infraestrutura pessoal, que nao sao "segredo" no sentido
+# classico mas tambem nao entram em repositorio nenhum.
+#
+# Regra da casa, documentada em ~/.claude/CLAUDE.md, ~/.codex/AGENTS.md e
+# ~/.gemini/GEMINI.md.
+#
+# CÓPIA para o CI. O original vive em ~/dev/lab-standards/gitleaks.toml e vale
+# para toda a máquina; esta cópia viaja com o repositório, porque o runner do
+# GitHub não tem o lab-standards. As regras são PADRÕES (o que procurar), não
+# endereços — nada aqui é segredo.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "lab-private-ipv4"
+description = "IP privado da LAN do lab em codigo ou config"
+regex = '''\b192\.168\.1\.\d{1,3}\b'''
+tags = ["lab", "infra"]
+
+[[rules]]
+id = "lab-tailscale-ipv4"
+description = "IP da tailnet (CGNAT 100.64/10)"
+regex = '''\b100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}\b'''
+tags = ["lab", "infra"]
+
+[[rules]]
+id = "lab-tailnet-hostname"
+description = "Hostname de tailnet (*.ts.net) ou dominio interno (*.lab.home)"
+regex = '''\b[a-z0-9][a-z0-9-]*\.(?:ts\.net|lab\.home)\b'''
+tags = ["lab", "infra"]
+
+[allowlist]
+description = "O que pode citar os identificadores legitimamente"
+paths = [
+  # O proprio lab-standards documenta a topologia: e a fonte da verdade dela.
+  # Visto de fora (outro repo citando o diretorio). De DENTRO os caminhos sao
+  # relativos e nao casam aqui — por isso o lab-standards usa a sua propria
+  # config, gitleaks-lab-standards.toml. Ver GIT-GUARD.md.
+  '''(^|/)lab-standards/''',
+  # .env nao e versionado; .env.example so tem placeholder.
+  '''(^|/)\.env$''',
+  '''(^|/)\.env\.example$''',
+  '''(^|/)gitleaks\.toml$''',
+]
+regexes = [
+  # Placeholders e documentacao de faixa, nao endereco real.
+  '''192\.168\.1\.\d{1,3}/24''',
+  '''100\.64\.0\.0/10''',
+  '''<[A-Z_]+>''',
+]
