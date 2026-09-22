@@ -138,6 +138,35 @@ o que o reconciliador faz sozinho no boot assim que `PLUGGY_CLIENT_SECRET` for
 uma credencial real (com placeholder ele desiste cedo e loga
 `pluggy-nao-configurada`).
 
+### Entregar não é o mesmo que funcionar
+
+São duas falhas diferentes, em dois lugares diferentes, e confundi-las custa
+tempo:
+
+1. **A entrega falha** — a Pluggy bate e leva 401/404/timeout. O evento nunca
+   entra na fila. Sintoma: `PluggyWebhookEvent` sem registros novos, e
+   `lastRejection` preenchido se foi por secret. Olhar: Funnel, Traefik, secret.
+2. **A entrega dá certo e o processamento falha** — o evento entra na fila com
+   `SUCCESS` na recepção e depois vira `ERROR`. Sintoma: eventos recentes na
+   fila com `status: ERROR` e `attempts: 5`. Olhar: o campo `error` do evento.
+
+O caso 2 é o mais enganoso, porque tudo *parece* certo: a URL responde, a Pluggy
+não reclama, o webhook aparece registrado. Mas `item/created`/`item/updated`
+mandam o app fazer `GET /items/{id}` **de volta na Pluggy** — e isso usa
+`PLUGGY_CLIENT_ID`/`PLUGGY_CLIENT_SECRET`. Com credencial inválida, a Pluggy
+recusa, o evento tenta 5 vezes e morre. O dado bancário nunca chega, mesmo com a
+cadeia de rede impecável.
+
+Um sinal que separa os dois na hora: `connector/status_updated` continua
+passando, porque é o único evento que **não** precisa chamar a Pluggy de volta.
+Fila com `connector/status_updated` em SUCCESS e `item/updated` em ERROR é
+assinatura de credencial recusada, não de problema de rede.
+
+```bash
+pnpm gravel sync webhook     # estado do registro (caso 1)
+# caso 2: GET /api/webhooks/pluggy na LAN, e olhar o `error` dos eventos
+```
+
 ### Exposição no lab (Tailscale Funnel + Traefik)
 
 A única porta pública é o Tailscale Funnel, compartilhada por vários serviços;
