@@ -44,7 +44,10 @@ export async function GET() {
       orderBy: { expiresAt: "asc" },
       select: { itemExternalId: true, status: true, expiresAt: true },
     }),
-    prisma.pluggyConnectorStatus.findMany(),
+    // Mesmo corte da rota de saúde: status de webhook com mais de 24 h é velho.
+    prisma.pluggyConnectorStatus.findMany({
+      where: { updatedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+    }),
   ])
 
   const identityByItem = new Map(

@@ -7,6 +7,9 @@ export const dynamic = "force-dynamic"
 /** A partir de quantos dias antes do vencimento o consentimento vira aviso. */
 const CONSENT_WARNING_DAYS = 15
 
+/** Por quanto tempo um status de conector recebido por webhook continua valendo. */
+const CONNECTOR_STATUS_TTL_MS = 24 * 60 * 60 * 1000
+
 /** Status de item que exigem o usuário passar pelo Connect de novo. */
 const NEEDS_ACTION_STATUSES = new Set([
   "WAITING_USER_INPUT",
@@ -53,8 +56,14 @@ export async function GET() {
           deletedAt: true,
         },
       }),
+      // Status vem de webhook: se os webhooks param, o último "instável" ficaria
+      // na tela para sempre (o do Nubank ficou de 09/08 a 28/10/2026). Só vale
+      // o que foi observado nas últimas 24 h.
       prisma.pluggyConnectorStatus.findMany({
-        where: { status: { in: ["UNSTABLE", "OFFLINE"] } },
+        where: {
+          status: { in: ["UNSTABLE", "OFFLINE"] },
+          updatedAt: { gte: new Date(Date.now() - CONNECTOR_STATUS_TTL_MS) },
+        },
       }),
     ])
 
