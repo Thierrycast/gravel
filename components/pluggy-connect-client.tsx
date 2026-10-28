@@ -651,7 +651,7 @@ export function PluggyConnectClient() {
       />
 
       {/* Status banner */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <SummaryStat
           label="Conexões ativas"
           value={String(itemsByStatus.total)}
@@ -1054,8 +1054,8 @@ function SummaryStat({ label, value, tone, icon: Icon }: SummaryStatProps) {
           )}
         />
       ) : null}
-      <div>
-        <p className="section-eyebrow">{label}</p>
+      <div className="min-w-0">
+        <p className="section-eyebrow truncate">{label}</p>
         <p className={cn("text-lg font-semibold tabular-nums", toneClass)}>
           {value}
         </p>

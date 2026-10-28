@@ -616,7 +616,7 @@ function TransactionsContent() {
               type="number"
               value={minInput}
               onChange={(e) => setMinInput(e.target.value)}
-              placeholder="Mín $"
+              placeholder="Mín R$"
               className="h-9 w-20 sm:w-24 px-2 text-xs"
             />
             <span className="text-muted-foreground text-xs">até</span>
@@ -624,7 +624,7 @@ function TransactionsContent() {
               type="number"
               value={maxInput}
               onChange={(e) => setMaxInput(e.target.value)}
-              placeholder="Máx $"
+              placeholder="Máx R$"
               className="h-9 w-20 sm:w-24 px-2 text-xs"
             />
           </div>
@@ -636,24 +636,27 @@ function TransactionsContent() {
             size="sm"
             className="font-mono text-xs"
             onClick={() => setDirection(undefined)}
+            aria-pressed={direction == null}
           >
-            ALL
+            Todas
           </Button>
           <Button
             variant={direction === "OUTFLOW" ? "secondary" : "outline"}
             size="sm"
             className="font-mono text-xs"
             onClick={() => setDirection("OUTFLOW")}
+            aria-pressed={direction === "OUTFLOW"}
           >
-            OUT
+            Saídas
           </Button>
           <Button
             variant={direction === "INFLOW" ? "secondary" : "outline"}
             size="sm"
             className="font-mono text-xs"
             onClick={() => setDirection("INFLOW")}
+            aria-pressed={direction === "INFLOW"}
           >
-            IN
+            Entradas
           </Button>
         </div>
       </section>
@@ -672,9 +675,9 @@ function TransactionsContent() {
       <section className="surface overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-border/60 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="section-eyebrow">Lista densa</p>
+            <p className="section-eyebrow">Lançamentos</p>
             <h2 className="text-sm font-semibold tracking-tight">
-              Drill-down detalhado do período
+              Todas as transações do período
             </h2>
           </div>
 
