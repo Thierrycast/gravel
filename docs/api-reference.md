@@ -102,13 +102,21 @@ força a re-detecção de recorrências.
 
 ## Sincronização e enriquecimento Pluggy
 
+- `GET /api/pluggy/transactions?accountId=...&after=...` — página de até 500
+  transações via API v2 da Pluggy. Sem `accountId`, retorna a primeira página de
+  cada conta. `pagesByAccount[].page.next` traz o cursor da próxima página;
+  `from` e `to` filtram por data. `page` e `pageSize` retornam 400.
 - `POST /api/pluggy/items/{itemId}/refresh` — dispara `PATCH /items/{id}` e
   acompanha até estado terminal. Body `{ wait: false }` retorna na hora
   (fire-and-forget); `wait: true` (default) devolve `{ outcome, executionStatus,
   status, message, reprojected }` com outcome ∈ SUCCESS | PARTIAL_SUCCESS | ERROR
   | NEEDS_ACTION | MFA_REQUIRED | IN_PROGRESS | RATE_LIMITED.
 - `GET /api/pluggy/items` — inclui `executionStatus`, `syncError`, `lastSyncedAt`,
-  `lastUpdatedAt`, `consentExpiresAt`, `nextAutoSyncAt` por item.
+  `lastUpdatedAt`, `consentExpiresAt`, `nextAutoSyncAt`,
+  `hasResourcesPendingAuthorization` e `resourcesCollectedAt` por item.
+- `GET /api/pluggy/items/{itemId}/resources` — resume, sob demanda, tipos e
+  contagens dos recursos pendentes ou indisponíveis do consentimento Open Finance;
+  não devolve os identificadores individuais dos recursos.
 - `POST /api/domain/accounts/{accountId}/balance` — saldo em tempo real
   (`GET /accounts/{id}/balance`). Sempre 200; em falha, `ok:false` + `message` +
   `effectiveBalance` (saldo salvo). `source` = realtime | cached.

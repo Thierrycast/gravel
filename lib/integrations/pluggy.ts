@@ -473,28 +473,19 @@ export async function fetchAccount(accountId: string) {
   return pluggyRequest(`/accounts/${accountId}`)
 }
 
-export async function fetchAccountBalance(accountId: string) {
-  return pluggyRequest(`/accounts/${accountId}/balance`)
+/** Recursos que a instituição declarou no consentimento Open Finance do item. */
+export async function fetchItemResources(itemId: string, options?: { status?: string; page?: number }) {
+  return pluggyRequest(`/items/${encodeURIComponent(itemId)}/resources`, {
+    query: options,
+  }) as Promise<{
+    results?: Array<{ resourceId: string; type: string; status: string }>
+    total?: number
+    totalPages?: number
+  } | null>
 }
 
-/**
- * @deprecated `GET /transactions` (paginado por página) foi descontinuado pela
- * Pluggy e será **removido em 2026-12-31**. Use
- * {@link fetchTransactionsByCursor} (`GET /v2/transactions`). Mantido só para
- * comparação/backfill durante a migração.
- */
-export async function fetchTransactions(
-  params: {
-    accountId: string
-    page?: number
-    pageSize?: number
-    from?: string
-    to?: string
-  }
-) {
-  return pluggyRequest("/transactions", {
-    query: params,
-  })
+export async function fetchAccountBalance(accountId: string) {
+  return pluggyRequest(`/accounts/${accountId}/balance`)
 }
 
 export type CursorPage<T> = {

@@ -77,6 +77,8 @@ export async function GET() {
           item.connectorId !== null
             ? (statusByConnector.get(item.connectorId)?.status ?? null)
             : null,
+        hasResourcesPendingAuthorization: null,
+        resourcesCollectedAt: null,
       })),
       providerIssue: details,
     })
@@ -138,13 +140,20 @@ export async function GET() {
             effectiveConnectorId !== null
               ? (statusByConnector.get(effectiveConnectorId)?.status ?? null)
               : null,
+          hasResourcesPendingAuthorization:
+            liveItem?.hasResourcesPendingAuthorization ?? null,
+          resourcesCollectedAt: liveItem?.resourcesCollectedAt ?? null,
           syncError: item.syncError,
           lastSyncedAt: item.lastSyncedAt,
           imageUrl: storedItem.imageUrl,
         }
       } catch (err) {
         console.warn(`[pluggy/items] failed to sync item ${item.pluggyItemId}:`, err)
-        return item
+        return {
+          ...item,
+          hasResourcesPendingAuthorization: null,
+          resourcesCollectedAt: null,
+        }
       }
     })
   )
