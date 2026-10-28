@@ -13,6 +13,7 @@ import {
   savePluggyItem,
   updateStoredPluggyItem,
 } from "@/lib/pluggy-items"
+import { coverageFamily, getConnectorInsights } from "@/lib/pluggy-connector-insights"
 import { prisma } from "@/lib/prisma"
 
 export const dynamic = "force-dynamic"
@@ -158,7 +159,27 @@ export async function GET() {
     })
   )
 
-  return NextResponse.json({ items: enrichedItems, providerIssue: null })
+  // Cobertura e incidentes vêm do conector do banco real (o id já mapeado), não
+  // do MeuPluggy: é o banco que cai ou deixa de expor um produto.
+  const insights = await getConnectorInsights(
+    enrichedItems
+      .map((item) => item.connectorId)
+      .filter((id): id is number => typeof id === "number"),
+  )
+  const itemsWithInsights = enrichedItems.map((item) => {
+    const insight =
+      typeof item.connectorId === "number" ? insights.get(item.connectorId) : undefined
+    return {
+      ...item,
+      productCoverage: insight?.productCoverage ?? [],
+      coverageFamilies: Array.from(
+        new Set((insight?.productCoverage ?? []).map(coverageFamily)),
+      ),
+      connectorIncidents: insight?.incidents ?? [],
+    }
+  })
+
+  return NextResponse.json({ items: itemsWithInsights, providerIssue: null })
 }
 
 export async function POST(request: Request) {

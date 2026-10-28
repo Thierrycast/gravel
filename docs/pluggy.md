@@ -47,6 +47,9 @@ Cada conexão autorizada vira um **Item** na Pluggy. A sincronização
 - status de sincronização;
 - recursos do consentimento que aguardam aprovação ou estão indisponíveis,
   consultados sob demanda sem expor identificadores dos recursos;
+- incidentes ativos da instituição (status page da Pluggy) e, no painel de
+  recursos, os produtos que o banco oferece via Open Finance (`productCoverage`;
+  vazio em conector direto);
 - última sincronização;
 - quantidade de contas;
 - quantidade de importações;
@@ -200,6 +203,7 @@ fica exposto (o `GET` de diagnóstico só responde em `<host>.lab.home`).
 | Categorias | `GET /categories`, `PATCH /transactions/{id}` (devolve a correção) |
 | Merchants | `GET /merchants?cnpj=a,b,c` (lote) |
 | Perfil | `GET /identity`, `GET /consents` |
+| Catálogo do banco | `GET /connectors/{id}` — `productCoverage` e `health.incidents` (cache de 5 min) |
 | Webhooks | `GET/POST/PATCH/DELETE /webhooks` |
 | Enriquecimento | `POST /recurring-payments`, `POST /behavior-analysis` (enrichment-api) |
 | Renda (opcional) | `POST /income` (insights-api) — pode não estar habilitado no plano |

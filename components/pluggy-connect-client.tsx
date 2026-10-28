@@ -61,6 +61,15 @@ type StoredItem = {
   nextAutoSyncAt?: string | null
   hasResourcesPendingAuthorization?: boolean | null
   resourcesCollectedAt?: string | null
+  /** Famílias de subprodutos Open Finance que o banco oferece. */
+  coverageFamilies?: string[]
+  /** Incidentes ativos do status page da Pluggy para este banco. */
+  connectorIncidents?: Array<{
+    title: string
+    kind: "INCIDENT" | "MAINTENANCE"
+    severity: string
+    url: string | null
+  }>
 }
 
 type ConsentResourceGroup = {
@@ -909,6 +918,32 @@ export function PluggyConnectClient() {
                       )}
                     </Button>
                   </div>
+                  {item.connectorIncidents?.length ? (
+                    <ul className="w-full space-y-1 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-800 dark:text-amber-200">
+                      {item.connectorIncidents.slice(0, 3).map((incident) => (
+                        <li key={incident.title} className="flex items-start gap-1.5">
+                          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                          <span>
+                            {incident.kind === "MAINTENANCE" ? "Manutenção" : "Incidente"} no banco:{" "}
+                            {incident.title}
+                            {incident.url ? (
+                              <>
+                                {" "}
+                                <a
+                                  href={incident.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="underline underline-offset-2"
+                                >
+                                  ver status
+                                </a>
+                              </>
+                            ) : null}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                   {openResourceItemId === item.pluggyItemId ? (
                     <div className="w-full rounded-lg border border-border bg-muted/30 p-3 text-xs">
                       <div className="flex items-center justify-between gap-3">
@@ -922,6 +957,11 @@ export function PluggyConnectClient() {
                           Atualizar
                         </Button>
                       </div>
+                      {item.coverageFamilies?.length ? (
+                        <p className="mt-1 text-muted-foreground">
+                          O banco oferece via Open Finance: {item.coverageFamilies.join(", ")}.
+                        </p>
+                      ) : null}
                       {approvalPending ? (
                         <p className="mt-1 text-amber-700 dark:text-amber-300">
                           Aprove os recursos pendentes no aplicativo do banco. Eles podem não aparecer no Gravel até essa etapa terminar.

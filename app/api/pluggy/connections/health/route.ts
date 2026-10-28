@@ -1,4 +1,5 @@
 import { jsonError, jsonOk } from "@/lib/core/http"
+import { getConnectorInsights } from "@/lib/pluggy-connector-insights"
 import { prisma } from "@/lib/prisma"
 
 export const dynamic = "force-dynamic"
@@ -15,13 +16,20 @@ const NEEDS_ACTION_STATUSES = new Set([
 ])
 
 export type ConnectionAlert = {
-  kind: "needs-action" | "consent-expiring" | "connector-unstable" | "stale"
+  kind:
+    | "needs-action"
+    | "consent-expiring"
+    | "connector-unstable"
+    | "connector-incident"
+    | "stale"
   severity: "warning" | "critical"
   itemId: string | null
   institution: string
   message: string
   /** Dias até o consentimento expirar, quando aplicável. */
   daysLeft?: number
+  /** Página do incidente no status page da Pluggy. */
+  url?: string | null
 }
 
 /**
@@ -104,6 +112,34 @@ export async function GET() {
           connector.status === "OFFLINE"
             ? "A instituição está fora do ar. Não é problema do app — os dados voltam quando ela voltar."
             : "A instituição está instável. Alguns dados podem atrasar.",
+      })
+    }
+
+    // Incidentes do status page: o `health.status` do conector pode continuar
+    // ONLINE com um incidente aberto (ex.: transações faltando), então isto não
+    // duplica o aviso de instabilidade acima.
+    const unstableIds = new Set(connectors.map((connector) => connector.connectorId))
+    const nameByConnector = new Map(
+      items
+        .filter((item) => item.connectorId !== null && !item.deletedAt)
+        .map((item) => [item.connectorId as number, item.connectorName]),
+    )
+    const insights = await getConnectorInsights(nameByConnector.keys())
+    for (const [connectorId, insight] of insights) {
+      const incident = insight.incidents[0]
+      if (!incident) continue
+      if (unstableIds.has(connectorId) && incident.kind !== "MAINTENANCE") continue
+      const extra = insight.incidents.length > 1 ? ` (+${insight.incidents.length - 1})` : ""
+      alerts.push({
+        kind: "connector-incident",
+        severity: incident.severity === "MAJOR_OUTAGE" ? "critical" : "warning",
+        itemId: null,
+        institution: nameByConnector.get(connectorId) ?? `Conector ${connectorId}`,
+        message:
+          incident.kind === "MAINTENANCE"
+            ? `Manutenção na instituição: ${incident.title}${extra}.`
+            : `Incidente na instituição: ${incident.title}${extra}. Não é problema do app.`,
+        url: incident.url,
       })
     }
 

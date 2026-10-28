@@ -113,7 +113,11 @@ força a re-detecção de recorrências.
   | NEEDS_ACTION | MFA_REQUIRED | IN_PROGRESS | RATE_LIMITED.
 - `GET /api/pluggy/items` — inclui `executionStatus`, `syncError`, `lastSyncedAt`,
   `lastUpdatedAt`, `consentExpiresAt`, `nextAutoSyncAt`,
-  `hasResourcesPendingAuthorization` e `resourcesCollectedAt` por item.
+  `hasResourcesPendingAuthorization` e `resourcesCollectedAt` por item, além de
+  `productCoverage` (subprodutos Open Finance do banco), `coverageFamilies`
+  (as mesmas famílias, legíveis) e `connectorIncidents` (incidentes ativos do
+  status page). Os dois últimos vêm de `GET /connectors/{id}` do banco real —
+  nas conexões via MeuPluggy, o id já mapeado, não o do proxy — com cache de 5 min.
 - `GET /api/pluggy/items/{itemId}/resources` — resume, sob demanda, tipos e
   contagens dos recursos pendentes ou indisponíveis do consentimento Open Finance;
   não devolve os identificadores individuais dos recursos.
@@ -225,7 +229,8 @@ ignorar a cadência e `{ "watchdogOnly": true }` para só liberar runs órfãos.
 
 Problemas que precisam de ação humana: reconexão (MFA/credencial), consentimento
 do Open Finance a menos de 15 dias do vencimento, instituição instável ou fora do
-ar. Nada aqui se resolve com "sincronizar de novo".
+ar, e incidente ativo no status page da Pluggy (`kind: "connector-incident"`, com
+`url` para o incidente). Nada aqui se resolve com "sincronizar de novo".
 
 `GET|PATCH /api/settings/secrets`
 

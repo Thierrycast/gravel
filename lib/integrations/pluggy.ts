@@ -686,6 +686,11 @@ export async function fetchConnectors(params?: {
   })
 }
 
+/** GET /connectors/{id} — inclui `productCoverage` e `health.incidents` ativos. */
+export async function fetchConnector(connectorId: number) {
+  return pluggyRequest(`/connectors/${connectorId}`)
+}
+
 export async function createConnectToken(options?: {
   apiKey?: string
   /**

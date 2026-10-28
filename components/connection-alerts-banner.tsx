@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { PlugZap } from "lucide-react"
+import { ExternalLink, PlugZap } from "lucide-react"
 
 import { AttentionBanner } from "@/components/attention-banner"
 import { useApi } from "@/hooks/use-api"
@@ -10,12 +10,18 @@ import { useSyncStream } from "@/hooks/use-sync-stream"
 import { Button } from "@/components/ui/button"
 
 type ConnectionAlert = {
-  kind: "needs-action" | "consent-expiring" | "connector-unstable" | "stale"
+  kind:
+    | "needs-action"
+    | "consent-expiring"
+    | "connector-unstable"
+    | "connector-incident"
+    | "stale"
   severity: "warning" | "critical"
   itemId: string | null
   institution: string
   message: string
   daysLeft?: number
+  url?: string | null
 }
 
 type Response = {
@@ -72,7 +78,9 @@ export function ConnectionAlertsBanner() {
   if (dismissed || alerts.length === 0) return null
 
   const critical = alerts.some((alert) => alert.severity === "critical")
-  const needsReconnect = alerts.some((alert) => alert.kind !== "connector-unstable")
+  const needsReconnect = alerts.some(
+    (alert) => alert.kind !== "connector-unstable" && alert.kind !== "connector-incident",
+  )
   const first = alerts[0]
 
   function dismiss() {
@@ -113,6 +121,13 @@ export function ConnectionAlertsBanner() {
               <PlugZap className="size-3.5" />
               Reconectar
             </Link>
+          </Button>
+        ) : first.url ? (
+          <Button asChild variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
+            <a href={first.url} target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="size-3.5" />
+              Ver status
+            </a>
           </Button>
         ) : null
       }
