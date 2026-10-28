@@ -15,3 +15,8 @@ temp
 data
 scratch
 .kilo
+# Bases SQLite locais (dev, cópias de produção) nunca entram na imagem:
+# o Dockerfile copia prisma/ inteiro para o estágio final.
+prisma/*.db
+prisma/*.db-*
+my_stuff
