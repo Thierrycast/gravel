@@ -11,7 +11,7 @@ O Gravel Finance OS organiza as telas em quatro pilares: confiança do dado, dec
 - `/recurring`: recorrências e parcelas detectadas; `/recurring/income` tem CRUD completo de receitas recorrentes manuais.
 - `/cash-flow`: leitura de caixa por período.
 - `/accounts`: contas e cartões; cartões mostram fatura atual (por ciclo), próximas, total em aberto e status, com configuração de fechamento/vencimento.
-- `/bills`: faturas por cartão calculadas pelo motor de ciclo — fatura atual em destaque, próximas, histórico e alerta de vencidas.
+- `/bills`: faturas por cartão calculadas pelo motor de ciclo — fatura atual em destaque, próximas, histórico e alerta de vencidas. Pagamentos identificados por `operationType: PAGAMENTO_FATURA` da Pluggy entram na quitação mesmo com descrição genérica e ficam fora dos totais de receita e despesa.
 - `/portfolio`, `/investments`, `/crypto`: patrimônio.
 - `/projection`: projeção mensal com componentes separados (recorrências, faturas de cartão, parcelas, variável), ajuste do mês corrente e alertas (saldo negativo, faturas vencidas, capacidade de poupança vs metas).
 - `/playground`: simulações; hipóteses locais (navegador) e cenários salvos (afetam projeções). `/scenarios` redireciona para cá.

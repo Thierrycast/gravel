@@ -10,6 +10,7 @@ import {
   parseNumberParam,
 } from "@/lib/core/filters";
 import { matchesSalaryPatternValues } from "@/lib/domain/salary";
+import { hasPluggyBillPaymentOperation } from "@/lib/domain/pluggy-operation";
 
 export const ZERO = new Prisma.Decimal(0);
 export const DAY_MS = 24 * 60 * 60 * 1000;
@@ -468,9 +469,13 @@ export function classifyCashFlowTransaction(
   options?: {
     salaryPatterns?: string[];
     merchantName?: string | null;
+    metadataJson?: string | null;
   },
 ): CashFlowClassification {
   if (direction === DomainTransactionDirection.TRANSFER) return "excluded";
+
+  // A Pluggy identifica a quitação mesmo quando a descrição vem genérica.
+  if (hasPluggyBillPaymentOperation(options?.metadataJson)) return "excluded";
 
   if (isInvestmentTransfer(categoryName, categoryKind, description)) {
     return "investment";

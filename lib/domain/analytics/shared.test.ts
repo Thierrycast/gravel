@@ -107,6 +107,18 @@ describe("classifyCashFlowTransaction", () => {
     ).toBe("excluded");
   });
 
+  it("excludes a Pluggy bill payment even with a generic description", () => {
+    expect(
+      classifyCashFlowTransaction(
+        DomainTransactionDirection.INFLOW,
+        "Outros",
+        "INCOME",
+        "Crédito lançado",
+        { metadataJson: JSON.stringify({ operationType: "PAGAMENTO_FATURA" }) },
+      ),
+    ).toBe("excluded");
+  });
+
   it("keeps investment contributions out of operating expenses", () => {
     expect(
       classifyCashFlowTransaction(

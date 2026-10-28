@@ -101,6 +101,7 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
       {
         salaryPatterns: settings.salaryPatterns,
         merchantName: transaction.merchantName,
+        metadataJson: transaction.metadataJson,
       },
     );
 

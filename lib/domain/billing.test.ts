@@ -15,7 +15,7 @@ const decimal = (value: number) => new Prisma.Decimal(value);
 function tx(
   iso: string,
   amount: number,
-  overrides?: Partial<{ direction: string; description: string | null }>,
+  overrides?: Partial<{ direction: string; description: string | null; metadataJson: string | null }>,
 ) {
   return {
     id: `tx-${iso}-${amount}`,
@@ -23,6 +23,7 @@ function tx(
     amount: decimal(amount),
     direction: overrides?.direction ?? (amount < 0 ? "OUTFLOW" : "INFLOW"),
     description: overrides?.description ?? "compra teste",
+    metadataJson: overrides?.metadataJson ?? null,
   };
 }
 
@@ -156,6 +157,22 @@ describe("buildCardStatements", () => {
       providerBills: [],
     });
     expect(current?.amount).toBe(80);
+  });
+
+  it("usa operationType da Pluggy quando o pagamento tem descrição genérica", () => {
+    const { current } = buildCardStatements({
+      ...base,
+      transactions: [
+        tx("2026-06-20T12:00:00Z", -100),
+        tx("2026-06-21T12:00:00Z", 100, {
+          direction: "INFLOW",
+          description: "Crédito recebido",
+          metadataJson: JSON.stringify({ operationType: "PAGAMENTO_FATURA" }),
+        }),
+      ],
+      providerBills: [],
+    });
+    expect(current?.amount).toBe(100);
   });
 
   it("prefere o valor oficial do provedor em ciclos reconciliados", () => {

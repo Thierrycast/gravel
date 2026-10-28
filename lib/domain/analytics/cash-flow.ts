@@ -70,6 +70,7 @@ export async function getCashFlowMetrics(searchParams: URLSearchParams) {
       {
         salaryPatterns: settings.salaryPatterns,
         merchantName: transaction.merchantName,
+        metadataJson: transaction.metadataJson,
       },
     );
 

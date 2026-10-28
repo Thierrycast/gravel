@@ -235,7 +235,7 @@ export async function getInboxPayload() {
       category?.name,
       category?.kind,
       tx.description ?? tx.normalizedDescription,
-      { salaryPatterns, merchantName: tx.merchantName },
+      { salaryPatterns, merchantName: tx.merchantName, metadataJson: tx.metadataJson },
     )
     const lookup = normalizeText([tx.description, tx.normalizedDescription, category?.name].filter(Boolean).join(" "))
 

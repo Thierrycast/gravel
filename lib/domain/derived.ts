@@ -229,7 +229,7 @@ export async function refreshRecurringDerived(options?: {
       category?.name,
       category?.kind,
       transaction.description ?? transaction.normalizedDescription,
-      { salaryPatterns, merchantName: transaction.merchantName },
+      { salaryPatterns, merchantName: transaction.merchantName, metadataJson: transaction.metadataJson },
     );
     if (classification === "excluded" || classification === "investment") {
       continue;
@@ -1030,6 +1030,7 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
       {
         salaryPatterns: settings.salaryPatterns,
         merchantName: tx.merchantName,
+        metadataJson: tx.metadataJson,
       },
     );
     return classification === "income";

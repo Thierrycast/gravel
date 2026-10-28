@@ -852,6 +852,7 @@ model PluggyTransactionRecord {
   amount            Decimal?
   date              DateTime?
   type              String?
+  operationType     String?
   status            String?
   categoryId        String?
   category          String?

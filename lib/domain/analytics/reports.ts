@@ -86,6 +86,7 @@ export async function getSpendingByCategoryMetrics(
       tx.domainCategory?.name,
       tx.domainCategory?.kind,
       tx.description ?? tx.normalizedDescription,
+      { metadataJson: tx.metadataJson },
     );
 
     if (classification === "expense") {
@@ -161,6 +162,7 @@ export async function getSpendingByMerchantMetrics(
       tx.domainCategory?.name,
       tx.domainCategory?.kind,
       tx.description ?? tx.normalizedDescription,
+      { metadataJson: tx.metadataJson },
     );
     return classification === "expense";
   });
@@ -254,6 +256,7 @@ export async function getSpendingTrendsMetrics(searchParams: URLSearchParams) {
       tx.domainCategory?.name,
       tx.domainCategory?.kind,
       tx.description ?? tx.normalizedDescription,
+      { metadataJson: tx.metadataJson },
     );
 
     if (classification === "expense") {

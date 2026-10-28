@@ -1,6 +1,7 @@
 import { DomainAccountKind, Prisma } from "@prisma/client";
 
 import { getInstitutionLogo } from "@/lib/domain/utils";
+import { hasPluggyBillPaymentOperation } from "@/lib/domain/pluggy-operation";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -135,8 +136,10 @@ export function isCardPaymentTransaction(input: {
   direction: string;
   description?: string | null;
   categoryName?: string | null;
+  metadataJson?: string | null;
 }) {
   if (input.direction !== "INFLOW") return false;
+  if (hasPluggyBillPaymentOperation(input.metadataJson)) return true;
   const text = `${input.description ?? ""} ${input.categoryName ?? ""}`;
   return PAYMENT_DESCRIPTION_PATTERN.test(text);
 }
@@ -148,6 +151,7 @@ type StatementTransaction = {
   direction: string;
   description: string | null;
   categoryName?: string | null;
+  metadataJson?: string | null;
 };
 
 type ProviderBill = {
@@ -220,6 +224,7 @@ export function buildCardStatements(options: {
         direction: tx.direction,
         description: tx.description,
         categoryName: tx.categoryName,
+        metadataJson: tx.metadataJson,
       })
     ) {
       const amount = Math.abs(toNumber(tx.amount));
@@ -435,6 +440,7 @@ export async function getCardStatements(options?: {
         amount: true,
         direction: true,
         description: true,
+        metadataJson: true,
         domainCategoryId: true,
         domainAccountId: true,
       },
@@ -460,6 +466,7 @@ export async function getCardStatements(options?: {
         amount: tx.amount,
         direction: tx.direction as string,
         description: tx.description,
+        metadataJson: tx.metadataJson,
         categoryName: tx.domainCategoryId
           ? (categoryNameById.get(tx.domainCategoryId) ?? null)
           : null,

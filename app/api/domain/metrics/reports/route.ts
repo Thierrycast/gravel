@@ -54,6 +54,7 @@ export async function GET() {
           direction: true,
           description: true,
           normalizedDescription: true,
+          metadataJson: true,
           merchantName: true,
           domainCategoryId: true,
           domainAccountId: true,
@@ -111,6 +112,7 @@ export async function GET() {
         {
           salaryPatterns: settings.salaryPatterns,
           merchantName: tx.merchantName,
+          metadataJson: tx.metadataJson,
         },
       );
       if (classification !== "income" && classification !== "expense") continue;
