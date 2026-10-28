@@ -14,6 +14,7 @@ import {
   Receipt,
 } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
+import { summarizeCardStatements } from "@/lib/domain/billing-summary";
 import { useCurrency } from "@/lib/currency-context";
 import { formatDate, daysUntilLabel } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -400,38 +401,16 @@ export default function BillsPage() {
   const configured = cards.filter((card) => card.configured);
   const unconfigured = cards.filter((card) => !card.configured);
 
-  const totals = useMemo(() => {
-    const current = configured.reduce(
-      (sum, card) => sum + (card.current?.amount ?? 0),
-      0,
-    );
-    const upcoming = configured.reduce(
-      (sum, card) =>
-        sum + card.upcoming.reduce((inner, s) => inner + s.amount, 0),
-      0,
-    );
-    const overdue = configured.reduce(
-      (sum, card) =>
-        sum +
-        card.past
-          .filter((s) => s.status === "OVERDUE")
-          .reduce((inner, s) => inner + s.amount, 0),
-      0,
-    );
-    const open = cards.reduce((sum, card) => sum + card.totalOpen, 0);
-    return { current, upcoming, overdue, open };
-  }, [cards, configured]);
-  const nearestDue = useMemo(() => {
-    const statements = configured.flatMap((card) =>
-      [card.current, ...card.upcoming]
-        .filter((statement): statement is CardStatement => Boolean(statement && statement.amount > 0))
-        .map((statement) => ({ card, statement })),
-    );
-    return statements.sort(
-      (first, second) =>
-        new Date(first.statement.dueDate).getTime() - new Date(second.statement.dueDate).getTime(),
-    )[0] ?? null;
-  }, [configured]);
+  // Mesmo resumo que CLI, MCP, chat e briefing usam.
+  const summary = useMemo(() => summarizeCardStatements(cards), [cards]);
+  const totals = {
+    current: summary.openAmount,
+    closed: summary.closedAmount,
+    upcoming: summary.upcomingAmount,
+    overdue: summary.overdueAmount,
+    open: summary.totalOpen,
+  };
+  const nearestDue = summary.nearestDue;
 
   async function markBillAsPaid(billId: string) {
     setPayingBillId(billId);
@@ -485,6 +464,14 @@ export default function BillsPage() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
+              {totals.closed > 0 && (
+                <span>
+                  Fechadas a pagar:{" "}
+                  <span className="font-semibold tabular-nums text-foreground">
+                    {format(totals.closed)}
+                  </span>
+                </span>
+              )}
               <span>
                 Atuais:{" "}
                 <span className="font-semibold tabular-nums text-foreground">
@@ -503,7 +490,7 @@ export default function BillsPage() {
                   <span className="font-semibold tabular-nums text-foreground">
                     {format(nearestDue.statement.amount)}
                   </span>{" "}
-                  <span className="text-muted-foreground">({nearestDue.card.accountName})</span>
+                  <span className="text-muted-foreground">({nearestDue.accountName})</span>
                 </span>
               )}
               {totals.overdue > 0 && (

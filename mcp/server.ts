@@ -720,9 +720,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const summary = await getCardStatementsSummaryMetrics();
         result = {
           counts: summary.counts,
+          totalOpen: summary.totalOpen,
           overdueAmount: summary.overdueAmount,
+          closedAmount: summary.closedAmount,
           openAmount: summary.openAmount,
+          upcomingAmount: summary.upcomingAmount,
           dueIn7DaysAmount: summary.dueIn7DaysAmount,
+          nearestDue: summary.nearestDue,
           statements: summary.statements,
         };
         break;

@@ -198,23 +198,41 @@ export const CHAT_TOOLS: Array<{ schema: ChatToolSchema; handler: ChatToolHandle
     handler: async () => {
       const summary = await getCardStatementsSummaryMetrics()
       return {
-        resposta_pronta: `Em aberto: ${formatBrl(summary.openAmount)}. Vence nos próximos 7 dias: ${formatBrl(summary.dueIn7DaysAmount)}. Em atraso: ${formatBrl(summary.overdueAmount)}.`,
-        total_em_aberto: summary.openAmount,
+        resposta_pronta: `Total em aberto nos cartões: ${formatBrl(summary.totalOpen)}. Fechadas aguardando vencimento: ${formatBrl(summary.closedAmount)}. Fatura atual (ainda aberta): ${formatBrl(summary.openAmount)}. Vence nos próximos 7 dias: ${formatBrl(summary.dueIn7DaysAmount)}. Em atraso: ${formatBrl(summary.overdueAmount)}.`,
+        total_em_aberto: summary.totalOpen,
+        fechadas_a_pagar: summary.closedAmount,
+        faturas_atuais: summary.openAmount,
         vence_em_7_dias: summary.dueIn7DaysAmount,
         em_atraso: summary.overdueAmount,
+        proximo_vencimento: summary.nearestDue
+          ? {
+              cartao: summary.nearestDue.accountName,
+              valor: summary.nearestDue.statement.amount,
+              vencimento: summary.nearestDue.statement.dueDate,
+              situacao: summary.nearestDue.statement.status,
+            }
+          : null,
         quantidades: summary.counts,
-        faturas: summary.statements.slice(0, 8).map((card) => ({
-          cartao: card.accountName,
-          instituicao: card.institutionName,
-          em_aberto_no_cartao: card.totalOpen,
-          fatura_atual: card.current
-            ? {
-                valor: card.current.providerAmount ?? card.current.amount,
-                vencimento: card.current.dueDate,
-                situacao: card.current.status,
-              }
-            : null,
-        })),
+        faturas: summary.statements.slice(0, 8).map((card) => {
+          // Mesmo valor que a tela /bills mostra: `amount` já é o do banco
+          // quando reconciliado; `providerAmount` cru pode ser só o resíduo.
+          const fechada = card.past.find((statement) => statement.status === "CLOSED")
+          return {
+            cartao: card.accountName,
+            instituicao: card.institutionName,
+            em_aberto_no_cartao: card.totalOpen,
+            fatura_fechada: fechada
+              ? { valor: fechada.amount, vencimento: fechada.dueDate, situacao: fechada.status }
+              : null,
+            fatura_atual: card.current
+              ? {
+                  valor: card.current.amount,
+                  vencimento: card.current.dueDate,
+                  situacao: card.current.status,
+                }
+              : null,
+          }
+        }),
         observacao: "Valores já somados e em reais. Não some nem converta nada.",
       }
     },
