@@ -411,9 +411,9 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
       </div>
 
       {/* Charts & Category sidebar */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Chart panel */}
-        <div className="surface flex flex-col gap-4 p-5 lg:col-span-2 overflow-hidden">
+        <div className="surface flex min-w-0 flex-col gap-4 p-5 lg:col-span-2 overflow-hidden">
           {/* Chart header */}
           <div className="flex flex-wrap items-center justify-between gap-2">
             {/* Left: label + cashflow sub-mode */}
