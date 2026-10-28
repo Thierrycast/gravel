@@ -21,12 +21,7 @@ const serwist = new Serwist({
       // o cache só é servido quando a rede falha ou estoura o timeout — dados
       // financeiros nunca vêm do cache com a rede saudável. O timeout alto
       // evita servir dado velho silenciosamente em conexões apenas lentas.
-      // Streams (SSE de /api/sync/events) ficam de fora: interceptado pelo
-      // worker, o stream infinito sobrevivia à navegação e, depois de ~6
-      // telas, esgotava as conexões HTTP/1.1 por host — o app congelava.
-      matcher: ({ url, request }) =>
-        url.pathname.startsWith("/api/") &&
-        !(request.headers.get("accept") ?? "").includes("text/event-stream"),
+      matcher: ({ url }) => url.pathname.startsWith("/api/"),
       handler: new NetworkFirst({
         cacheName: "api-cache",
         networkTimeoutSeconds: 10,
@@ -62,6 +57,22 @@ const serwist = new Serwist({
       },
     ],
   },
+});
+
+// Streams SSE (/api/sync/events) não passam pelo worker. Interceptado, cada
+// stream infinito ficava preso ao worker mesmo depois da troca de página; ~6
+// telas depois as conexões HTTP/1.1 do host se esgotavam e o app congelava.
+// O filtro no runtimeCaching não basta: o `defaultCache` do Serwist também casa
+// /api/*. Registrado antes do Serwist, este listener encerra o evento sem
+// `respondWith`, e o navegador busca direto na rede.
+type StreamFetchEvent = { request: Request; stopImmediatePropagation: () => void };
+(globalThis as unknown as {
+  addEventListener: (type: "fetch", listener: (event: StreamFetchEvent) => void) => void;
+}).addEventListener("fetch", (event) => {
+  const accept = event.request.headers.get("accept") ?? "";
+  if (accept.includes("text/event-stream")) {
+    event.stopImmediatePropagation();
+  }
 });
 
 serwist.addEventListeners();
