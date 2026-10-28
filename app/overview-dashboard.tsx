@@ -63,36 +63,6 @@ import { getCategoryEmoji, getCategoryColor } from "@/lib/category-emoji";
 import { cn } from "@/lib/utils";
 
 
-interface OverviewMetricsResponse {
-  results: {
-    periodInflow: number;
-    periodOutflow: number;
-    fiatNetWorth: number;
-    fiatAssets: number;
-    investmentsTotal: number;
-    counts: { investments: number };
-  };
-}
-
-interface CategoriesResponse {
-  results: Array<{
-    categoryId: string | null;
-    name: string;
-    amount: number;
-    sharePercent: number;
-  }>;
-}
-
-interface CashFlowResponse {
-  results: Array<{
-    date: string;
-    income: number;
-    expense: number;
-    investments: number;
-    net: number;
-  }>;
-}
-
 interface OverviewDashboardProps {
   initialData: OverviewDashboardData;
 }
@@ -310,31 +280,11 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
     setChartFilters((prev) => ({ ...prev, ...patch }));
   }
 
-  const { data: overviewData } = useApi<OverviewMetricsResponse>(
-    "/api/domain/metrics/overview",
-    periodState.params,
-  );
-  const { data: categoriesData } = useApi<CategoriesResponse>(
-    "/api/domain/metrics/spending/categories",
-    { ...periodState.params, limit: "7" },
-  );
-  const { data: cashFlowData } = useApi<CashFlowResponse>(
-    "/api/domain/metrics/cash-flow",
-    { ...periodState.params, groupBy: "day" },
-  );
-
   const { overview: initialOverview, transactions, recurring } = initialData;
-
-  const overview = {
-    ...initialOverview,
-    inflow:  overviewData?.results?.periodInflow  ?? initialOverview.inflow,
-    outflow: overviewData?.results?.periodOutflow ?? initialOverview.outflow,
-  };
-  const categories = {
-    results: categoriesData?.results ?? initialData.categories.results,
-  };
+  const overview = initialOverview;
+  const categories = initialData.categories;
   const cashFlow = {
-    results: (cashFlowData?.results ?? initialData.cashFlow.results).reduce((acc, day) => {
+    results: initialData.cashFlow.results.reduce((acc, day) => {
       const lastNet = acc.length > 0 ? acc[acc.length - 1].net : 0;
       const delta = day.income - day.expense - day.investments;
       acc.push({
@@ -342,7 +292,7 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
         net: lastNet + delta
       });
       return acc;
-    }, [] as CashFlowResponse["results"]),
+    }, [] as OverviewDashboardData["cashFlow"]["results"]),
   };
 
 

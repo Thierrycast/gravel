@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
 import { Loader2, ArrowDown } from "lucide-react"
 import { toast } from "sonner"
@@ -11,6 +12,7 @@ const MAX_PULL = 120
 const RESISTANCE = 0.5
 
 export function PullToRefresh() {
+  const router = useRouter()
   const queryClient = useQueryClient()
   const [pull, setPull] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
@@ -84,6 +86,7 @@ export function PullToRefresh() {
         })
         if (!res.ok) throw new Error(String(res.status))
         await queryClient.invalidateQueries()
+        router.refresh()
         toast.success("Atualizado.")
       } catch {
         toast.error("Falha ao sincronizar")
@@ -124,7 +127,7 @@ export function PullToRefresh() {
       window.removeEventListener("touchend", onTouchEnd)
       window.removeEventListener("touchcancel", onTouchEnd)
     }
-  }, [queryClient])
+  }, [queryClient, router])
 
   const visible = pull > 0 || refreshing
   const reachedThreshold = pull >= THRESHOLD || refreshing
