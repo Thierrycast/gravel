@@ -21,7 +21,12 @@ const serwist = new Serwist({
       // o cache só é servido quando a rede falha ou estoura o timeout — dados
       // financeiros nunca vêm do cache com a rede saudável. O timeout alto
       // evita servir dado velho silenciosamente em conexões apenas lentas.
-      matcher: ({ url }) => url.pathname.startsWith("/api/"),
+      // Streams (SSE de /api/sync/events) ficam de fora: interceptado pelo
+      // worker, o stream infinito sobrevivia à navegação e, depois de ~6
+      // telas, esgotava as conexões HTTP/1.1 por host — o app congelava.
+      matcher: ({ url, request }) =>
+        url.pathname.startsWith("/api/") &&
+        !(request.headers.get("accept") ?? "").includes("text/event-stream"),
       handler: new NetworkFirst({
         cacheName: "api-cache",
         networkTimeoutSeconds: 10,
