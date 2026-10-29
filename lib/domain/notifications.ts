@@ -9,6 +9,7 @@ import {
 } from "@/lib/domain/analytics/spending-query"
 import { getProjectionPayload } from "@/lib/domain/derived"
 import { getBudgetsProgress } from "@/lib/domain/budgets"
+import { listPayables } from "@/lib/domain/payables"
 import { formatCurrency as formatBrl } from "@/lib/format"
 
 const LOG_FILE_PATH = path.join(process.cwd(), ".agents", "logs", "notifications.log")
@@ -313,6 +314,38 @@ export async function checkBudgetAnomalies() {
         categorySlug: budget.categorySlug,
         spent: budget.spent,
         limit: budget.monthlyLimit,
+      })
+    }
+
+    // 1b. Boletos cadastrados: lembra perto do vencimento e quando vencem sem
+    // o pagamento aparecer no banco.
+    const payables = await listPayables(now)
+    for (const payable of payables.results) {
+      if (payable.status !== "PENDING") continue
+      if (!payable.overdue && payable.daysToDue > 3) continue
+      const state = payable.overdue ? "overdue" : "due-soon"
+      const key = `payable-${payable.id}-${state}`
+      const when = payable.overdue
+        ? `venceu há ${-payable.daysToDue} dia(s)`
+        : payable.daysToDue === 0
+          ? "vence hoje"
+          : `vence em ${payable.daysToDue} dia(s)`
+      const title = payable.overdue ? `Boleto vencido: ${payable.description}` : `Boleto ${when}: ${payable.description}`
+      const description = `${formatBrl(payable.amount)}, ${when}. Some da lista sozinho quando o pagamento aparecer no banco.`
+      anomalies.push({
+        id: key,
+        kind: "payable-due",
+        severity: payable.overdue ? "high" : "medium",
+        title,
+        description,
+        impact: formatBrl(payable.amount),
+        origin: "Contas a pagar",
+        amount: payable.amount,
+        href: "/payables",
+      })
+      await deliverNotificationOnce(key, "payable-due", title, description, payable.overdue ? "warning" : "info", {
+        payableId: payable.id,
+        amount: payable.amount,
       })
     }
 

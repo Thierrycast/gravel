@@ -1136,3 +1136,29 @@ model AiChatMessage {
 
   @@index([createdAt])
 }
+
+/// Boleto cadastrado para lembrar e projetar um pagamento que o Open Finance
+/// só enxerga depois de pago. Nunca vira lançamento: quando a saída de mesmo
+/// valor aparece no banco perto do vencimento, a conta é dada como paga e
+/// ligada a ela.
+model Payable {
+  id                String    @id @default(cuid())
+  description       String
+  /// "BANK" (cobrança) ou "CONVENIO" (consumo/tributo).
+  kind              String
+  /// 44 dígitos — identidade do boleto, impede cadastro duplicado.
+  barcode           String    @unique
+  digitableLine     String
+  issuer            String?
+  amount            Decimal
+  dueDate           DateTime
+  /// PENDING | PAID | CANCELLED
+  status            String    @default("PENDING")
+  paidAt            DateTime?
+  /// Transação do Open Finance que quitou o boleto (match automático).
+  paidTransactionId String?   @unique
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([status, dueDate])
+}

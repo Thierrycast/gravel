@@ -155,6 +155,7 @@ Você tem acesso ao servidor MCP `gravel-finance`. Use-o sempre que o usuário s
 *   **`get_people`**: Pessoas cadastradas com valores a receber (empréstimos + divisões).
 *   **`get_sync_items`**: Estado de sincronização de cada item Pluggy (status, executionStatus, último sync, erro, consentimento).
 *   **`get_goals`**: Exibe metas ativas e percentual de progresso.
+*   **`get_payables`**: Contas a pagar (boletos) pendentes, vencidas e pagas recentes.
 *   **`get_budgets`**: Orçamentos do mês por categoria com gasto, restante, projeção pelo ritmo e status.
 *   **`get_goal_history`**: Série mensal de uma meta com auto-tracking (`goal_id`, `months` de 1 a 60, padrão 12). Saída vinculada soma, entrada (resgate) abate, e o acumulado parte do valor manual e do que entrou antes da janela: o último ponto bate com o progresso da meta.
 *   **get_scenarios**: Cenários e eventos de simulação futuros.

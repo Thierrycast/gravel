@@ -23,6 +23,7 @@ import {
   Inbox,
   RefreshCw,
   PiggyBank,
+  ReceiptText,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -45,6 +46,7 @@ export const NAV_FINANCE: NavItem[] = [
   { title: "Contas", href: "/accounts", icon: Wallet },
   { title: "Faturas", href: "/bills", icon: Receipt },
   { title: "Orçamentos", href: "/budgets", icon: PiggyBank },
+  { title: "Contas a pagar", href: "/payables", icon: ReceiptText },
   { title: "Fechamento Mensal", href: "/monthly-close", icon: CalendarCheck },
   { title: "Categorias", href: "/categories", icon: Tags },
   { title: "Comerciantes", href: "/merchants", icon: Store },

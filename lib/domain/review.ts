@@ -24,6 +24,7 @@ type ReviewKind =
   | "goal-risk"
   | "budget-deviation"
   | "budget-limit"
+  | "payable-due"
   | "cash-risk"
 
 export type ReviewAction = {

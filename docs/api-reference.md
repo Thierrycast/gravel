@@ -254,3 +254,17 @@ produto pode não estar habilitado na aplicação; nesse caso a resposta traz
   um orçamento por categoria (substitui o existente). `alertAtPercent` padrão 80.
 - `PATCH /api/domain/budgets/{budgetId}` — `{ monthlyLimit?, alertAtPercent?, active? }`.
 - `DELETE /api/domain/budgets/{budgetId}`.
+
+## Contas a pagar (boletos)
+
+- `POST /api/domain/payables/parse` — lê sem gravar: `{ code }` (linha digitável
+  ou código de barras) ou multipart com `file` (PDF até 5 MB). Devolve `kind`
+  (`BANK` | `CONVENIO`), `barcode`, `digitableLine`, `amount`, `dueDate`, `issuer`;
+  422 quando o dígito verificador não confere.
+- `GET /api/domain/payables` — concilia com as saídas do banco e lista pendentes
+  e pagos dos últimos 60 dias, com `daysToDue` e `overdue`.
+- `POST /api/domain/payables` — `{ code, description, dueDate?, amount? }`
+  (`dueDate`/`amount` só quando o código não traz). Recusa boleto duplicado.
+- `PATCH /api/domain/payables/{payableId}` — `{ description?, status? }`;
+  `PAID` à mão cobre pagamento por fora, `PENDING` desfaz a ligação.
+- `DELETE /api/domain/payables/{payableId}`.

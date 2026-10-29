@@ -1,4 +1,5 @@
 import { DomainTransactionDirection, Prisma } from "@prisma/client";
+import { reconcilePayables } from "@/lib/domain/payables";
 import { accountKindOf, loadAccountKinds } from "@/lib/domain/analytics/account-kinds";
 
 import { parseNumberParam } from "@/lib/core/filters";
@@ -1234,6 +1235,10 @@ export async function buildPortfolioHistory(months = 12) {
 }
 
 export async function refreshDerivedCaches() {
+  // Dado novo do banco pode ser o pagamento de um boleto cadastrado.
+  await reconcilePayables().catch((error) => {
+    console.warn("[derived] conciliação de contas a pagar falhou:", error);
+  });
   const recurringSummary = await refreshRecurringDerived();
   const [portfolioHistory, projection] = await Promise.all([
     buildPortfolioHistory(12),

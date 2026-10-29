@@ -13,6 +13,7 @@
  */
 import { getOverviewMetrics } from "@/lib/domain/analytics/overview"
 import { getBudgetsProgress } from "@/lib/domain/budgets"
+import { listPayables } from "@/lib/domain/payables"
 import { enrichGoalWithAutoTransactions } from "@/lib/domain/queries"
 import { getCardStatementsSummaryMetrics } from "@/lib/domain/billing"
 import { getSpendingByCategoryMetrics } from "@/lib/domain/analytics/reports"
@@ -348,6 +349,30 @@ export const CHAT_TOOLS: Array<{ schema: ChatToolSchema; handler: ChatToolHandle
         atual: toNumber(goal.currentAmount),
         prazo: goal.targetDate,
       }))
+    },
+  },
+  {
+    schema: {
+      name: "contas_a_pagar",
+      description:
+        "Boletos cadastrados ainda não pagos (valor, vencimento, dias até vencer, vencidos) e os pagos recentes. Use para 'tenho conta para pagar', 'o que vence esta semana'.",
+      parameters: { type: "object", properties: {} },
+    },
+    handler: async () => {
+      const payables = await listPayables()
+      return {
+        a_pagar_total: payables.summary.pendingAmount,
+        vencidos: payables.summary.overdueCount,
+        vencem_em_7_dias: payables.summary.dueIn7DaysCount,
+        contas: payables.results.map((row) => ({
+          nome: row.description,
+          valor: row.amount,
+          vencimento: row.dueDate,
+          situacao: row.status === "PAID" ? "pago" : row.overdue ? "vencido" : "pendente",
+          dias_para_vencer: row.status === "PENDING" ? row.daysToDue : null,
+        })),
+        observacao: "Valores em reais. Contas pagas saem sozinhas quando o pagamento aparece no banco.",
+      }
     },
   },
   {

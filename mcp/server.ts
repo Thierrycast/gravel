@@ -652,6 +652,11 @@ const TOOLS: Tool[] = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "get_payables",
+    description: "Contas a pagar (boletos cadastrados): pendentes com vencimento e dias até vencer, vencidas, e pagas nos últimos 60 dias (baixa automática quando o pagamento aparece no Open Finance).",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
     name: "set_budget",
     description: "Cria ou substitui o orçamento mensal de uma categoria (um por categoria).",
     inputSchema: {
@@ -1587,6 +1592,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "get_budgets": {
         const { getBudgetsProgress } = await import("../lib/domain/budgets.js");
         result = await getBudgetsProgress();
+        break;
+      }
+      case "get_payables": {
+        const { listPayables } = await import("../lib/domain/payables.js");
+        result = await listPayables();
         break;
       }
       case "set_budget": {
