@@ -604,8 +604,9 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
                         className="shrink-0 size-2 rounded-full"
                         style={{ backgroundColor: cat.color }}
                       />
-                      <span className="truncate text-muted-foreground flex items-center gap-1">
-                        <span aria-hidden>{cat.emoji}</span> {cat.name}
+                      <span className="flex min-w-0 items-center gap-1 text-muted-foreground">
+                        <span aria-hidden>{cat.emoji}</span>
+                        <span className="truncate" title={cat.name}>{cat.name}</span>
                       </span>
                       <span className="ml-auto shrink-0 tabular-nums font-medium">
                         {cat.share.toFixed(0)}%
@@ -635,14 +636,17 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
               return (
                 <div key={cat.categoryId} className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium truncate flex items-center gap-1.5">
+                    <span className="flex min-w-0 items-center gap-1.5 font-medium">
                       <span
                         className="flex size-5 items-center justify-center rounded-full text-[10px] shrink-0"
                         style={{ backgroundColor: `${color}20` }}
                       >
                         {emoji}
                       </span>
-                      {cat.name}
+                      {/* Reticências só funcionam no próprio nó de texto, não no flex. */}
+                      <span className="truncate" title={cat.name}>
+                        {cat.name}
+                      </span>
                     </span>
                     <span className="tabular-nums font-semibold shrink-0 ml-2">
                       {format(cat.amount)}
@@ -826,8 +830,9 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
                   {pieData.map((cat) => (
                     <div key={cat.name} className="flex items-center gap-2 text-sm">
                       <span className="shrink-0 size-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
-                      <span className="truncate text-muted-foreground flex items-center gap-1.5">
-                        <span aria-hidden>{cat.emoji}</span> {cat.name}
+                      <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+                        <span aria-hidden>{cat.emoji}</span>
+                        <span className="truncate" title={cat.name}>{cat.name}</span>
                       </span>
                       <span className="ml-auto shrink-0 tabular-nums font-medium">{format(cat.value)}</span>
                       <span className="shrink-0 tabular-nums text-muted-foreground w-12 text-right">{cat.share.toFixed(1)}%</span>

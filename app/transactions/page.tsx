@@ -809,8 +809,8 @@ function TransactionsContent() {
                             )}
 
                             <div className="min-w-0">
-                              <p className="truncate text-base font-semibold tracking-tight text-foreground/90 flex items-center gap-2">
-                                {title}
+                              <p className="flex min-w-0 items-center gap-2 text-base font-semibold tracking-tight text-foreground/90">
+                                <span className="truncate" title={title}>{title}</span>
                                 {transaction.isSalary ? (
                                   <Badge className="h-5 gap-1 bg-emerald-500/10 px-1.5 text-xs font-mono text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400">
                                     <BadgeDollarSign className="size-3" />
