@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1 — Install deps (cache-friendly)
 # ---------------------------------------------------------------------------
-FROM node:20-alpine AS deps
+FROM node:24-alpine AS deps
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 
@@ -17,7 +17,7 @@ RUN corepack enable pnpm && pnpm install --frozen-lockfile
 # ---------------------------------------------------------------------------
 # Stage 2 — Build (isolated)
 # ---------------------------------------------------------------------------
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 
@@ -40,7 +40,7 @@ RUN esbuild mcp/server.ts --bundle --platform=node --target=node20 --external:@p
 # ---------------------------------------------------------------------------
 # Stage 3 — Production Runtime
 # ---------------------------------------------------------------------------
-FROM node:20-alpine AS runner
+FROM node:24-alpine AS runner
 RUN apk add --no-cache libc6-compat openssl su-exec wget
 WORKDIR /app
 
