@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.1.13 — 2026-10-28 — fichas de classificação e débito de lint
+
+### Números
+
+- **Entrada em cartão nunca é renda.** Quitação com descrição de banco
+  ("Inclusao de Pagamento Ciclo Corrente") e estorno de compra entravam como
+  receita. O classificador central passou a receber o tipo da conta.
+- **Auto-transferência "Pix recebido de Fulano" não pareava** com o envio
+  "enviada|FULANO": o extrator de contraparte mantinha o "de" no nome.
+- **Histórico de meta** somava valor absoluto (resgate virava aporte) e
+  começava do zero; agora usa o mesmo sinal do progresso e parte do valor
+  manual, então o último ponto bate com a meta.
+
+### Qualidade
+
+- As 17 ocorrências das regras de hooks do React Compiler foram resolvidas e as
+  regras voltaram a ser **erro**: `useSyncExternalStore` para montagem, media
+  query, `localStorage` e suporte a push; ajuste de estado na renderização para
+  semear rascunhos; React Query no banner de falha de sync. Lint com zero avisos.
+- Nomes longos em linhas flex ganham reticências em vez de corte no meio.
+- `simulate_purchase_impact` e `get_goal_history` documentados em `docs/mcp.md`.
+
 ## 0.1.9 – 0.1.12 — 2026-10-28 — retomada
 
 O app estava parado desde setembro. Rodada de atualização, integração com as
