@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.1.9 – 0.1.12 — 2026-10-28 — retomada
+
+O app estava parado desde setembro. Rodada de atualização, integração com as
+novidades da Pluggy e uma revisão pela interface, tela a tela, em celular e
+desktop, com o PWA ativo. Cada versão passou por `pnpm lint`, `tsc`, `pnpm test`
+e pelo scanner de segredos antes do build.
+
+### Dependências e segurança
+
+- Next 16.1.6 → 16.4.3 e dependências vulneráveis atualizadas: o audit saiu de
+  6 críticas para **1 baixa**, transitiva do `shadcn` e sem correção publicada.
+- A imagem Docker levava `prisma/dev.db`: o estágio final copia `prisma/`
+  inteiro. O `.dockerignore` passou a excluir bases SQLite locais. **Imagens até
+  a 0.1.8 contêm esse arquivo.**
+- As regras novas `react-hooks/set-state-in-effect` e `react-hooks/refs` viraram
+  aviso: 17 ocorrências antigas ficam como débito de refatoração.
+
+### Pluggy
+
+- Transações em `GET /v2/transactions` com cursor: a v1 paginada sai em
+  dezembro. `page`/`pageSize` em `/api/pluggy/transactions` passam a dar 400.
+- `operationType: PAGAMENTO_FATURA` identifica a quitação de fatura mesmo com
+  descrição genérica, em faturas, fluxo de caixa e relatórios.
+- `/connect` mostra os recursos do consentimento que aguardam aprovação
+  (`GET /api/pluggy/items/{itemId}/resources`, sem expor identificadores).
+- `productCoverage` e os incidentes ativos do status page, lidos do conector do
+  banco real: com MeuPluggy, o id já mapeado, e não o do proxy. Aparecem em
+  `/connect` e no aviso de conexões, com link para o incidente.
+- Status de conector recebido por webhook expira em 24 h. Quando os webhooks
+  param, um "instável" antigo ficava na tela por meses.
+
+### Faturas
+
+- Um resumo só (`summarizeCardStatements`) para `/bills`, CLI, MCP, chat e
+  briefing. A fatura **fechada e ainda não vencida** contava como paga no
+  CLI/MCP e sumia dos totais da tela, justo a próxima a pagar. O chat chamava de
+  "em aberto" só o ciclo atual; o briefing usava a contagem de abertas como
+  "vence em 7 dias".
+- Removidos `GET /api/domain/metrics/bills/summary` e `getBillsSummaryMetrics`,
+  sem consumidores.
+
+### PWA e interface
+
+- **O app congelava depois de ~6 telas.** O service worker interceptava o SSE de
+  `/api/sync/events` e mantinha um stream aberto por página visitada até esgotar
+  as conexões HTTP/1.1 do host. Streams agora passam direto para a rede.
+- Valores dos cards do painel escalam com a largura e não estouram mais no
+  celular; o painel de análise não passa da tela.
+- Insights formatam reais e BTC em pt-BR; os filtros de transação estão em
+  português; os avisos ganharam respiro até o título; `/connect` usa grade 2×2
+  no celular.
+- O painel deixou de repetir três consultas que o SSR já trazia.
+
 ## 0.1.7 — 2026-09-21 — auditoria de setembro
 
 Rodada sobre os seis relatórios em `docs/audit-reports/`. Quatro ondas, cada uma
