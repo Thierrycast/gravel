@@ -16,6 +16,8 @@ export function PullToRefresh() {
   const queryClient = useQueryClient()
   const [pull, setPull] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
+  // Espelho do `pulling` para a renderização: ref não pode ser lida no render.
+  const [dragging, setDragging] = useState(false)
 
   const startY = useRef<number | null>(null)
   const pulling = useRef(false)
@@ -47,6 +49,7 @@ export function PullToRefresh() {
       }
       startY.current = e.touches[0].clientY
       pulling.current = false
+      setDragging(false)
     }
 
     function onTouchMove(e: TouchEvent) {
@@ -55,6 +58,7 @@ export function PullToRefresh() {
       if (dy <= 0) {
         if (pulling.current) {
           pulling.current = false
+          setDragging(false)
           setPull(0)
         }
         return
@@ -64,11 +68,13 @@ export function PullToRefresh() {
         startY.current = null
         if (pulling.current) {
           pulling.current = false
+          setDragging(false)
           setPull(0)
         }
         return
       }
       pulling.current = true
+      setDragging(true)
       const damped = Math.min(MAX_PULL, dy * RESISTANCE)
       setPull(damped)
       // Only block browser scroll when we're actually handling the pull gesture
@@ -100,6 +106,7 @@ export function PullToRefresh() {
       const wasPulling = pulling.current
       const finalPull = pullRef.current
       pulling.current = false
+      setDragging(false)
       startY.current = null
       if (refreshingRef.current) return
       if (!wasPulling) {
@@ -131,7 +138,7 @@ export function PullToRefresh() {
 
   const visible = pull > 0 || refreshing
   const reachedThreshold = pull >= THRESHOLD || refreshing
-  const settling = !refreshing && !pulling.current
+  const settling = !refreshing && !dragging
 
   return (
     <div

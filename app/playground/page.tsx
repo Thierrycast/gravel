@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useMemo } from "react"
 import { toast } from "sonner"
 import {
   Plus,
@@ -33,6 +33,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { useApi } from "@/hooks/use-api"
+import { useLocalStorageState } from "@/hooks/use-local-storage"
 import { useCurrency } from "@/lib/currency-context"
 import { cn } from "@/lib/utils"
 import { PageHeader } from "@/components/page-header"
@@ -85,6 +86,8 @@ type Hypothesis = {
   active: boolean
 }
 
+const EMPTY_HYPOTHESES: Hypothesis[] = []
+
 export default function PlaygroundPage() {
   const { format: formatCurrency } = useCurrency()
   
@@ -93,7 +96,10 @@ export default function PlaygroundPage() {
   const { data: scenarios, refetch: refetchScenarios } =
     useApi<ScenarioEvent[]>("/api/scenarios")
 
-  const [hypotheses, setHypotheses] = useState<Hypothesis[]>([])
+  const [hypotheses, saveHypotheses] = useLocalStorageState<Hypothesis[]>(
+    "gravel_playground_hypotheses",
+    EMPTY_HYPOTHESES,
+  )
   
   // Form de nova hipótese
   const [form, setForm] = useState({
@@ -107,21 +113,6 @@ export default function PlaygroundPage() {
     notes: "",
   })
 
-  // Carrega hipóteses do localStorage no client-side
-  useEffect(() => {
-    const saved = localStorage.getItem("gravel_playground_hypotheses")
-    if (saved) {
-      try {
-        setHypotheses(JSON.parse(saved))
-      } catch {}
-    }
-  }, [])
-
-  // Salva hipóteses no localStorage sempre que alterado
-  const saveHypotheses = (newHypotheses: Hypothesis[]) => {
-    setHypotheses(newHypotheses)
-    localStorage.setItem("gravel_playground_hypotheses", JSON.stringify(newHypotheses))
-  }
 
   // Adiciona hipótese
   const addHypothesis = () => {

@@ -1,9 +1,10 @@
 "use client"
 
-import { Suspense, useEffect, useState } from "react"
+import { Suspense, useEffect, useState, useSyncExternalStore } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
+
 import {
   RefreshCw,
   DollarSign,
@@ -50,6 +51,8 @@ import type {
   AccountsResponse,
   CardStatementsResponse,
 } from "@/lib/types/api"
+
+const noopSubscribe = () => () => {}
 
 type SettingsFormData = {
   monthlySalary: number
@@ -350,19 +353,26 @@ function SettingsContent() {
     }
   }
 
+  // Suporte a push é propriedade do navegador, não estado: deriva na hora.
+  const pushSupported = useSyncExternalStore(
+    noopSubscribe,
+    () => Boolean(navigator.serviceWorker) && "PushManager" in window,
+    () => true,
+  )
+  const pushStatus = pushSupported ? pushState : "unsupported"
+
   useEffect(() => {
+    // Checa o navegador de novo: na hidratação o `pushSupported` ainda é o valor
+    // do servidor, e fora de contexto seguro `navigator.serviceWorker` não existe.
+    if (!pushSupported || !navigator.serviceWorker || !("PushManager" in window)) return
     let mounted = true
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-      setPushState("unsupported")
-      return
-    }
     navigator.serviceWorker.ready.then((reg) =>
       reg.pushManager.getSubscription().then((sub) => {
         if (mounted) setPushState(sub ? "active" : "idle")
       })
     ).catch(() => { if (mounted) setPushState("unsupported") })
     return () => { mounted = false }
-  }, [])
+  }, [pushSupported])
   const [salaryPatterns, setSalaryPatterns] = useState<string[]>([])
   const [salarySources, setSalarySources] = useState<SalarySource[]>([])
   const [salarySuggestions, setSalarySuggestions] = useState<SalarySuggestion[]>([])
@@ -393,8 +403,12 @@ function SettingsContent() {
     (statementsData?.results ?? []).map((entry) => [entry.accountId, entry.suggestedDueDay]),
   )
 
-  useEffect(() => {
-    if (settings) {
+  // Semeia o formulário a cada carga nova das configurações (ajuste durante a
+  // renderização, pela identidade do objeto que a API devolve).
+  const [seededSettings, setSeededSettings] = useState<typeof settings>(null)
+  if (settings && settings !== seededSettings) {
+    setSeededSettings(settings)
+    {
       const next: SettingsFormData = {
         monthlySalary: settings.monthlySalary,
         showFutureSalary: settings.showFutureSalary,
@@ -423,7 +437,7 @@ function SettingsContent() {
       if (Array.isArray(settings.salarySources)) setSalarySources(settings.salarySources)
       if (Array.isArray(settings.salarySuggestions)) setSalarySuggestions(settings.salarySuggestions)
     }
-  }, [settings])
+  }
 
   async function patchPatterns(updated: string[], successMessage: string) {
     try {
@@ -918,24 +932,24 @@ function SettingsContent() {
                   Receba alertas diretamente no seu dispositivo, mesmo com o app fechado.
                 </p>
               </div>
-              {pushState === "unsupported" ? (
+              {pushStatus === "unsupported" ? (
                 <p className="text-xs text-muted-foreground italic">
                   Notificações push não são suportadas neste navegador.
                 </p>
               ) : (
                 <Button
                   type="button"
-                  variant={pushState === "active" ? "destructive" : "outline"}
+                  variant={pushStatus === "active" ? "destructive" : "outline"}
                   size="sm"
-                  disabled={pushState === "loading"}
+                  disabled={pushStatus === "loading"}
                   onClick={togglePushSubscription}
                   className="gap-2"
                 >
-                  {pushState === "loading" && <Loader2 className="size-3.5 animate-spin" />}
-                  {pushState === "active" ? "Desativar notificações push" : "Ativar notificações push"}
+                  {pushStatus === "loading" && <Loader2 className="size-3.5 animate-spin" />}
+                  {pushStatus === "active" ? "Desativar notificações push" : "Ativar notificações push"}
                 </Button>
               )}
-              {pushState === "active" && (
+              {pushStatus === "active" && (
                 <p className="text-xs text-emerald-600 dark:text-emerald-400">
                   Notificações push ativadas neste dispositivo.
                 </p>

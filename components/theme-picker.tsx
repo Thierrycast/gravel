@@ -4,6 +4,8 @@ import * as React from "react"
 import { Check } from "lucide-react"
 import { useTheme } from "next-themes"
 
+import { useMounted } from "@/hooks/use-mounted"
+
 import { cn } from "@/lib/utils"
 import {
   buildTheme,
@@ -134,8 +136,7 @@ const FAMILIES: FamilyCard[] = [
 
 export function ThemePicker() {
   const { theme, resolvedTheme, setTheme } = useTheme()
-  const [mounted, setMounted] = React.useState(false)
-  React.useEffect(() => setMounted(true), [])
+  const mounted = useMounted()
 
   const active = resolvedTheme ?? theme
   const currentFamily = getFamily(active)

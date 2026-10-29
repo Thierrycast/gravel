@@ -345,7 +345,9 @@ function TransactionsContent() {
 
   function exportTransactions() {
     const params = new URLSearchParams(transactionParams);
-    window.location.href = `/api/domain/transactions/export?${params.toString()}`;
+    window.location.assign(
+      new URL(`/api/domain/transactions/export?${params.toString()}`, window.location.origin),
+    );
   }
 
 

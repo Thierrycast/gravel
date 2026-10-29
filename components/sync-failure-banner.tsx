@@ -1,10 +1,11 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useState } from "react"
 import { RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 
 import { AttentionBanner } from "@/components/attention-banner"
+import { useApi } from "@/hooks/use-api"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -38,39 +39,24 @@ function formatRelative(iso?: string): string {
 const DISMISS_KEY = "gravel:sync-failure-dismissed-at"
 const DISMISS_TTL_MS = 60 * 60 * 1000
 
+function readDismissed(): boolean {
+  if (typeof window === "undefined") return false
+  try {
+    const stored = window.localStorage.getItem(DISMISS_KEY)
+    return Boolean(stored && Date.now() - parseInt(stored, 10) < DISMISS_TTL_MS)
+  } catch {
+    return false
+  }
+}
+
 export function SyncFailureBanner() {
-  const [failure, setFailure] = useState<Failure | null>(null)
-  const [dismissed, setDismissed] = useState(false)
+  // Polling pelo React Query: o mesmo cache que o stream de sync invalida.
+  const { data, refetch } = useApi<FailureResponse>("/api/sync/last-failure", undefined, {
+    refetchIntervalMs: 5 * 60 * 1000,
+  })
+  const failure = data?.summary?.hasFailure ? (data.results?.failure ?? null) : null
+  const [dismissed, setDismissed] = useState(readDismissed)
   const [retrying, setRetrying] = useState(false)
-
-  const fetchStatus = useCallback(async () => {
-    try {
-      const res = await fetch("/api/sync/last-failure", { cache: "no-store" })
-      if (!res.ok) return
-      const json = (await res.json()) as FailureResponse
-      if (json?.summary?.hasFailure) {
-        setFailure(json.results?.failure ?? null)
-      } else {
-        setFailure(null)
-      }
-    } catch {
-      // Silent — banner stays hidden when health endpoint is unreachable.
-    }
-  }, [])
-
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(DISMISS_KEY)
-      if (stored && Date.now() - parseInt(stored, 10) < DISMISS_TTL_MS) {
-        setDismissed(true)
-      }
-    } catch {
-      // ignore
-    }
-    fetchStatus()
-    const interval = setInterval(fetchStatus, 5 * 60 * 1000)
-    return () => clearInterval(interval)
-  }, [fetchStatus])
 
   if (!failure || dismissed) return null
 
@@ -84,7 +70,7 @@ export function SyncFailureBanner() {
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       toast.success("Sync disparado. Toa procurando o cascalho perdido…")
-      setTimeout(() => fetchStatus(), 30_000)
+      setTimeout(refetch, 30_000)
     } catch (err) {
       toast.error(
         err instanceof Error ? `Falha ao disparar sync: ${err.message}` : "Falha ao disparar sync"
