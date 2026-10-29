@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.1.15 — 2026-10-29 — orçamentos e contas a pagar
+
+### Orçamentos (`/budgets`)
+
+- Limite mensal por categoria, com subcategorias somando na categoria-mãe. O
+  gasto usa a mesma política de despesa operacional do fluxo de caixa, então
+  bate com os relatórios.
+- Projeção de fim de mês pelo ritmo atual (a partir de 15% do mês decorrido),
+  aviso uma vez ao cruzar o percentual escolhido e outra ao estourar, na Inbox e
+  nas notificações. Categoria com orçamento deixa de receber o alerta por média.
+- MCP: `get_budgets`, `set_budget`, `delete_budget`. Chat: `orcamentos` (leitura).
+
+### Contas a pagar (`/payables`)
+
+- Boleto por linha digitável colada ou PDF: valor, vencimento e banco, com os
+  dígitos verificadores conferidos (bancário 47, convênio 48, barras 44; o fator
+  de vencimento que reiniciou em 22/02/2025 é resolvido pelo ciclo mais próximo).
+- Não cria lançamento. Lembra perto do vencimento e dá baixa sozinha quando a
+  saída de mesmo valor aparece no Open Finance perto do vencimento — só
+  transações já ocorridas, para uma parcela futura de cartão não quitar boleto.
+- MCP: `get_payables`. Chat: `contas_a_pagar` (leitura).
+
+### Outros
+
+- A ferramenta `metas` do chat passa a contar os aportes automáticos, como a tela.
+- Auto-transferência de conta não conectada conta como renda até a conta ser
+  conectada; aí o par é reconhecido sozinho, inclusive nos meses passados (teste).
+
 ## 0.1.14 — 2026-10-28 — datas congeladas no build
 
 - **Páginas eram pré-renderizadas no build** e guardavam `new Date()` no HTML:
