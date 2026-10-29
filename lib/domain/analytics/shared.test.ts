@@ -318,6 +318,33 @@ describe("detectInternalTransferPairIds", () => {
     expect([...paired].sort()).toEqual(["in", "out"]);
   });
 
+  it("counts a self-transfer from an untracked account until that account is connected", () => {
+    // Regra do Thierry: sem a perna de saída rastreada, é dinheiro novo no
+    // sistema e conta. Conectada a conta de origem, o histórico traz a saída e o
+    // par some da renda sozinho — inclusive nos meses passados, porque o
+    // pareamento é feito a cada consulta, não gravado.
+    const inflow = tx({
+      id: "in",
+      direction: DomainTransactionDirection.INFLOW,
+      amount: 860,
+      occurredAt: "2026-06-11T12:00:00Z",
+      description: "Transferência Recebida|123.456.789 FULANO EXEMPLO DA SILVA",
+    });
+    expect(detectInternalTransferPairIds([inflow]).size).toBe(0);
+
+    const outflowFromNewAccount = tx({
+      id: "out",
+      direction: DomainTransactionDirection.OUTFLOW,
+      amount: 860,
+      occurredAt: "2026-06-11T11:59:00Z",
+      description: "Pix enviado - Fulano Exemplo da Silva",
+    });
+    expect([...detectInternalTransferPairIds([inflow, outflowFromNewAccount])].sort()).toEqual([
+      "in",
+      "out",
+    ]);
+  });
+
   it("does not pair the real salary inflow with the self-transfer legs", () => {
     const paired = detectInternalTransferPairIds([
       tx({

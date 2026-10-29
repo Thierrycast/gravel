@@ -187,7 +187,13 @@ coisa a existir, e o chat nasce em cima dele.
   da tailnet — é o caminho **preferido** justamente por isso.
 - Modo de voz ao vivo pelo WebSocket da speech-api.
 
-### Fase 3 — ferramentas de escrita
+### Fase 3 — ferramentas de escrita (descartada em 2026-10-29)
+
+> **Decisão do Thierry (2026-10-29): não fazer.** Todo o dinheiro já chega pelo
+> Open Finance, então o chat não precisa criar nem editar lançamentos. Uma
+> carteira de dinheiro físico foi cogitada e descartada pelo mesmo motivo. O
+> chat segue somente leitura; o texto abaixo fica como registro do que se pensou.
+
 
 - Criar/editar transação, pagar fatura, marcar item do inbox: tudo com
   confirmação explícita na tela antes de aplicar, e trilha de quem pediu.
