@@ -1,3 +1,4 @@
+import { formatCurrency } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { getOverviewMetrics } from "./analytics";
 
@@ -34,7 +35,7 @@ export async function getBehavioralNudges() {
     nudges.push({
       type: "WARNING",
       title: "Se liga!",
-      message: `Você já queimou R$ ${currentOutflow.toFixed(2)} este mês. Isso é mais de 75% da sua média histórica de R$ ${historicalAvg.toFixed(2)} e ainda estamos no dia ${now.getDate()}.`,
+      message: `Você já queimou ${formatCurrency(currentOutflow)} este mês. Isso é mais de 75% da sua média histórica de ${formatCurrency(historicalAvg)} e ainda estamos no dia ${now.getDate()}.`,
     });
   }
 
@@ -53,7 +54,7 @@ export async function getBehavioralNudges() {
     nudges.push({
       type: "INSIGHT",
       title: "Custo de Oportunidade",
-      message: `Suas taxas bancárias recentes somam R$ ${totalTaxes.toFixed(2)}. Com esse valor você poderia ter comprado ${btcAmount.toFixed(8)} BTC hoje.`,
+      message: `Suas taxas bancárias recentes somam ${formatCurrency(totalTaxes)}. Com esse valor você poderia ter comprado ${btcAmount.toLocaleString("pt-BR", { maximumFractionDigits: 8 })} BTC hoje.`,
     });
   }
 

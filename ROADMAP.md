@@ -21,7 +21,7 @@ Checklist da revisão de ponta a ponta solicitada. Itens são marcados conforme 
 - [x] Motor de ciclo de fatura (`lib/domain/billing.ts` + 15 testes): atual, futuras, passadas; agrupamento por ciclo; reconciliação com faturas do provedor; detecção de pagamento
 - [x] Warning amigável para cartões sem fechamento/vencimento configurados
 - [x] Revisão de design da página (visão por cartão: fatura atual em destaque, próximas, passadas colapsáveis, alerta de vencidas, link para transações do ciclo)
-- [x] Consumidores antigos verificados: nenhuma tela consome os endpoints antigos de bills; CLI/MCP ainda usam `getBillsSummaryMetrics` (anotado em "Pontos de atenção futuros")
+- [x] Consumidores antigos verificados: nenhuma tela consome os endpoints antigos de bills; tela, CLI, MCP, chat e briefing usam o mesmo resumo (`summarizeCardStatements`); a rota antiga `/api/domain/metrics/bills/summary` e `getBillsSummaryMetrics` foram removidas em 2026-10-28
 
 ## 4. Projeções (`/projection`)
 - [x] Revisar cálculos (saldo, recorrências, faturas, cenários)
@@ -135,8 +135,7 @@ Checklist da revisão de ponta a ponta solicitada. Itens são marcados conforme 
 - [x] Página reorganizada: hero de saúde financeira (score do relatório consolidado) → ações recomendadas → comportamento → assinaturas ocultas → Benford (colapsável); PageHeader/container padrão
 
 ## Pontos de atenção futuros
-- CLI e MCP ainda usam `getBillsSummaryMetrics` (heurística antiga de bills) — funcional, mas migrar para o motor de ciclo traria os mesmos números da UI.
-- "Implementações sugeridas" não iniciadas: DomainBudget + tools MCP de orçamento, webhooks/SSE de eventos, upload/parsing de boletos, `simulate_purchase_impact` e `get_goal_history` no MCP.
+- "Implementações sugeridas" ainda não iniciadas: DomainBudget + tools MCP de orçamento e upload/parsing de boletos. Já entregues: SSE de eventos (`/api/sync/events`), `simulate_purchase_impact` e `get_goal_history` no MCP (revisado em 2026-10-28).
 - Cartões sem fechamento/vencimento configurados continuam nas heurísticas antigas — configurar cada cartão em /settings › Cartões de crédito.
 - O deploy em produção aplica o schema automaticamente (`prisma db push` no entrypoint); os campos novos de billing entram sem passo manual.
 
@@ -188,7 +187,13 @@ coisa a existir, e o chat nasce em cima dele.
   da tailnet — é o caminho **preferido** justamente por isso.
 - Modo de voz ao vivo pelo WebSocket da speech-api.
 
-### Fase 3 — ferramentas de escrita
+### Fase 3 — ferramentas de escrita (descartada em 2026-10-29)
+
+> **Decisão do Thierry (2026-10-29): não fazer.** Todo o dinheiro já chega pelo
+> Open Finance, então o chat não precisa criar nem editar lançamentos. Uma
+> carteira de dinheiro físico foi cogitada e descartada pelo mesmo motivo. O
+> chat segue somente leitura; o texto abaixo fica como registro do que se pensou.
+
 
 - Criar/editar transação, pagar fatura, marcar item do inbox: tudo com
   confirmação explícita na tela antes de aplicar, e trilha de quem pediu.

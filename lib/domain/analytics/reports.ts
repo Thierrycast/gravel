@@ -1,6 +1,5 @@
 
 import { createBrlConverter } from "@/lib/domain/currency";
-import { summarizeBills } from "./bills-summary";
 import { getUsdBrlRate } from "@/lib/exchange-rate";
 import { prisma } from "@/lib/prisma";
 import {
@@ -13,39 +12,6 @@ import {
   sumDecimals,
   ZERO,
 } from "./shared";
-
-export async function getBillsSummaryMetrics(searchParams: URLSearchParams) {
-  const filters = buildMetricFilters(searchParams, { limit: 12 });
-  const now = new Date();
-  const hasDateWindow =
-    searchParams.has("from") ||
-    searchParams.has("to") ||
-    searchParams.has("period");
-
-  const [bills, usdBrlRate] = await Promise.all([
-    prisma.domainBill.findMany({
-      where: {
-        sourceProvider: filters.provider,
-        domainAccountId: filters.accountId,
-        dueDate: hasDateWindow ? { gte: filters.from, lte: filters.to } : undefined,
-      },
-      orderBy: [{ dueDate: "asc" }, { totalAmount: "desc" }],
-    }),
-    getUsdBrlRate(),
-  ]);
-
-  // A matemática vive em ./bills-summary.ts, testável sem banco. Aqui ficou só
-  // a consulta.
-  const summary = summarizeBills(bills, now, usdBrlRate, filters.limit);
-
-  return {
-    ...summary,
-    appliedFilters: {
-      from: filters.from,
-      to: filters.to,
-    },
-  };
-}
 
 export async function getSpendingByCategoryMetrics(
   searchParams: URLSearchParams,
@@ -86,6 +52,7 @@ export async function getSpendingByCategoryMetrics(
       tx.domainCategory?.name,
       tx.domainCategory?.kind,
       tx.description ?? tx.normalizedDescription,
+      { metadataJson: tx.metadataJson },
     );
 
     if (classification === "expense") {
@@ -161,6 +128,7 @@ export async function getSpendingByMerchantMetrics(
       tx.domainCategory?.name,
       tx.domainCategory?.kind,
       tx.description ?? tx.normalizedDescription,
+      { metadataJson: tx.metadataJson },
     );
     return classification === "expense";
   });
@@ -254,6 +222,7 @@ export async function getSpendingTrendsMetrics(searchParams: URLSearchParams) {
       tx.domainCategory?.name,
       tx.domainCategory?.kind,
       tx.description ?? tx.normalizedDescription,
+      { metadataJson: tx.metadataJson },
     );
 
     if (classification === "expense") {

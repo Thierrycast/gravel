@@ -153,6 +153,10 @@ function buildUrl(url: string, params?: Record<string, string | undefined>) {
 export function useApi<T>(
   url: string | null,
   params?: Record<string, string | undefined>,
+  options?: {
+    /** Revalida sozinho a cada N ms (polling de status). */
+    refetchIntervalMs?: number
+  },
 ): UseApiResult<T> {
   const paramsKey = useMemo(() => (params ? JSON.stringify(params) : ""), [params])
 
@@ -172,6 +176,7 @@ export function useApi<T>(
     queryKey: ["api", url ?? "noop", paramsKey],
     queryFn,
     enabled: !!url,
+    refetchInterval: options?.refetchIntervalMs,
   })
 
   const errorInfo: UseApiError | null = query.error

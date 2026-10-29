@@ -102,13 +102,25 @@ força a re-detecção de recorrências.
 
 ## Sincronização e enriquecimento Pluggy
 
+- `GET /api/pluggy/transactions?accountId=...&after=...` — página de até 500
+  transações via API v2 da Pluggy. Sem `accountId`, retorna a primeira página de
+  cada conta. `pagesByAccount[].page.next` traz o cursor da próxima página;
+  `from` e `to` filtram por data. `page` e `pageSize` retornam 400.
 - `POST /api/pluggy/items/{itemId}/refresh` — dispara `PATCH /items/{id}` e
   acompanha até estado terminal. Body `{ wait: false }` retorna na hora
   (fire-and-forget); `wait: true` (default) devolve `{ outcome, executionStatus,
   status, message, reprojected }` com outcome ∈ SUCCESS | PARTIAL_SUCCESS | ERROR
   | NEEDS_ACTION | MFA_REQUIRED | IN_PROGRESS | RATE_LIMITED.
 - `GET /api/pluggy/items` — inclui `executionStatus`, `syncError`, `lastSyncedAt`,
-  `lastUpdatedAt`, `consentExpiresAt`, `nextAutoSyncAt` por item.
+  `lastUpdatedAt`, `consentExpiresAt`, `nextAutoSyncAt`,
+  `hasResourcesPendingAuthorization` e `resourcesCollectedAt` por item, além de
+  `productCoverage` (subprodutos Open Finance do banco), `coverageFamilies`
+  (as mesmas famílias, legíveis) e `connectorIncidents` (incidentes ativos do
+  status page). Os dois últimos vêm de `GET /connectors/{id}` do banco real —
+  nas conexões via MeuPluggy, o id já mapeado, não o do proxy — com cache de 5 min.
+- `GET /api/pluggy/items/{itemId}/resources` — resume, sob demanda, tipos e
+  contagens dos recursos pendentes ou indisponíveis do consentimento Open Finance;
+  não devolve os identificadores individuais dos recursos.
 - `POST /api/domain/accounts/{accountId}/balance` — saldo em tempo real
   (`GET /accounts/{id}/balance`). Sempre 200; em falha, `ok:false` + `message` +
   `effectiveBalance` (saldo salvo). `source` = realtime | cached.
@@ -217,7 +229,8 @@ ignorar a cadência e `{ "watchdogOnly": true }` para só liberar runs órfãos.
 
 Problemas que precisam de ação humana: reconexão (MFA/credencial), consentimento
 do Open Finance a menos de 15 dias do vencimento, instituição instável ou fora do
-ar. Nada aqui se resolve com "sincronizar de novo".
+ar, e incidente ativo no status page da Pluggy (`kind: "connector-incident"`, com
+`url` para o incidente). Nada aqui se resolve com "sincronizar de novo".
 
 `GET|PATCH /api/settings/secrets`
 
@@ -231,3 +244,27 @@ primeiro cadastro é liberado, senão o setup seria impossível.
 Renda detectada pela Insights API da Pluggy versus o salário configurado. O
 produto pode não estar habilitado na aplicação; nesse caso a resposta traz
 `unavailable` com o motivo em vez de erro.
+
+## Orçamentos
+
+- `GET /api/domain/budgets` — orçamentos ativos com o progresso do mês: `spent`,
+  `remaining`, `percent`, `projected` (ritmo atual, só depois de 15% do mês) e
+  `status` (`ok` | `warning` | `over`) com `reason`. `meta.monthElapsedPercent`.
+- `POST /api/domain/budgets` — `{ categoryId, monthlyLimit, alertAtPercent? }`;
+  um orçamento por categoria (substitui o existente). `alertAtPercent` padrão 80.
+- `PATCH /api/domain/budgets/{budgetId}` — `{ monthlyLimit?, alertAtPercent?, active? }`.
+- `DELETE /api/domain/budgets/{budgetId}`.
+
+## Contas a pagar (boletos)
+
+- `POST /api/domain/payables/parse` — lê sem gravar: `{ code }` (linha digitável
+  ou código de barras) ou multipart com `file` (PDF até 5 MB). Devolve `kind`
+  (`BANK` | `CONVENIO`), `barcode`, `digitableLine`, `amount`, `dueDate`, `issuer`;
+  422 quando o dígito verificador não confere.
+- `GET /api/domain/payables` — concilia com as saídas do banco e lista pendentes
+  e pagos dos últimos 60 dias, com `daysToDue` e `overdue`.
+- `POST /api/domain/payables` — `{ code, description, dueDate?, amount? }`
+  (`dueDate`/`amount` só quando o código não traz). Recusa boleto duplicado.
+- `PATCH /api/domain/payables/{payableId}` — `{ description?, status? }`;
+  `PAID` à mão cobre pagamento por fora, `PENDING` desfaz a ligação.
+- `DELETE /api/domain/payables/{payableId}`.

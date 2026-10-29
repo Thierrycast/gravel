@@ -12,6 +12,11 @@ vi.mock("@/lib/integrations/pluggy", () => ({
   getPluggyErrorDetails: vi.fn(),
 }))
 
+vi.mock("@/lib/pluggy-connector-insights", () => ({
+  getConnectorInsights: vi.fn().mockResolvedValue(new Map()),
+  coverageFamily: (entry: string) => entry,
+}))
+
 vi.mock("@/lib/pluggy-items", () => ({
   listStoredPluggyItems: () => listStoredPluggyItemsMock(),
   savePluggyItem: vi.fn(),

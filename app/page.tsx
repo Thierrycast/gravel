@@ -66,7 +66,7 @@ export default async function Page({
       },
     },
     categories: {
-      results: categories.results.slice(0, 5),
+      results: categories.results.slice(0, 7),
     },
     netWorth: {
       points: netWorth.points,

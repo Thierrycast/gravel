@@ -59,6 +59,52 @@ type StoredItem = {
   lastUpdatedAt?: string | null
   consentExpiresAt?: string | null
   nextAutoSyncAt?: string | null
+  hasResourcesPendingAuthorization?: boolean | null
+  resourcesCollectedAt?: string | null
+  /** Famílias de subprodutos Open Finance que o banco oferece. */
+  coverageFamilies?: string[]
+  /** Incidentes ativos do status page da Pluggy para este banco. */
+  connectorIncidents?: Array<{
+    title: string
+    kind: "INCIDENT" | "MAINTENANCE"
+    severity: string
+    url: string | null
+  }>
+}
+
+type ConsentResourceGroup = {
+  type: string
+  status: string
+  count: number
+}
+
+type ConsentResources = {
+  groups: ConsentResourceGroup[]
+  partial: boolean
+}
+
+type ConsentResourceState = {
+  status: LoadState
+  data?: ConsentResources
+  error?: string
+}
+
+const RESOURCE_TYPE_LABELS: Record<string, string> = {
+  ACCOUNT: "Conta",
+  CREDIT_CARD_ACCOUNT: "Cartão de crédito",
+  FUND: "Fundo de investimento",
+  LOAN: "Empréstimo",
+  INVESTMENT: "Investimento",
+}
+
+function resourceTypeLabel(type: string) {
+  return RESOURCE_TYPE_LABELS[type] ?? type.replaceAll("_", " ").toLowerCase()
+}
+
+function resourceStatusLabel(status: string) {
+  if (status === "PENDING_AUTHORISATION") return "Aguardando aprovação no banco"
+  if (status === "TEMPORARILY_UNAVAILABLE") return "Temporariamente indisponível"
+  return "Indisponível no banco"
 }
 
 function getRelativeTime(dateString: string | null): string {
@@ -127,6 +173,16 @@ function describeStatus(item: StoredItem, isLocalSyncing?: boolean): StatusMeta 
       tone: "negative",
       description: item.syncError || "As credenciais expiraram ou mudaram.",
       Icon: WifiOff,
+      needsAction: true,
+    }
+  }
+
+  if (item.status === "USER_AUTHORIZATION_PENDING" || item.hasResourcesPendingAuthorization === true) {
+    return {
+      label: "Aprovação pendente",
+      tone: "warning",
+      description: "Conclua a aprovação dos recursos no aplicativo do banco.",
+      Icon: AlertTriangle,
       needsAction: true,
     }
   }
@@ -221,6 +277,43 @@ export function PluggyConnectClient() {
     message: string
   } | null>(null)
   const [reconnectItemId, setReconnectItemId] = useState<string | null>(null)
+  const [openResourceItemId, setOpenResourceItemId] = useState<string | null>(null)
+  const [resourcesByItem, setResourcesByItem] = useState<Record<string, ConsentResourceState>>({})
+
+  async function loadResources(itemId: string) {
+    setResourcesByItem((current) => ({
+      ...current,
+      [itemId]: { status: "loading" },
+    }))
+    try {
+      const response = await fetch(`/api/pluggy/items/${encodeURIComponent(itemId)}/resources`, {
+        cache: "no-store",
+      })
+      const payload = (await response.json()) as ConsentResources & { error?: string }
+      if (!response.ok) throw new Error(payload.error ?? "Falha ao consultar o consentimento")
+      setResourcesByItem((current) => ({
+        ...current,
+        [itemId]: { status: "ready", data: payload },
+      }))
+    } catch (error) {
+      setResourcesByItem((current) => ({
+        ...current,
+        [itemId]: {
+          status: "error",
+          error: error instanceof Error ? error.message : "Falha ao consultar o consentimento",
+        },
+      }))
+    }
+  }
+
+  function toggleResources(itemId: string) {
+    if (openResourceItemId === itemId) {
+      setOpenResourceItemId(null)
+      return
+    }
+    setOpenResourceItemId(itemId)
+    void loadResources(itemId)
+  }
 
   const loadItems = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) {
@@ -558,7 +651,7 @@ export function PluggyConnectClient() {
       />
 
       {/* Status banner */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <SummaryStat
           label="Conexões ativas"
           value={String(itemsByStatus.total)}
@@ -712,11 +805,17 @@ export function PluggyConnectClient() {
               const StatusIcon = meta.Icon
               const isPending = pendingItemId === item.pluggyItemId
               const lastSync = item.lastSyncedAt || item.updatedAt || item.lastUpdatedAt;
+              const approvalPending =
+                item.status === "USER_AUTHORIZATION_PENDING" ||
+                item.hasResourcesPendingAuthorization === true
+              const canInspectResources =
+                approvalPending || Boolean(item.resourcesCollectedAt)
+              const resourceState = resourcesByItem[item.pluggyItemId]
               
               return (
                 <li
                   key={item.id}
-                  className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-muted to-muted/70 text-xs font-semibold text-foreground/80 ring-1 ring-border">
@@ -750,14 +849,23 @@ export function PluggyConnectClient() {
                         {meta.description}
                       </p>
                       <p className="font-mono text-xs text-muted-foreground/70">
-                        {item.pluggyItemId}
-                        {lastSync ? ` · última sincronização: ${getRelativeTime(lastSync)}` : null}
+                        {lastSync ? `Última sincronização: ${getRelativeTime(lastSync)}` : ""}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex shrink-0 items-center gap-1.5">
-                    {meta.needsAction ? (
+                    {meta.label === "Aprovação pendente" ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => toggleResources(item.pluggyItemId)}
+                        className="cursor-pointer"
+                      >
+                        <ShieldCheck className="size-3.5" />
+                        Ver pendências
+                      </Button>
+                    ) : meta.needsAction ? (
                       <Button
                         size="sm"
                         variant="outline"
@@ -784,6 +892,17 @@ export function PluggyConnectClient() {
                         Sincronizar agora
                       </Button>
                     )}
+                    {canInspectResources && meta.label !== "Aprovação pendente" ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => toggleResources(item.pluggyItemId)}
+                        className="cursor-pointer"
+                      >
+                        <ShieldCheck className="size-3.5" />
+                        Ver acesso
+                      </Button>
+                    ) : null}
                     <Button
                       size="icon-sm"
                       variant="ghost"
@@ -799,6 +918,79 @@ export function PluggyConnectClient() {
                       )}
                     </Button>
                   </div>
+                  {item.connectorIncidents?.length ? (
+                    <ul className="w-full space-y-1 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-800 dark:text-amber-200">
+                      {item.connectorIncidents.slice(0, 3).map((incident) => (
+                        <li key={incident.title} className="flex items-start gap-1.5">
+                          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                          <span>
+                            {incident.kind === "MAINTENANCE" ? "Manutenção" : "Incidente"} no banco:{" "}
+                            {incident.title}
+                            {incident.url ? (
+                              <>
+                                {" "}
+                                <a
+                                  href={incident.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="underline underline-offset-2"
+                                >
+                                  ver status
+                                </a>
+                              </>
+                            ) : null}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {openResourceItemId === item.pluggyItemId ? (
+                    <div className="w-full rounded-lg border border-border bg-muted/30 p-3 text-xs">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-medium">Recursos do consentimento</p>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => void loadResources(item.pluggyItemId)}
+                          disabled={resourceState?.status === "loading"}
+                        >
+                          Atualizar
+                        </Button>
+                      </div>
+                      {item.coverageFamilies?.length ? (
+                        <p className="mt-1 text-muted-foreground">
+                          O banco oferece via Open Finance: {item.coverageFamilies.join(", ")}.
+                        </p>
+                      ) : null}
+                      {approvalPending ? (
+                        <p className="mt-1 text-amber-700 dark:text-amber-300">
+                          Aprove os recursos pendentes no aplicativo do banco. Eles podem não aparecer no Gravel até essa etapa terminar.
+                        </p>
+                      ) : null}
+                      {resourceState?.status === "loading" ? (
+                        <p className="mt-2 text-muted-foreground">Consultando recursos…</p>
+                      ) : resourceState?.status === "error" ? (
+                        <p className="mt-2 text-rose-600 dark:text-rose-400">{resourceState.error}</p>
+                      ) : resourceState?.data?.groups.length ? (
+                        <ul className="mt-2 space-y-1 text-muted-foreground">
+                          {resourceState.data.groups.map((group) => (
+                            <li key={`${group.status}:${group.type}`}>
+                              {resourceTypeLabel(group.type)}: {resourceStatusLabel(group.status)} ({group.count})
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-2 text-muted-foreground">
+                          {item.resourcesCollectedAt
+                            ? "A instituição não informou recursos pendentes ou indisponíveis."
+                            : "A lista de recursos ainda não foi coletada pela Pluggy."}
+                        </p>
+                      )}
+                      {resourceState?.data?.partial ? (
+                        <p className="mt-2 text-muted-foreground">Lista parcial: há mais recursos do que o limite desta consulta.</p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </li>
               )
             })}
@@ -862,8 +1054,8 @@ function SummaryStat({ label, value, tone, icon: Icon }: SummaryStatProps) {
           )}
         />
       ) : null}
-      <div>
-        <p className="section-eyebrow">{label}</p>
+      <div className="min-w-0">
+        <p className="section-eyebrow truncate">{label}</p>
         <p className={cn("text-lg font-semibold tabular-nums", toneClass)}>
           {value}
         </p>

@@ -22,6 +22,12 @@ const securityHeaders = [
 const buildCpus = Number(process.env.NEXT_BUILD_CPUS ?? "")
 
 const nextConfig: NextConfig = {
+  // Hosts extras que podem abrir o `next dev` (ex.: o nome da máquina na VPN).
+  // Vem do ambiente porque é infraestrutura pessoal — nunca vai para o código.
+  allowedDevOrigins: (process.env.DEV_ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
   output: "standalone",
   transpilePackages: ["voice-kit"],
   devIndicators: false,

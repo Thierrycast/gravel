@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { fetchAccounts, fetchItem, fetchTransactions } from "@/lib/integrations/pluggy"
+import { fetchAccounts, fetchItem, fetchTransactionsByCursor } from "@/lib/integrations/pluggy"
 import { resolveStoredPluggyItemIds } from "@/lib/pluggy-items"
 
 export const dynamic = "force-dynamic"
@@ -9,14 +9,23 @@ function isReady(status?: string) {
   return status === "UPDATED"
 }
 
-function parseNumber(value: string | null) {
-  if (!value) return undefined
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : undefined
-}
-
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
+  if (searchParams.has("page") || searchParams.has("pageSize")) {
+    return NextResponse.json(
+      { error: "Paginação por página não é suportada. Use accountId e after para continuar pela v2." },
+      { status: 400 },
+    )
+  }
+
+  const selectedAccountId = searchParams.get("accountId")
+  const after = searchParams.get("after")
+  if (after && !selectedAccountId) {
+    return NextResponse.json(
+      { error: "accountId é obrigatório ao informar after." },
+      { status: 400 },
+    )
+  }
   const itemIds = await resolveStoredPluggyItemIds(searchParams.get("itemId"))
 
   if (itemIds.length === 0) {
@@ -26,8 +35,6 @@ export async function GET(request: Request) {
     )
   }
 
-  const page = parseNumber(searchParams.get("page"))
-  const pageSize = parseNumber(searchParams.get("pageSize"))
   const from = searchParams.get("from") ?? undefined
   const to = searchParams.get("to") ?? undefined
 
@@ -58,16 +65,22 @@ export async function GET(request: Request) {
     }))
   })
 
+  if (selectedAccountId && !accountEntries.some((account) => account.accountId === selectedAccountId)) {
+    return NextResponse.json({ error: "Conta Pluggy não encontrada nos items selecionados." }, { status: 404 })
+  }
+
+  const selectedAccounts = selectedAccountId
+    ? accountEntries.filter((account) => account.accountId === selectedAccountId)
+    : accountEntries
   const transactionsByAccount = await Promise.all(
-    accountEntries.map(async (account) => ({
+    selectedAccounts.map(async (account) => ({
       itemId: account.itemId,
       accountId: account.accountId,
-      page: await fetchTransactions({
+      page: await fetchTransactionsByCursor({
         accountId: account.accountId,
-        page,
-        pageSize,
-        from,
-        to,
+        dateFrom: from,
+        dateTo: to,
+        after,
       }),
     }))
   )

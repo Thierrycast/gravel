@@ -59,6 +59,22 @@ const serwist = new Serwist({
   },
 });
 
+// Streams SSE (/api/sync/events) não passam pelo worker. Interceptado, cada
+// stream infinito ficava preso ao worker mesmo depois da troca de página; ~6
+// telas depois as conexões HTTP/1.1 do host se esgotavam e o app congelava.
+// O filtro no runtimeCaching não basta: o `defaultCache` do Serwist também casa
+// /api/*. Registrado antes do Serwist, este listener encerra o evento sem
+// `respondWith`, e o navegador busca direto na rede.
+type StreamFetchEvent = { request: Request; stopImmediatePropagation: () => void };
+(globalThis as unknown as {
+  addEventListener: (type: "fetch", listener: (event: StreamFetchEvent) => void) => void;
+}).addEventListener("fetch", (event) => {
+  const accept = event.request.headers.get("accept") ?? "";
+  if (accept.includes("text/event-stream")) {
+    event.stopImmediatePropagation();
+  }
+});
+
 serwist.addEventListeners();
 
 // Push notification handlers — typed via globalThis cast to avoid SW/lib.dom conflicts

@@ -5,6 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { Slot } from "radix-ui"
 
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useMounted } from "@/hooks/use-mounted"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -172,11 +173,7 @@ function Sidebar({
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
-  const [mounted, setMounted] = React.useState(false)
-
-  React.useEffect(() => {
-    setMounted(true)
-  }, [])
+  const mounted = useMounted()
 
 
   if (collapsible === "none") {
@@ -608,11 +605,14 @@ function SidebarMenuSkeleton({
 }: React.ComponentProps<"div"> & {
   showIcon?: boolean
 }) {
-  const [width, setWidth] = React.useState("80%")
-
-  React.useEffect(() => {
-    setWidth(`${Math.floor(Math.random() * 40) + 50}%`)
-  }, [])
+  // Largura variada mas determinística (igual no servidor e no cliente):
+  // derivada do id do componente, sem o setState pós-montagem.
+  const id = React.useId()
+  const width = React.useMemo(() => {
+    let hash = 0
+    for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+    return `${(hash % 40) + 50}%`
+  }, [id])
 
   return (
     <div

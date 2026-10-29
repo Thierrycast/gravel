@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
 import { Loader2, ArrowDown } from "lucide-react"
 import { toast } from "sonner"
@@ -11,9 +12,12 @@ const MAX_PULL = 120
 const RESISTANCE = 0.5
 
 export function PullToRefresh() {
+  const router = useRouter()
   const queryClient = useQueryClient()
   const [pull, setPull] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
+  // Espelho do `pulling` para a renderização: ref não pode ser lida no render.
+  const [dragging, setDragging] = useState(false)
 
   const startY = useRef<number | null>(null)
   const pulling = useRef(false)
@@ -45,6 +49,7 @@ export function PullToRefresh() {
       }
       startY.current = e.touches[0].clientY
       pulling.current = false
+      setDragging(false)
     }
 
     function onTouchMove(e: TouchEvent) {
@@ -53,6 +58,7 @@ export function PullToRefresh() {
       if (dy <= 0) {
         if (pulling.current) {
           pulling.current = false
+          setDragging(false)
           setPull(0)
         }
         return
@@ -62,11 +68,13 @@ export function PullToRefresh() {
         startY.current = null
         if (pulling.current) {
           pulling.current = false
+          setDragging(false)
           setPull(0)
         }
         return
       }
       pulling.current = true
+      setDragging(true)
       const damped = Math.min(MAX_PULL, dy * RESISTANCE)
       setPull(damped)
       // Only block browser scroll when we're actually handling the pull gesture
@@ -84,6 +92,7 @@ export function PullToRefresh() {
         })
         if (!res.ok) throw new Error(String(res.status))
         await queryClient.invalidateQueries()
+        router.refresh()
         toast.success("Atualizado.")
       } catch {
         toast.error("Falha ao sincronizar")
@@ -97,6 +106,7 @@ export function PullToRefresh() {
       const wasPulling = pulling.current
       const finalPull = pullRef.current
       pulling.current = false
+      setDragging(false)
       startY.current = null
       if (refreshingRef.current) return
       if (!wasPulling) {
@@ -124,11 +134,11 @@ export function PullToRefresh() {
       window.removeEventListener("touchend", onTouchEnd)
       window.removeEventListener("touchcancel", onTouchEnd)
     }
-  }, [queryClient])
+  }, [queryClient, router])
 
   const visible = pull > 0 || refreshing
   const reachedThreshold = pull >= THRESHOLD || refreshing
-  const settling = !refreshing && !pulling.current
+  const settling = !refreshing && !dragging
 
   return (
     <div

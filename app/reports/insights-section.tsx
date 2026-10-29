@@ -324,13 +324,13 @@ export function ReportsInsightsSection() {
                 className="block space-y-1 group"
               >
                 <div className="flex justify-between text-xs">
-                  <span className="flex items-center gap-1.5 truncate group-hover:text-primary">
+                  <span className="flex min-w-0 items-center gap-1.5 group-hover:text-primary">
                     {item.kind === "CARD" || item.kind === "CREDIT" ? (
                       <CreditCard className="size-3 shrink-0 text-muted-foreground" />
                     ) : (
                       <Wallet className="size-3 shrink-0 text-muted-foreground" />
                     )}
-                    {item.name}
+                    <span className="truncate" title={item.name}>{item.name}</span>
                   </span>
                   <span className="font-mono font-semibold tabular-nums">
                     {format(item.total)}

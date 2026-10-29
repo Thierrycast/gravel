@@ -63,36 +63,6 @@ import { getCategoryEmoji, getCategoryColor } from "@/lib/category-emoji";
 import { cn } from "@/lib/utils";
 
 
-interface OverviewMetricsResponse {
-  results: {
-    periodInflow: number;
-    periodOutflow: number;
-    fiatNetWorth: number;
-    fiatAssets: number;
-    investmentsTotal: number;
-    counts: { investments: number };
-  };
-}
-
-interface CategoriesResponse {
-  results: Array<{
-    categoryId: string | null;
-    name: string;
-    amount: number;
-    sharePercent: number;
-  }>;
-}
-
-interface CashFlowResponse {
-  results: Array<{
-    date: string;
-    income: number;
-    expense: number;
-    investments: number;
-    net: number;
-  }>;
-}
-
 interface OverviewDashboardProps {
   initialData: OverviewDashboardData;
 }
@@ -310,31 +280,11 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
     setChartFilters((prev) => ({ ...prev, ...patch }));
   }
 
-  const { data: overviewData } = useApi<OverviewMetricsResponse>(
-    "/api/domain/metrics/overview",
-    periodState.params,
-  );
-  const { data: categoriesData } = useApi<CategoriesResponse>(
-    "/api/domain/metrics/spending/categories",
-    { ...periodState.params, limit: "7" },
-  );
-  const { data: cashFlowData } = useApi<CashFlowResponse>(
-    "/api/domain/metrics/cash-flow",
-    { ...periodState.params, groupBy: "day" },
-  );
-
   const { overview: initialOverview, transactions, recurring } = initialData;
-
-  const overview = {
-    ...initialOverview,
-    inflow:  overviewData?.results?.periodInflow  ?? initialOverview.inflow,
-    outflow: overviewData?.results?.periodOutflow ?? initialOverview.outflow,
-  };
-  const categories = {
-    results: categoriesData?.results ?? initialData.categories.results,
-  };
+  const overview = initialOverview;
+  const categories = initialData.categories;
   const cashFlow = {
-    results: (cashFlowData?.results ?? initialData.cashFlow.results).reduce((acc, day) => {
+    results: initialData.cashFlow.results.reduce((acc, day) => {
       const lastNet = acc.length > 0 ? acc[acc.length - 1].net : 0;
       const delta = day.income - day.expense - day.investments;
       acc.push({
@@ -342,7 +292,7 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
         net: lastNet + delta
       });
       return acc;
-    }, [] as CashFlowResponse["results"]),
+    }, [] as OverviewDashboardData["cashFlow"]["results"]),
   };
 
 
@@ -461,9 +411,9 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
       </div>
 
       {/* Charts & Category sidebar */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Chart panel */}
-        <div className="surface flex flex-col gap-4 p-5 lg:col-span-2 overflow-hidden">
+        <div className="surface flex min-w-0 flex-col gap-4 p-5 lg:col-span-2 overflow-hidden">
           {/* Chart header */}
           <div className="flex flex-wrap items-center justify-between gap-2">
             {/* Left: label + cashflow sub-mode */}
@@ -654,8 +604,9 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
                         className="shrink-0 size-2 rounded-full"
                         style={{ backgroundColor: cat.color }}
                       />
-                      <span className="truncate text-muted-foreground flex items-center gap-1">
-                        <span aria-hidden>{cat.emoji}</span> {cat.name}
+                      <span className="flex min-w-0 items-center gap-1 text-muted-foreground">
+                        <span aria-hidden>{cat.emoji}</span>
+                        <span className="truncate" title={cat.name}>{cat.name}</span>
                       </span>
                       <span className="ml-auto shrink-0 tabular-nums font-medium">
                         {cat.share.toFixed(0)}%
@@ -685,14 +636,17 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
               return (
                 <div key={cat.categoryId} className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium truncate flex items-center gap-1.5">
+                    <span className="flex min-w-0 items-center gap-1.5 font-medium">
                       <span
                         className="flex size-5 items-center justify-center rounded-full text-[10px] shrink-0"
                         style={{ backgroundColor: `${color}20` }}
                       >
                         {emoji}
                       </span>
-                      {cat.name}
+                      {/* Reticências só funcionam no próprio nó de texto, não no flex. */}
+                      <span className="truncate" title={cat.name}>
+                        {cat.name}
+                      </span>
                     </span>
                     <span className="tabular-nums font-semibold shrink-0 ml-2">
                       {format(cat.amount)}
@@ -876,8 +830,9 @@ export function OverviewDashboard({ initialData }: OverviewDashboardProps) {
                   {pieData.map((cat) => (
                     <div key={cat.name} className="flex items-center gap-2 text-sm">
                       <span className="shrink-0 size-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
-                      <span className="truncate text-muted-foreground flex items-center gap-1.5">
-                        <span aria-hidden>{cat.emoji}</span> {cat.name}
+                      <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+                        <span aria-hidden>{cat.emoji}</span>
+                        <span className="truncate" title={cat.name}>{cat.name}</span>
                       </span>
                       <span className="ml-auto shrink-0 tabular-nums font-medium">{format(cat.value)}</span>
                       <span className="shrink-0 tabular-nums text-muted-foreground w-12 text-right">{cat.share.toFixed(1)}%</span>

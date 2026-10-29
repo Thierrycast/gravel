@@ -1,4 +1,6 @@
 import { DomainTransactionDirection, Prisma } from "@prisma/client";
+import { reconcilePayables } from "@/lib/domain/payables";
+import { accountKindOf, loadAccountKinds } from "@/lib/domain/analytics/account-kinds";
 
 import { parseNumberParam } from "@/lib/core/filters";
 import { RECURRING_DETECTION, PROJECTION } from "@/lib/domain/constants";
@@ -229,7 +231,7 @@ export async function refreshRecurringDerived(options?: {
       category?.name,
       category?.kind,
       transaction.description ?? transaction.normalizedDescription,
-      { salaryPatterns, merchantName: transaction.merchantName },
+      { salaryPatterns, merchantName: transaction.merchantName, metadataJson: transaction.metadataJson },
     );
     if (classification === "excluded" || classification === "investment") {
       continue;
@@ -1018,6 +1020,7 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
   // so the summary card reflects actual income even when salary is not configured.
   const pastInternalTransferPairIds =
     detectInternalTransferPairIds(pastTransactions);
+  const accountKinds = await loadAccountKinds();
   const pastInflowTransactions = pastTransactions.filter((tx) => {
     if (tx.direction !== DomainTransactionDirection.INFLOW) return false;
     if (pastInternalTransferPairIds.has(tx.id)) return false;
@@ -1030,6 +1033,8 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
       {
         salaryPatterns: settings.salaryPatterns,
         merchantName: tx.merchantName,
+        metadataJson: tx.metadataJson,
+        accountKind: accountKindOf(accountKinds, tx.domainAccountId),
       },
     );
     return classification === "income";
@@ -1230,6 +1235,10 @@ export async function buildPortfolioHistory(months = 12) {
 }
 
 export async function refreshDerivedCaches() {
+  // Dado novo do banco pode ser o pagamento de um boleto cadastrado.
+  await reconcilePayables().catch((error) => {
+    console.warn("[derived] conciliação de contas a pagar falhou:", error);
+  });
   const recurringSummary = await refreshRecurringDerived();
   const [portfolioHistory, projection] = await Promise.all([
     buildPortfolioHistory(12),

@@ -540,6 +540,7 @@ async function syncTransactionEntity(
     amount: amount,
     date: toDate(transaction.date) ?? undefined,
     type: toStringOrNull(transaction.type),
+    operationType: toStringOrNull(transaction.operationType),
     status: toStringOrNull(transaction.status),
     categoryId: toStringOrNull(transaction.categoryId),
     category: toStringOrNull(transaction.category),

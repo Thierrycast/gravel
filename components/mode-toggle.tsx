@@ -4,16 +4,14 @@ import * as React from "react"
 import { Moon, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
 
+import { useMounted } from "@/hooks/use-mounted"
+
 import { Button } from "@/components/ui/button"
 import { buildTheme, getFamily, getMode } from "@/lib/theme"
 
 export function ModeToggle() {
   const { theme, resolvedTheme, setTheme } = useTheme()
-  const [mounted, setMounted] = React.useState(false)
-
-  React.useEffect(() => {
-    setMounted(true)
-  }, [])
+  const mounted = useMounted()
 
   const active = resolvedTheme ?? theme
   const mode = getMode(active)

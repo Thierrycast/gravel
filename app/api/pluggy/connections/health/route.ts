@@ -1,10 +1,14 @@
 import { jsonError, jsonOk } from "@/lib/core/http"
+import { getConnectorInsights } from "@/lib/pluggy-connector-insights"
 import { prisma } from "@/lib/prisma"
 
 export const dynamic = "force-dynamic"
 
 /** A partir de quantos dias antes do vencimento o consentimento vira aviso. */
 const CONSENT_WARNING_DAYS = 15
+
+/** Por quanto tempo um status de conector recebido por webhook continua valendo. */
+const CONNECTOR_STATUS_TTL_MS = 24 * 60 * 60 * 1000
 
 /** Status de item que exigem o usuário passar pelo Connect de novo. */
 const NEEDS_ACTION_STATUSES = new Set([
@@ -15,13 +19,20 @@ const NEEDS_ACTION_STATUSES = new Set([
 ])
 
 export type ConnectionAlert = {
-  kind: "needs-action" | "consent-expiring" | "connector-unstable" | "stale"
+  kind:
+    | "needs-action"
+    | "consent-expiring"
+    | "connector-unstable"
+    | "connector-incident"
+    | "stale"
   severity: "warning" | "critical"
   itemId: string | null
   institution: string
   message: string
   /** Dias até o consentimento expirar, quando aplicável. */
   daysLeft?: number
+  /** Página do incidente no status page da Pluggy. */
+  url?: string | null
 }
 
 /**
@@ -45,8 +56,14 @@ export async function GET() {
           deletedAt: true,
         },
       }),
+      // Status vem de webhook: se os webhooks param, o último "instável" ficaria
+      // na tela para sempre (o do Nubank ficou de 09/08 a 28/10/2026). Só vale
+      // o que foi observado nas últimas 24 h.
       prisma.pluggyConnectorStatus.findMany({
-        where: { status: { in: ["UNSTABLE", "OFFLINE"] } },
+        where: {
+          status: { in: ["UNSTABLE", "OFFLINE"] },
+          updatedAt: { gte: new Date(Date.now() - CONNECTOR_STATUS_TTL_MS) },
+        },
       }),
     ])
 
@@ -104,6 +121,34 @@ export async function GET() {
           connector.status === "OFFLINE"
             ? "A instituição está fora do ar. Não é problema do app — os dados voltam quando ela voltar."
             : "A instituição está instável. Alguns dados podem atrasar.",
+      })
+    }
+
+    // Incidentes do status page: o `health.status` do conector pode continuar
+    // ONLINE com um incidente aberto (ex.: transações faltando), então isto não
+    // duplica o aviso de instabilidade acima.
+    const unstableIds = new Set(connectors.map((connector) => connector.connectorId))
+    const nameByConnector = new Map(
+      items
+        .filter((item) => item.connectorId !== null && !item.deletedAt)
+        .map((item) => [item.connectorId as number, item.connectorName]),
+    )
+    const insights = await getConnectorInsights(nameByConnector.keys())
+    for (const [connectorId, insight] of insights) {
+      const incident = insight.incidents[0]
+      if (!incident) continue
+      if (unstableIds.has(connectorId) && incident.kind !== "MAINTENANCE") continue
+      const extra = insight.incidents.length > 1 ? ` (+${insight.incidents.length - 1})` : ""
+      alerts.push({
+        kind: "connector-incident",
+        severity: incident.severity === "MAJOR_OUTAGE" ? "critical" : "warning",
+        itemId: null,
+        institution: nameByConnector.get(connectorId) ?? `Conector ${connectorId}`,
+        message:
+          incident.kind === "MAINTENANCE"
+            ? `Manutenção na instituição: ${incident.title}${extra}.`
+            : `Incidente na instituição: ${incident.title}${extra}. Não é problema do app.`,
+        url: incident.url,
       })
     }
 

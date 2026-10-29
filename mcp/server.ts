@@ -647,6 +647,41 @@ const TOOLS: Tool[] = [
     },
   },
   {
+    name: "get_budgets",
+    description: "Orçamentos mensais por categoria com o gasto do mês (mesma política do fluxo de caixa, subcategorias incluídas), restante, projeção de fim de mês pelo ritmo atual e status (ok, warning, over).",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "get_payables",
+    description: "Contas a pagar (boletos cadastrados): pendentes com vencimento e dias até vencer, vencidas, e pagas nos últimos 60 dias (baixa automática quando o pagamento aparece no Open Finance).",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "set_budget",
+    description: "Cria ou substitui o orçamento mensal de uma categoria (um por categoria).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        category_slug: { type: "string", description: "Slug da categoria (ex.: alimentacao)" },
+        category_id: { type: "string", description: "ID da categoria, alternativa ao slug" },
+        monthly_limit: { type: "number", description: "Limite mensal em BRL (positivo)" },
+        alert_at_percent: { type: "number", description: "Percentual do limite que dispara o aviso (1-100, padrão 80)" },
+      },
+      required: ["monthly_limit"],
+    },
+  },
+  {
+    name: "delete_budget",
+    description: "Remove o orçamento de uma categoria.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        budget_id: { type: "string", description: "ID do orçamento" },
+        category_slug: { type: "string", description: "Slug da categoria, alternativa ao ID" },
+      },
+    },
+  },
+  {
     name: "get_goal_history",
     description: "Retorna a série histórica mensal do progresso de uma meta. Disponível apenas para metas com auto-tracking (matchCategorySlug ou matchKeyword configurados).",
     inputSchema: {
@@ -720,9 +755,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const summary = await getCardStatementsSummaryMetrics();
         result = {
           counts: summary.counts,
+          totalOpen: summary.totalOpen,
           overdueAmount: summary.overdueAmount,
+          closedAmount: summary.closedAmount,
           openAmount: summary.openAmount,
+          upcomingAmount: summary.upcomingAmount,
           dueIn7DaysAmount: summary.dueIn7DaysAmount,
+          nearestDue: summary.nearestDue,
           statements: summary.statements,
         };
         break;
@@ -1548,6 +1587,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             targetMonthBalance: simulatedMonths[monthIndex].balance,
           },
         };
+        break;
+      }
+      case "get_budgets": {
+        const { getBudgetsProgress } = await import("../lib/domain/budgets.js");
+        result = await getBudgetsProgress();
+        break;
+      }
+      case "get_payables": {
+        const { listPayables } = await import("../lib/domain/payables.js");
+        result = await listPayables();
+        break;
+      }
+      case "set_budget": {
+        const { upsertBudget } = await import("../lib/domain/budgets.js");
+        result = await upsertBudget({
+          categorySlug: args?.category_slug ? String(args.category_slug) : undefined,
+          categoryId: args?.category_id ? String(args.category_id) : undefined,
+          monthlyLimit: Number(args?.monthly_limit),
+          alertAtPercent: args?.alert_at_percent !== undefined ? Number(args.alert_at_percent) : undefined,
+        });
+        break;
+      }
+      case "delete_budget": {
+        const { deleteBudget } = await import("../lib/domain/budgets.js");
+        result = await deleteBudget({
+          id: args?.budget_id ? String(args.budget_id) : undefined,
+          categorySlug: args?.category_slug ? String(args.category_slug) : undefined,
+        });
         break;
       }
       case "get_goal_history": {

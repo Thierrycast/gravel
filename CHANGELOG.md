@@ -1,5 +1,116 @@
 # Changelog
 
+## 0.1.15 — 2026-10-29 — orçamentos e contas a pagar
+
+### Orçamentos (`/budgets`)
+
+- Limite mensal por categoria, com subcategorias somando na categoria-mãe. O
+  gasto usa a mesma política de despesa operacional do fluxo de caixa, então
+  bate com os relatórios.
+- Projeção de fim de mês pelo ritmo atual (a partir de 15% do mês decorrido),
+  aviso uma vez ao cruzar o percentual escolhido e outra ao estourar, na Inbox e
+  nas notificações. Categoria com orçamento deixa de receber o alerta por média.
+- MCP: `get_budgets`, `set_budget`, `delete_budget`. Chat: `orcamentos` (leitura).
+
+### Contas a pagar (`/payables`)
+
+- Boleto por linha digitável colada ou PDF: valor, vencimento e banco, com os
+  dígitos verificadores conferidos (bancário 47, convênio 48, barras 44; o fator
+  de vencimento que reiniciou em 22/02/2025 é resolvido pelo ciclo mais próximo).
+- Não cria lançamento. Lembra perto do vencimento e dá baixa sozinha quando a
+  saída de mesmo valor aparece no Open Finance perto do vencimento — só
+  transações já ocorridas, para uma parcela futura de cartão não quitar boleto.
+- MCP: `get_payables`. Chat: `contas_a_pagar` (leitura).
+
+### Outros
+
+- A ferramenta `metas` do chat passa a contar os aportes automáticos, como a tela.
+- Auto-transferência de conta não conectada conta como renda até a conta ser
+  conectada; aí o par é reconhecido sozinho, inclusive nos meses passados (teste).
+
+## 0.1.14 — 2026-10-28 — datas congeladas no build
+
+- **Páginas eram pré-renderizadas no build** e guardavam `new Date()` no HTML:
+  `/people` mostrava o vencimento padrão com a data do build, `/monthly-close` o
+  mês do build, e a hidratação quebrava (React #418) quando o dia virava entre o
+  build (container em UTC) e o acesso. Todas as rotas passam a ser renderizadas
+  por requisição: são dados do usuário, atrás de login.
+
+## 0.1.13 — 2026-10-28 — fichas de classificação e débito de lint
+
+### Números
+
+- **Entrada em cartão nunca é renda.** Quitação com descrição de banco
+  ("Inclusao de Pagamento Ciclo Corrente") e estorno de compra entravam como
+  receita. O classificador central passou a receber o tipo da conta.
+- **Auto-transferência "Pix recebido de Fulano" não pareava** com o envio
+  "enviada|FULANO": o extrator de contraparte mantinha o "de" no nome.
+- **Histórico de meta** somava valor absoluto (resgate virava aporte) e
+  começava do zero; agora usa o mesmo sinal do progresso e parte do valor
+  manual, então o último ponto bate com a meta.
+
+### Qualidade
+
+- As 17 ocorrências das regras de hooks do React Compiler foram resolvidas e as
+  regras voltaram a ser **erro**: `useSyncExternalStore` para montagem, media
+  query, `localStorage` e suporte a push; ajuste de estado na renderização para
+  semear rascunhos; React Query no banner de falha de sync. Lint com zero avisos.
+- Nomes longos em linhas flex ganham reticências em vez de corte no meio.
+- `simulate_purchase_impact` e `get_goal_history` documentados em `docs/mcp.md`.
+
+## 0.1.9 – 0.1.12 — 2026-10-28 — retomada
+
+O app estava parado desde setembro. Rodada de atualização, integração com as
+novidades da Pluggy e uma revisão pela interface, tela a tela, em celular e
+desktop, com o PWA ativo. Cada versão passou por `pnpm lint`, `tsc`, `pnpm test`
+e pelo scanner de segredos antes do build.
+
+### Dependências e segurança
+
+- Next 16.1.6 → 16.4.3 e dependências vulneráveis atualizadas: o audit saiu de
+  6 críticas para **1 baixa**, transitiva do `shadcn` e sem correção publicada.
+- A imagem Docker levava `prisma/dev.db`: o estágio final copia `prisma/`
+  inteiro. O `.dockerignore` passou a excluir bases SQLite locais. **Imagens até
+  a 0.1.8 contêm esse arquivo.**
+- As regras novas `react-hooks/set-state-in-effect` e `react-hooks/refs` viraram
+  aviso: 17 ocorrências antigas ficam como débito de refatoração.
+
+### Pluggy
+
+- Transações em `GET /v2/transactions` com cursor: a v1 paginada sai em
+  dezembro. `page`/`pageSize` em `/api/pluggy/transactions` passam a dar 400.
+- `operationType: PAGAMENTO_FATURA` identifica a quitação de fatura mesmo com
+  descrição genérica, em faturas, fluxo de caixa e relatórios.
+- `/connect` mostra os recursos do consentimento que aguardam aprovação
+  (`GET /api/pluggy/items/{itemId}/resources`, sem expor identificadores).
+- `productCoverage` e os incidentes ativos do status page, lidos do conector do
+  banco real: com MeuPluggy, o id já mapeado, e não o do proxy. Aparecem em
+  `/connect` e no aviso de conexões, com link para o incidente.
+- Status de conector recebido por webhook expira em 24 h. Quando os webhooks
+  param, um "instável" antigo ficava na tela por meses.
+
+### Faturas
+
+- Um resumo só (`summarizeCardStatements`) para `/bills`, CLI, MCP, chat e
+  briefing. A fatura **fechada e ainda não vencida** contava como paga no
+  CLI/MCP e sumia dos totais da tela, justo a próxima a pagar. O chat chamava de
+  "em aberto" só o ciclo atual; o briefing usava a contagem de abertas como
+  "vence em 7 dias".
+- Removidos `GET /api/domain/metrics/bills/summary` e `getBillsSummaryMetrics`,
+  sem consumidores.
+
+### PWA e interface
+
+- **O app congelava depois de ~6 telas.** O service worker interceptava o SSE de
+  `/api/sync/events` e mantinha um stream aberto por página visitada até esgotar
+  as conexões HTTP/1.1 do host. Streams agora passam direto para a rede.
+- Valores dos cards do painel escalam com a largura e não estouram mais no
+  celular; o painel de análise não passa da tela.
+- Insights formatam reais e BTC em pt-BR; os filtros de transação estão em
+  português; os avisos ganharam respiro até o título; `/connect` usa grade 2×2
+  no celular.
+- O painel deixou de repetir três consultas que o SSR já trazia.
+
 ## 0.1.7 — 2026-09-21 — auditoria de setembro
 
 Rodada sobre os seis relatórios em `docs/audit-reports/`. Quatro ondas, cada uma

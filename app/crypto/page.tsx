@@ -430,12 +430,12 @@ function PnlList({ results }: { results: CryptoAsset[] }) {
           
           return (
             <div key={asset.asset} className="flex items-center gap-4 text-sm">
-              <div className="w-20 font-medium shrink-0 flex items-center gap-2 truncate">
+              <div className="w-20 font-medium shrink-0 flex min-w-0 items-center gap-2">
                 <Avatar className="size-6">
                   <AvatarImage src={asset.imageUrl || undefined} />
                   <AvatarFallback className="bg-muted text-[10px]">{asset.asset.slice(0,2)}</AvatarFallback>
                 </Avatar>
-                {asset.asset}
+                <span className="truncate">{asset.asset}</span>
               </div>
               <div className="flex-1 flex items-center h-5">
                 <div className="flex-1 flex justify-end h-full relative">

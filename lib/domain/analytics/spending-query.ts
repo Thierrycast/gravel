@@ -27,6 +27,7 @@ export const SPENDING_TRANSACTION_SELECT = {
   occurredAt: true,
   description: true,
   normalizedDescription: true,
+  metadataJson: true,
   domainCategoryId: true,
   domainAccountId: true,
   domainCategory: { select: { name: true, kind: true } },
@@ -42,6 +43,7 @@ export type ClassifiableTransaction = {
   occurredAt: Date;
   description?: string | null;
   normalizedDescription?: string | null;
+  metadataJson?: string | null;
   domainCategoryId?: string | null;
   domainAccountId?: string | null;
   domainCategory?: { name: string | null; kind: string | null } | null;
@@ -88,6 +90,7 @@ function filterByClassification<T extends ClassifiableTransaction>(
       {
         salaryPatterns: options?.salaryPatterns,
         merchantName: transaction.domainMerchant?.displayName ?? null,
+        metadataJson: transaction.metadataJson,
       },
     );
 

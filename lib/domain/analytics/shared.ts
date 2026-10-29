@@ -10,6 +10,7 @@ import {
   parseNumberParam,
 } from "@/lib/core/filters";
 import { matchesSalaryPatternValues } from "@/lib/domain/salary";
+import { hasPluggyBillPaymentOperation } from "@/lib/domain/pluggy-operation";
 
 export const ZERO = new Prisma.Decimal(0);
 export const DAY_MS = 24 * 60 * 60 * 1000;
@@ -336,6 +337,8 @@ const TRANSFER_PHRASE_TERMS = [
   "transferencia",
 ];
 
+const LEADING_PREPOSITIONS = new Set(["de", "da", "do", "das", "dos", "para", "pra"]);
+
 // Extrai o nome do contraparte de uma descrição de transferência. Ex.:
 //   "Transferência Recebida|ANA PAULA DE SOUZA LIMA" -> "ana paula de souza lima"
 //   "Pix enviado - Ana Paula De Souza Lima"          -> "ana paula de souza lima"
@@ -373,6 +376,9 @@ export function extractTransferCounterparty(
     .replace(/\s+/g, " ")
     .trim();
   const tokens = cleaned.split(" ").filter((token) => token.length > 1);
+  // "Pix recebido de Fulano" virava "de fulano" e não pareava com o envio
+  // "Pix enviado|FULANO": a preposição que liga a frase ao nome não é nome.
+  while (tokens.length > 0 && LEADING_PREPOSITIONS.has(tokens[0])) tokens.shift();
   if (tokens.length < 2) return null;
   return tokens.join(" ");
 }
@@ -468,9 +474,24 @@ export function classifyCashFlowTransaction(
   options?: {
     salaryPatterns?: string[];
     merchantName?: string | null;
+    metadataJson?: string | null;
+    /** Tipo da conta da transação (`DomainAccount.kind`). */
+    accountKind?: string | null;
   },
 ): CashFlowClassification {
   if (direction === DomainTransactionDirection.TRANSFER) return "excluded";
+
+  // Entrada em cartão é quitação de fatura ou estorno — nunca renda, qualquer
+  // que seja a descrição ("Inclusao de Pagamento Ciclo Corrente" do C6 passava).
+  if (
+    direction === DomainTransactionDirection.INFLOW &&
+    options?.accountKind?.toUpperCase().includes("CARD")
+  ) {
+    return "excluded";
+  }
+
+  // A Pluggy identifica a quitação mesmo quando a descrição vem genérica.
+  if (hasPluggyBillPaymentOperation(options?.metadataJson)) return "excluded";
 
   if (isInvestmentTransfer(categoryName, categoryKind, description)) {
     return "investment";

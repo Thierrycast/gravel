@@ -12,6 +12,9 @@
  * que garante que um campo novo no schema não vaze sozinho amanhã.
  */
 import { getOverviewMetrics } from "@/lib/domain/analytics/overview"
+import { getBudgetsProgress } from "@/lib/domain/budgets"
+import { listPayables } from "@/lib/domain/payables"
+import { enrichGoalWithAutoTransactions } from "@/lib/domain/queries"
 import { getCardStatementsSummaryMetrics } from "@/lib/domain/billing"
 import { getSpendingByCategoryMetrics } from "@/lib/domain/analytics/reports"
 import { summarizeCreditLimits } from "@/lib/domain/credit"
@@ -198,23 +201,41 @@ export const CHAT_TOOLS: Array<{ schema: ChatToolSchema; handler: ChatToolHandle
     handler: async () => {
       const summary = await getCardStatementsSummaryMetrics()
       return {
-        resposta_pronta: `Em aberto: ${formatBrl(summary.openAmount)}. Vence nos próximos 7 dias: ${formatBrl(summary.dueIn7DaysAmount)}. Em atraso: ${formatBrl(summary.overdueAmount)}.`,
-        total_em_aberto: summary.openAmount,
+        resposta_pronta: `Total em aberto nos cartões: ${formatBrl(summary.totalOpen)}. Fechadas aguardando vencimento: ${formatBrl(summary.closedAmount)}. Fatura atual (ainda aberta): ${formatBrl(summary.openAmount)}. Vence nos próximos 7 dias: ${formatBrl(summary.dueIn7DaysAmount)}. Em atraso: ${formatBrl(summary.overdueAmount)}.`,
+        total_em_aberto: summary.totalOpen,
+        fechadas_a_pagar: summary.closedAmount,
+        faturas_atuais: summary.openAmount,
         vence_em_7_dias: summary.dueIn7DaysAmount,
         em_atraso: summary.overdueAmount,
+        proximo_vencimento: summary.nearestDue
+          ? {
+              cartao: summary.nearestDue.accountName,
+              valor: summary.nearestDue.statement.amount,
+              vencimento: summary.nearestDue.statement.dueDate,
+              situacao: summary.nearestDue.statement.status,
+            }
+          : null,
         quantidades: summary.counts,
-        faturas: summary.statements.slice(0, 8).map((card) => ({
-          cartao: card.accountName,
-          instituicao: card.institutionName,
-          em_aberto_no_cartao: card.totalOpen,
-          fatura_atual: card.current
-            ? {
-                valor: card.current.providerAmount ?? card.current.amount,
-                vencimento: card.current.dueDate,
-                situacao: card.current.status,
-              }
-            : null,
-        })),
+        faturas: summary.statements.slice(0, 8).map((card) => {
+          // Mesmo valor que a tela /bills mostra: `amount` já é o do banco
+          // quando reconciliado; `providerAmount` cru pode ser só o resíduo.
+          const fechada = card.past.find((statement) => statement.status === "CLOSED")
+          return {
+            cartao: card.accountName,
+            instituicao: card.institutionName,
+            em_aberto_no_cartao: card.totalOpen,
+            fatura_fechada: fechada
+              ? { valor: fechada.amount, vencimento: fechada.dueDate, situacao: fechada.status }
+              : null,
+            fatura_atual: card.current
+              ? {
+                  valor: card.current.amount,
+                  vencimento: card.current.dueDate,
+                  situacao: card.current.status,
+                }
+              : null,
+          }
+        }),
         observacao: "Valores já somados e em reais. Não some nem converta nada.",
       }
     },
@@ -317,17 +338,66 @@ export const CHAT_TOOLS: Array<{ schema: ChatToolSchema; handler: ChatToolHandle
       description: "Metas financeiras ativas, com valor alvo e progresso.",
       parameters: { type: "object", properties: {} },
     },
+    // O valor atual inclui os aportes automáticos (transações vinculadas), como
+    // a tela de metas mostra — o `currentAmount` cru é só a parte manual.
     handler: async () => {
-      const goals = await prisma.goal.findMany({
-        where: { active: true },
-        select: { name: true, targetAmount: true, currentAmount: true, targetDate: true },
-      })
-      return goals.map((goal) => ({
+      const goals = await prisma.goal.findMany({ where: { active: true } })
+      const enriched = await Promise.all(goals.map((goal) => enrichGoalWithAutoTransactions(goal)))
+      return enriched.map((goal) => ({
         nome: goal.name,
         alvo: toNumber(goal.targetAmount),
         atual: toNumber(goal.currentAmount),
         prazo: goal.targetDate,
       }))
+    },
+  },
+  {
+    schema: {
+      name: "contas_a_pagar",
+      description:
+        "Boletos cadastrados ainda não pagos (valor, vencimento, dias até vencer, vencidos) e os pagos recentes. Use para 'tenho conta para pagar', 'o que vence esta semana'.",
+      parameters: { type: "object", properties: {} },
+    },
+    handler: async () => {
+      const payables = await listPayables()
+      return {
+        a_pagar_total: payables.summary.pendingAmount,
+        vencidos: payables.summary.overdueCount,
+        vencem_em_7_dias: payables.summary.dueIn7DaysCount,
+        contas: payables.results.map((row) => ({
+          nome: row.description,
+          valor: row.amount,
+          vencimento: row.dueDate,
+          situacao: row.status === "PAID" ? "pago" : row.overdue ? "vencido" : "pendente",
+          dias_para_vencer: row.status === "PENDING" ? row.daysToDue : null,
+        })),
+        observacao: "Valores em reais. Contas pagas saem sozinhas quando o pagamento aparece no banco.",
+      }
+    },
+  },
+  {
+    schema: {
+      name: "orcamentos",
+      description:
+        "Orçamentos do mês por categoria: limite, gasto, restante, projeção pelo ritmo atual e situação. Use para 'como está meu orçamento', 'posso gastar mais com X'.",
+      parameters: { type: "object", properties: {} },
+    },
+    handler: async () => {
+      const budgets = await getBudgetsProgress()
+      return {
+        mes: budgets.month,
+        mes_decorrido_pct: budgets.monthElapsedPercent,
+        orcamentos: budgets.results.map((budget) => ({
+          categoria: budget.categoryName,
+          limite: budget.monthlyLimit,
+          gasto: budget.spent,
+          restante: budget.remaining,
+          projecao_fim_do_mes: budget.projected,
+          situacao: budget.status === "over" ? "estourado" : budget.status === "warning" ? "atenção" : "no ritmo",
+          motivo: budget.reason,
+        })),
+        observacao: "Valores em reais, já somados com as subcategorias. Não some de novo.",
+      }
     },
   },
 ]

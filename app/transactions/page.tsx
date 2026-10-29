@@ -345,7 +345,9 @@ function TransactionsContent() {
 
   function exportTransactions() {
     const params = new URLSearchParams(transactionParams);
-    window.location.href = `/api/domain/transactions/export?${params.toString()}`;
+    window.location.assign(
+      new URL(`/api/domain/transactions/export?${params.toString()}`, window.location.origin),
+    );
   }
 
 
@@ -616,7 +618,7 @@ function TransactionsContent() {
               type="number"
               value={minInput}
               onChange={(e) => setMinInput(e.target.value)}
-              placeholder="Mín $"
+              placeholder="Mín R$"
               className="h-9 w-20 sm:w-24 px-2 text-xs"
             />
             <span className="text-muted-foreground text-xs">até</span>
@@ -624,7 +626,7 @@ function TransactionsContent() {
               type="number"
               value={maxInput}
               onChange={(e) => setMaxInput(e.target.value)}
-              placeholder="Máx $"
+              placeholder="Máx R$"
               className="h-9 w-20 sm:w-24 px-2 text-xs"
             />
           </div>
@@ -636,24 +638,27 @@ function TransactionsContent() {
             size="sm"
             className="font-mono text-xs"
             onClick={() => setDirection(undefined)}
+            aria-pressed={direction == null}
           >
-            ALL
+            Todas
           </Button>
           <Button
             variant={direction === "OUTFLOW" ? "secondary" : "outline"}
             size="sm"
             className="font-mono text-xs"
             onClick={() => setDirection("OUTFLOW")}
+            aria-pressed={direction === "OUTFLOW"}
           >
-            OUT
+            Saídas
           </Button>
           <Button
             variant={direction === "INFLOW" ? "secondary" : "outline"}
             size="sm"
             className="font-mono text-xs"
             onClick={() => setDirection("INFLOW")}
+            aria-pressed={direction === "INFLOW"}
           >
-            IN
+            Entradas
           </Button>
         </div>
       </section>
@@ -672,9 +677,9 @@ function TransactionsContent() {
       <section className="surface overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-border/60 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="section-eyebrow">Lista densa</p>
+            <p className="section-eyebrow">Lançamentos</p>
             <h2 className="text-sm font-semibold tracking-tight">
-              Drill-down detalhado do período
+              Todas as transações do período
             </h2>
           </div>
 
@@ -804,8 +809,8 @@ function TransactionsContent() {
                             )}
 
                             <div className="min-w-0">
-                              <p className="truncate text-base font-semibold tracking-tight text-foreground/90 flex items-center gap-2">
-                                {title}
+                              <p className="flex min-w-0 items-center gap-2 text-base font-semibold tracking-tight text-foreground/90">
+                                <span className="truncate" title={title}>{title}</span>
                                 {transaction.isSalary ? (
                                   <Badge className="h-5 gap-1 bg-emerald-500/10 px-1.5 text-xs font-mono text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400">
                                     <BadgeDollarSign className="size-3" />

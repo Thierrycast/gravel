@@ -11,7 +11,9 @@ O Gravel Finance OS organiza as telas em quatro pilares: confiança do dado, dec
 - `/recurring`: recorrências e parcelas detectadas; `/recurring/income` tem CRUD completo de receitas recorrentes manuais.
 - `/cash-flow`: leitura de caixa por período.
 - `/accounts`: contas e cartões; cartões mostram fatura atual (por ciclo), próximas, total em aberto e status, com configuração de fechamento/vencimento.
-- `/bills`: faturas por cartão calculadas pelo motor de ciclo — fatura atual em destaque, próximas, histórico e alerta de vencidas.
+- `/budgets`: orçamento mensal por categoria (subcategorias contam na mãe), com o gasto calculado pela mesma política de despesa operacional do fluxo de caixa, projeção de fim de mês pelo ritmo atual e aviso na Inbox e nas notificações ao cruzar o percentual escolhido e ao estourar. Categoria com orçamento definido deixa de receber o alerta por média histórica.
+- `/payables`: contas a pagar a partir de boletos. Lê a linha digitável (colada) ou o PDF, confere os dígitos verificadores (FEBRABAN: bancário de 47 dígitos e convênio de 48, além do código de barras de 44) e tira valor, vencimento e banco. Não cria lançamento: avisa perto do vencimento e dá baixa sozinha quando a saída de mesmo valor aparece no Open Finance perto do vencimento (só transações já ocorridas). Fica fora da projeção de propósito, porque o boleto típico já entra como recorrência ou gasto variável.
+- `/bills`: faturas por cartão calculadas pelo motor de ciclo — fatura atual em destaque, próximas, histórico e alerta de vencidas. Pagamentos identificados por `operationType: PAGAMENTO_FATURA` da Pluggy entram na quitação mesmo com descrição genérica e ficam fora dos totais de receita e despesa.
 - `/portfolio`, `/investments`, `/crypto`: patrimônio.
 - `/projection`: projeção mensal com componentes separados (recorrências, faturas de cartão, parcelas, variável), ajuste do mês corrente e alertas (saldo negativo, faturas vencidas, capacidade de poupança vs metas).
 - `/playground`: simulações; hipóteses locais (navegador) e cenários salvos (afetam projeções). `/scenarios` redireciona para cá.

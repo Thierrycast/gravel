@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { BadgeDollarSign, CalendarClock, Link2, TrendingUp, Users, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -75,11 +75,12 @@ export function TransactionEditSheet({
   const [savingOverride, setSavingOverride] = useState(false);
   const [savingLend, setSavingLend] = useState(false);
 
-  // Semeia os rascunhos quando outra transação é selecionada. Antes isso ficava
-  // em `openTransaction`, na página, que precisava conhecer a forma interna
-  // desta folha para preenchê-la.
-  useEffect(() => {
-    if (!transaction) return;
+  // Semeia os rascunhos quando outra transação é selecionada. Ajuste de estado
+  // durante a renderização (padrão do React para "resetar ao mudar a prop"),
+  // em vez de um effect que renderiza a folha duas vezes com o rascunho velho.
+  const [seededFor, setSeededFor] = useState<typeof transaction>(null);
+  if (transaction && transaction !== seededFor) {
+    setSeededFor(transaction);
     const defaultDueDate = new Date(transaction.date);
     defaultDueDate.setDate(defaultDueDate.getDate() + 30);
 
@@ -95,7 +96,7 @@ export function TransactionEditSheet({
         : defaultDueDate.toISOString().slice(0, 10),
       description: transaction.rawDescription ?? transaction.description ?? "",
     });
-  }, [transaction]);
+  }
 
   const isSelfTransfer = Boolean(transaction?.isSelfTransfer);
   const signedAmount = transaction

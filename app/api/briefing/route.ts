@@ -124,7 +124,8 @@ PROJEÇÃO:
 
 SITUAÇÃO ATUAL (contagens reais de hoje):
 - Faturas de cartão em atraso: ${bills.counts.overdue}
-- Faturas a vencer em 7 dias: ${bills.counts.open}
+- Faturas a vencer em 7 dias: ${bills.counts.dueIn7Days} (${bills.dueIn7DaysAmount.toFixed(2)})
+- Faturas fechadas aguardando vencimento: ${bills.counts.closed} (${bills.closedAmount.toFixed(2)})
 
 GASTO REALIZADO NOS ÚLTIMOS 30 DIAS — TOP 5 CATEGORIAS:
 ${topSpend.length === 0 ? "Nenhum gasto categorizado no período." : topSpend.map((s, i) => `${i + 1}. ${s.category}: R$ ${s.amount.toFixed(2)}`).join("\n")}

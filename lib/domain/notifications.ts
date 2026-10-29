@@ -8,6 +8,9 @@ import {
   filterOperationalSpending,
 } from "@/lib/domain/analytics/spending-query"
 import { getProjectionPayload } from "@/lib/domain/derived"
+import { getBudgetsProgress } from "@/lib/domain/budgets"
+import { listPayables } from "@/lib/domain/payables"
+import { formatCurrency as formatBrl } from "@/lib/format"
 
 const LOG_FILE_PATH = path.join(process.cwd(), ".agents", "logs", "notifications.log")
 
@@ -280,8 +283,75 @@ export async function checkBudgetAnomalies() {
       historyMap.set(tx.domainCategoryId, (historyMap.get(tx.domainCategoryId) ?? 0) + val)
     }
 
-    // Verifica estoiros nas categorias
+    // 1a. Orçamentos definidos pelo usuário: o limite dele manda. Avisa uma vez
+    // ao cruzar o percentual de alerta e outra ao estourar, por mês.
+    const budgets = await getBudgetsProgress({ now })
+    const budgetedCategoryIds = new Set<string>()
+    for (const budget of budgets.results) {
+      budgetedCategoryIds.add(budget.categoryId)
+      if (budget.status === "ok") continue
+      const over = budget.status === "over"
+      const key = `budget-limit-${budget.categorySlug}-${monthKey}-${budget.status}`
+      const title = over
+        ? `Orçamento de ${budget.categoryName} estourado`
+        : `Orçamento de ${budget.categoryName} perto do limite`
+      const description = `Gasto do mês: ${formatBrl(budget.spent)} de ${formatBrl(budget.monthlyLimit)} (${Math.floor(budget.percent)}%).`
+      const impact = over
+        ? `${formatBrl(-budget.remaining)} acima do limite.`
+        : (budget.reason ?? "")
+      anomalies.push({
+        id: key,
+        kind: "budget-limit",
+        severity: over ? "high" : "medium",
+        title,
+        description,
+        impact,
+        origin: "Orçamento",
+        amount: budget.spent,
+        href: "/budgets",
+      })
+      await deliverNotificationOnce(key, "budget-limit", title, `${description} ${impact}`, over ? "warning" : "info", {
+        categorySlug: budget.categorySlug,
+        spent: budget.spent,
+        limit: budget.monthlyLimit,
+      })
+    }
+
+    // 1b. Boletos cadastrados: lembra perto do vencimento e quando vencem sem
+    // o pagamento aparecer no banco.
+    const payables = await listPayables(now)
+    for (const payable of payables.results) {
+      if (payable.status !== "PENDING") continue
+      if (!payable.overdue && payable.daysToDue > 3) continue
+      const state = payable.overdue ? "overdue" : "due-soon"
+      const key = `payable-${payable.id}-${state}`
+      const when = payable.overdue
+        ? `venceu há ${-payable.daysToDue} dia(s)`
+        : payable.daysToDue === 0
+          ? "vence hoje"
+          : `vence em ${payable.daysToDue} dia(s)`
+      const title = payable.overdue ? `Boleto vencido: ${payable.description}` : `Boleto ${when}: ${payable.description}`
+      const description = `${formatBrl(payable.amount)}, ${when}. Some da lista sozinho quando o pagamento aparecer no banco.`
+      anomalies.push({
+        id: key,
+        kind: "payable-due",
+        severity: payable.overdue ? "high" : "medium",
+        title,
+        description,
+        impact: formatBrl(payable.amount),
+        origin: "Contas a pagar",
+        amount: payable.amount,
+        href: "/payables",
+      })
+      await deliverNotificationOnce(key, "payable-due", title, description, payable.overdue ? "warning" : "info", {
+        payableId: payable.id,
+        amount: payable.amount,
+      })
+    }
+
+    // Verifica estoiros nas categorias sem orçamento definido (média histórica)
     for (const [catId, currentVal] of currentMap.entries()) {
+      if (budgetedCategoryIds.has(catId)) continue
       // Ignora valores muito baixos (abaixo de R$ 100) para evitar ruído
       if (currentVal < 100) continue
 

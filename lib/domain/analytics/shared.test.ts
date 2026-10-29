@@ -32,6 +32,34 @@ function tx(overrides: {
 }
 
 describe("classifyCashFlowTransaction", () => {
+  it("never treats an inflow on a card account as income", () => {
+    // Quitação com descrição de banco ("Inclusao de Pagamento Ciclo Corrente")
+    // e estorno de compra caíam como renda por virem com categoria genérica.
+    for (const [category, description] of [
+      ["Transferências", "Inclusao de Pagamento Ciclo Corrente"],
+      ["Compras online", "MERCADOLIVRE*MERCADOLIVRE"],
+    ]) {
+      expect(
+        classifyCashFlowTransaction(
+          DomainTransactionDirection.INFLOW,
+          category,
+          null,
+          description,
+          { accountKind: "CARD" },
+        ),
+      ).toBe("excluded");
+    }
+    expect(
+      classifyCashFlowTransaction(
+        DomainTransactionDirection.INFLOW,
+        "Transferências",
+        null,
+        "Transferência Recebida|CLIENTE EXEMPLO",
+        { accountKind: "BANK" },
+      ),
+    ).toBe("income");
+  });
+
   it("counts an external received transfer as income", () => {
     expect(
       classifyCashFlowTransaction(
@@ -103,6 +131,18 @@ describe("classifyCashFlowTransaction", () => {
         "Pagamento de cartao de credito",
         "EXPENSE",
         "Pagamento recebido",
+      ),
+    ).toBe("excluded");
+  });
+
+  it("excludes a Pluggy bill payment even with a generic description", () => {
+    expect(
+      classifyCashFlowTransaction(
+        DomainTransactionDirection.INFLOW,
+        "Outros",
+        "INCOME",
+        "Crédito lançado",
+        { metadataJson: JSON.stringify({ operationType: "PAGAMENTO_FATURA" }) },
       ),
     ).toBe("excluded");
   });
@@ -219,6 +259,17 @@ describe("extractTransferCounterparty", () => {
     ).toBe("ana paula de souza lima");
   });
 
+  it("drops the preposition that links the phrase to the name", () => {
+    // Sem isto, "Pix recebido de Fulano" ("de fulano ...") não pareava com o
+    // envio "Transferência enviada|FULANO ..." e a auto-transferência virava renda.
+    expect(
+      extractTransferCounterparty("Pix recebido de Fulano Exemplo da Silva"),
+    ).toBe("fulano exemplo da silva");
+    expect(
+      extractTransferCounterparty("Transferência enviada para Fulano Exemplo"),
+    ).toBe("fulano exemplo");
+  });
+
   it("returns null for non-transfer descriptions", () => {
     expect(extractTransferCounterparty("Depósito de dinheiro")).toBeNull();
     expect(extractTransferCounterparty("Netflix assinatura")).toBeNull();
@@ -245,6 +296,53 @@ describe("detectInternalTransferPairIds", () => {
     ]);
     expect(paired.has("out")).toBe(true);
     expect(paired.has("in")).toBe(true);
+  });
+
+  it("pairs a 'Pix recebido de' inflow with the 'enviada|NAME' outflow", () => {
+    const paired = detectInternalTransferPairIds([
+      tx({
+        id: "out",
+        direction: DomainTransactionDirection.OUTFLOW,
+        amount: 1000,
+        occurredAt: "2026-10-16T12:00:00Z",
+        description: "Transferência enviada pelo Pix|FULANO EXEMPLO DA SILVA",
+      }),
+      tx({
+        id: "in",
+        direction: DomainTransactionDirection.INFLOW,
+        amount: 1000,
+        occurredAt: "2026-10-16T12:00:05Z",
+        description: "Pix recebido de Fulano Exemplo da Silva",
+      }),
+    ]);
+    expect([...paired].sort()).toEqual(["in", "out"]);
+  });
+
+  it("counts a self-transfer from an untracked account until that account is connected", () => {
+    // Regra do Thierry: sem a perna de saída rastreada, é dinheiro novo no
+    // sistema e conta. Conectada a conta de origem, o histórico traz a saída e o
+    // par some da renda sozinho — inclusive nos meses passados, porque o
+    // pareamento é feito a cada consulta, não gravado.
+    const inflow = tx({
+      id: "in",
+      direction: DomainTransactionDirection.INFLOW,
+      amount: 860,
+      occurredAt: "2026-06-11T12:00:00Z",
+      description: "Transferência Recebida|123.456.789 FULANO EXEMPLO DA SILVA",
+    });
+    expect(detectInternalTransferPairIds([inflow]).size).toBe(0);
+
+    const outflowFromNewAccount = tx({
+      id: "out",
+      direction: DomainTransactionDirection.OUTFLOW,
+      amount: 860,
+      occurredAt: "2026-06-11T11:59:00Z",
+      description: "Pix enviado - Fulano Exemplo da Silva",
+    });
+    expect([...detectInternalTransferPairIds([inflow, outflowFromNewAccount])].sort()).toEqual([
+      "in",
+      "out",
+    ]);
   });
 
   it("does not pair the real salary inflow with the self-transfer legs", () => {

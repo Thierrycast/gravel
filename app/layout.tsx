@@ -57,6 +57,13 @@ import { CurrencyProvider } from "@/lib/currency-context";
 import { BottomNav } from "@/components/bottom-nav";
 import { ChatDock } from "@/components/chat/chat-dock";
 
+// Tudo aqui é dado do usuário atrás de login, do momento da requisição. Sem
+// isto, as páginas cliente eram pré-renderizadas no build e congelavam
+// `new Date()` no HTML: /people mostrava o vencimento padrão com a data do build
+// e /monthly-close o mês do build, e a hidratação quebrava (React #418) quando o
+// dia virava entre o build (container em UTC) e o acesso.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Gravel Finance",
   description: "Personal financial dashboard with multi-currency support and privacy mode. Tracking every digital 'cascalho' with precision.",
@@ -152,8 +159,12 @@ export default async function RootLayout({
                       <MobileToolbox />
                     </header>
                     <div className="page-container px-4 md:px-6 xl:px-12 2xl:px-16 xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto w-full py-5 pb-[5.25rem] md:pb-8 md:py-6 lg:py-8">
-                      <ConnectionAlertsBanner />
-                      <SyncFailureBanner />
+                      {/* Avisos empilhados com respiro entre si e até o título; somem
+                          (empty:hidden) quando nenhum banner tem o que mostrar. */}
+                      <div className="mb-5 flex flex-col gap-3 empty:hidden">
+                        <ConnectionAlertsBanner />
+                        <SyncFailureBanner />
+                      </div>
                       <Suspense fallback={<div className="flex min-h-[40vh] w-full items-center justify-center p-8"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
                         {children}
                       </Suspense>

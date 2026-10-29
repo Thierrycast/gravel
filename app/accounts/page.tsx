@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import {
   Plus,
@@ -236,21 +236,24 @@ export default function AccountsPage() {
 
   const loading = accountsLoading || allocationLoading;
 
-  useEffect(() => {
-    if (selectedAccount) {
-      setNicknameInput(selectedAccount.nickname || selectedAccount.name || "");
-      setClosingDayInput(
-        selectedAccount.billingClosingDay != null
-          ? String(selectedAccount.billingClosingDay)
-          : "",
-      );
-      setDueDayInput(
-        selectedAccount.billingDueDay != null
-          ? String(selectedAccount.billingDueDay)
-          : "",
-      );
-    }
-  }, [selectedAccount]);
+  // Semeia os campos quando outra conta é aberta (ajuste durante a
+  // renderização). Pelo id, não pelo objeto: salvar saldo ou ciclo troca o
+  // objeto selecionado e não deve apagar o que está sendo digitado.
+  const [seededAccountId, setSeededAccountId] = useState<string | null>(null);
+  if (selectedAccount && selectedAccount.id !== seededAccountId) {
+    setSeededAccountId(selectedAccount.id);
+    setNicknameInput(selectedAccount.nickname || selectedAccount.name || "");
+    setClosingDayInput(
+      selectedAccount.billingClosingDay != null
+        ? String(selectedAccount.billingClosingDay)
+        : "",
+    );
+    setDueDayInput(
+      selectedAccount.billingDueDay != null
+        ? String(selectedAccount.billingDueDay)
+        : "",
+    );
+  }
 
   if (accountsError || allocationError) {
     return (

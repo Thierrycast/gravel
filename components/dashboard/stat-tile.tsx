@@ -35,7 +35,7 @@ export function StatTile({
     <Wrapper
       {...wrapperProps}
       className={cn(
-        "surface flex flex-col gap-2 p-4 transition-colors",
+        "surface @container flex min-w-0 flex-col gap-2 p-4 transition-colors",
         href && "hover:bg-accent/40"
       )}
     >
@@ -46,7 +46,14 @@ export function StatTile({
       {loading ? (
         <Skeleton className="h-7 w-28" />
       ) : (
-        <p className={cn("text-2xl font-bold tabular-nums tracking-tighter", toneClass)}>
+        // Fonte proporcional à largura do card: em duas colunas num celular de
+        // 390 px, "R$ 13.169,68" em text-2xl passava da borda.
+        <p
+          className={cn(
+            "whitespace-nowrap text-[clamp(1rem,12.5cqi,1.5rem)] font-bold tabular-nums tracking-tighter",
+            toneClass,
+          )}
+        >
           {value}
         </p>
       )}

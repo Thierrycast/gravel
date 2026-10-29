@@ -669,6 +669,7 @@ export async function projectPluggyTransactions() {
         providerId: record.providerId,
         status: record.status,
         type: record.type,
+        operationType: record.operationType,
         ...(Object.keys(overrides).length > 0 ? { overrides } : {}),
       };
       const metadataJson = JSON.stringify(metadataPayload);
