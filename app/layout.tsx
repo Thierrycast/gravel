@@ -57,6 +57,13 @@ import { CurrencyProvider } from "@/lib/currency-context";
 import { BottomNav } from "@/components/bottom-nav";
 import { ChatDock } from "@/components/chat/chat-dock";
 
+// Tudo aqui é dado do usuário atrás de login, do momento da requisição. Sem
+// isto, as páginas cliente eram pré-renderizadas no build e congelavam
+// `new Date()` no HTML: /people mostrava o vencimento padrão com a data do build
+// e /monthly-close o mês do build, e a hidratação quebrava (React #418) quando o
+// dia virava entre o build (container em UTC) e o acesso.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Gravel Finance",
   description: "Personal financial dashboard with multi-currency support and privacy mode. Tracking every digital 'cascalho' with precision.",
