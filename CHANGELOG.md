@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.14 — 2026-10-28 — datas congeladas no build
+
+- **Páginas eram pré-renderizadas no build** e guardavam `new Date()` no HTML:
+  `/people` mostrava o vencimento padrão com a data do build, `/monthly-close` o
+  mês do build, e a hidratação quebrava (React #418) quando o dia virava entre o
+  build (container em UTC) e o acesso. Todas as rotas passam a ser renderizadas
+  por requisição: são dados do usuário, atrás de login.
+
 ## 0.1.13 — 2026-10-28 — fichas de classificação e débito de lint
 
 ### Números
