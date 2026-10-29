@@ -155,6 +155,7 @@ Você tem acesso ao servidor MCP `gravel-finance`. Use-o sempre que o usuário s
 *   **`get_people`**: Pessoas cadastradas com valores a receber (empréstimos + divisões).
 *   **`get_sync_items`**: Estado de sincronização de cada item Pluggy (status, executionStatus, último sync, erro, consentimento).
 *   **`get_goals`**: Exibe metas ativas e percentual de progresso.
+*   **`get_budgets`**: Orçamentos do mês por categoria com gasto, restante, projeção pelo ritmo e status.
 *   **`get_goal_history`**: Série mensal de uma meta com auto-tracking (`goal_id`, `months` de 1 a 60, padrão 12). Saída vinculada soma, entrada (resgate) abate, e o acumulado parte do valor manual e do que entrou antes da janela: o último ponto bate com o progresso da meta.
 *   **get_scenarios**: Cenários e eventos de simulação futuros.
 *   **get_financial_inbox**: Retorna pendências de conciliação.
@@ -166,6 +167,7 @@ Você tem acesso ao servidor MCP `gravel-finance`. Use-o sempre que o usuário s
 *   **complete_monthly_close**: Persiste o resumo final do fechamento mensal.
 
 ### ✍️ Ações de Escrita e Mutação (CRUD)
+*   **`set_budget`** / **`delete_budget`** (escopo de escrita): cria ou substitui o orçamento mensal de uma categoria (`category_slug` ou `category_id`, `monthly_limit`, `alert_at_percent`) e remove (`budget_id` ou `category_slug`).
 *   **`create_transaction`** / **`update_transaction`** / **`delete_transaction`**: Cria, edita e remove transações locais manuais.
 *   **`update_account`**: Edita apelidos e saldos de contas manuais.
 *   **`pay_bill`**: Registra a quitação de faturas de cartão.

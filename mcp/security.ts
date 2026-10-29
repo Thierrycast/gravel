@@ -13,6 +13,8 @@ export const WRITE_TOOLS = new Set([
   "pay_bill",
   "create_goal",
   "update_goal",
+  "set_budget",
+  "delete_budget",
   "create_scenario",
   "delete_scenario",
   "create_lend",

@@ -8,6 +8,8 @@ import {
   filterOperationalSpending,
 } from "@/lib/domain/analytics/spending-query"
 import { getProjectionPayload } from "@/lib/domain/derived"
+import { getBudgetsProgress } from "@/lib/domain/budgets"
+import { formatCurrency as formatBrl } from "@/lib/format"
 
 const LOG_FILE_PATH = path.join(process.cwd(), ".agents", "logs", "notifications.log")
 
@@ -280,8 +282,43 @@ export async function checkBudgetAnomalies() {
       historyMap.set(tx.domainCategoryId, (historyMap.get(tx.domainCategoryId) ?? 0) + val)
     }
 
-    // Verifica estoiros nas categorias
+    // 1a. Orçamentos definidos pelo usuário: o limite dele manda. Avisa uma vez
+    // ao cruzar o percentual de alerta e outra ao estourar, por mês.
+    const budgets = await getBudgetsProgress({ now })
+    const budgetedCategoryIds = new Set<string>()
+    for (const budget of budgets.results) {
+      budgetedCategoryIds.add(budget.categoryId)
+      if (budget.status === "ok") continue
+      const over = budget.status === "over"
+      const key = `budget-limit-${budget.categorySlug}-${monthKey}-${budget.status}`
+      const title = over
+        ? `Orçamento de ${budget.categoryName} estourado`
+        : `Orçamento de ${budget.categoryName} perto do limite`
+      const description = `Gasto do mês: ${formatBrl(budget.spent)} de ${formatBrl(budget.monthlyLimit)} (${Math.floor(budget.percent)}%).`
+      const impact = over
+        ? `${formatBrl(-budget.remaining)} acima do limite.`
+        : (budget.reason ?? "")
+      anomalies.push({
+        id: key,
+        kind: "budget-limit",
+        severity: over ? "high" : "medium",
+        title,
+        description,
+        impact,
+        origin: "Orçamento",
+        amount: budget.spent,
+        href: "/budgets",
+      })
+      await deliverNotificationOnce(key, "budget-limit", title, `${description} ${impact}`, over ? "warning" : "info", {
+        categorySlug: budget.categorySlug,
+        spent: budget.spent,
+        limit: budget.monthlyLimit,
+      })
+    }
+
+    // Verifica estoiros nas categorias sem orçamento definido (média histórica)
     for (const [catId, currentVal] of currentMap.entries()) {
+      if (budgetedCategoryIds.has(catId)) continue
       // Ignora valores muito baixos (abaixo de R$ 100) para evitar ruído
       if (currentVal < 100) continue
 

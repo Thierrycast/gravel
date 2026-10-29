@@ -12,6 +12,8 @@
  * que garante que um campo novo no schema não vaze sozinho amanhã.
  */
 import { getOverviewMetrics } from "@/lib/domain/analytics/overview"
+import { getBudgetsProgress } from "@/lib/domain/budgets"
+import { enrichGoalWithAutoTransactions } from "@/lib/domain/queries"
 import { getCardStatementsSummaryMetrics } from "@/lib/domain/billing"
 import { getSpendingByCategoryMetrics } from "@/lib/domain/analytics/reports"
 import { summarizeCreditLimits } from "@/lib/domain/credit"
@@ -335,17 +337,42 @@ export const CHAT_TOOLS: Array<{ schema: ChatToolSchema; handler: ChatToolHandle
       description: "Metas financeiras ativas, com valor alvo e progresso.",
       parameters: { type: "object", properties: {} },
     },
+    // O valor atual inclui os aportes automáticos (transações vinculadas), como
+    // a tela de metas mostra — o `currentAmount` cru é só a parte manual.
     handler: async () => {
-      const goals = await prisma.goal.findMany({
-        where: { active: true },
-        select: { name: true, targetAmount: true, currentAmount: true, targetDate: true },
-      })
-      return goals.map((goal) => ({
+      const goals = await prisma.goal.findMany({ where: { active: true } })
+      const enriched = await Promise.all(goals.map((goal) => enrichGoalWithAutoTransactions(goal)))
+      return enriched.map((goal) => ({
         nome: goal.name,
         alvo: toNumber(goal.targetAmount),
         atual: toNumber(goal.currentAmount),
         prazo: goal.targetDate,
       }))
+    },
+  },
+  {
+    schema: {
+      name: "orcamentos",
+      description:
+        "Orçamentos do mês por categoria: limite, gasto, restante, projeção pelo ritmo atual e situação. Use para 'como está meu orçamento', 'posso gastar mais com X'.",
+      parameters: { type: "object", properties: {} },
+    },
+    handler: async () => {
+      const budgets = await getBudgetsProgress()
+      return {
+        mes: budgets.month,
+        mes_decorrido_pct: budgets.monthElapsedPercent,
+        orcamentos: budgets.results.map((budget) => ({
+          categoria: budget.categoryName,
+          limite: budget.monthlyLimit,
+          gasto: budget.spent,
+          restante: budget.remaining,
+          projecao_fim_do_mes: budget.projected,
+          situacao: budget.status === "over" ? "estourado" : budget.status === "warning" ? "atenção" : "no ritmo",
+          motivo: budget.reason,
+        })),
+        observacao: "Valores em reais, já somados com as subcategorias. Não some de novo.",
+      }
     },
   },
 ]

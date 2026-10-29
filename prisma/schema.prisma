@@ -288,10 +288,25 @@ model DomainCategory {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
   transactions       DomainTransaction[]
+  budget             DomainBudget?
 
 
   @@unique([sourceProvider, sourceExternalId])
   @@index([parentId])
+}
+
+/// Limite mensal de gasto por categoria (inclui as subcategorias). O gasto é
+/// calculado com a mesma política de despesa operacional do fluxo de caixa.
+model DomainBudget {
+  id             String         @id @default(cuid())
+  categoryId     String         @unique
+  category       DomainCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  monthlyLimit   Decimal
+  /// Percentual do limite que dispara o aviso (o estouro sempre avisa).
+  alertAtPercent Int            @default(80)
+  active         Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 }
 
 model DomainMerchant {

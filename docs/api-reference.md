@@ -244,3 +244,13 @@ primeiro cadastro é liberado, senão o setup seria impossível.
 Renda detectada pela Insights API da Pluggy versus o salário configurado. O
 produto pode não estar habilitado na aplicação; nesse caso a resposta traz
 `unavailable` com o motivo em vez de erro.
+
+## Orçamentos
+
+- `GET /api/domain/budgets` — orçamentos ativos com o progresso do mês: `spent`,
+  `remaining`, `percent`, `projected` (ritmo atual, só depois de 15% do mês) e
+  `status` (`ok` | `warning` | `over`) com `reason`. `meta.monthElapsedPercent`.
+- `POST /api/domain/budgets` — `{ categoryId, monthlyLimit, alertAtPercent? }`;
+  um orçamento por categoria (substitui o existente). `alertAtPercent` padrão 80.
+- `PATCH /api/domain/budgets/{budgetId}` — `{ monthlyLimit?, alertAtPercent?, active? }`.
+- `DELETE /api/domain/budgets/{budgetId}`.
