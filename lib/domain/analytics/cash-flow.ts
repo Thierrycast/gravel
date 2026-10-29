@@ -1,4 +1,5 @@
 import { DomainTransactionDirection } from "@prisma/client";
+import { accountKindOf, loadAccountKinds } from "./account-kinds";
 import { createBrlConverter } from "@/lib/domain/currency";
 import { getUsdBrlRate } from "@/lib/exchange-rate";
 import { prisma } from "@/lib/prisma";
@@ -18,7 +19,7 @@ export async function getCashFlowMetrics(searchParams: URLSearchParams) {
     groupBy: "month",
   });
 
-  const [transactions, categories, settings, usdBrlRate] = await Promise.all([
+  const [transactions, categories, settings, usdBrlRate, accountKinds] = await Promise.all([
     prisma.domainTransaction.findMany({
       where: buildTransactionWhere(filters),
       orderBy: { occurredAt: "asc" },
@@ -26,6 +27,7 @@ export async function getCashFlowMetrics(searchParams: URLSearchParams) {
     prisma.domainCategory.findMany(),
     getUserSettings(searchParams),
     getUsdBrlRate(),
+    loadAccountKinds(),
   ]);
 
   // Um conversor por chamada: converte o que conhece e anota o que não
@@ -71,6 +73,7 @@ export async function getCashFlowMetrics(searchParams: URLSearchParams) {
         salaryPatterns: settings.salaryPatterns,
         merchantName: transaction.merchantName,
         metadataJson: transaction.metadataJson,
+        accountKind: accountKindOf(accountKinds, transaction.domainAccountId),
       },
     );
 

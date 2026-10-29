@@ -113,6 +113,7 @@ export async function GET() {
           salaryPatterns: settings.salaryPatterns,
           merchantName: tx.merchantName,
           metadataJson: tx.metadataJson,
+          accountKind: tx.domainAccountId ? accountById.get(tx.domainAccountId)?.kind : null,
         },
       );
       if (classification !== "income" && classification !== "expense") continue;

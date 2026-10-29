@@ -9,6 +9,7 @@ import {
 import { getOverviewMetrics, getSpendingByCategoryMetrics } from "@/lib/domain/analytics"
 import { isGenericIncomeLabel, parseSalaryPatternsConfig } from "@/lib/domain/salary"
 import { checkBudgetAnomalies } from "@/lib/domain/notifications"
+import { accountKindOf, loadAccountKinds } from "@/lib/domain/analytics/account-kinds"
 
 type ReviewStatus = "open" | "resolved" | "ignored"
 type Severity = "critical" | "high" | "medium" | "low"
@@ -162,6 +163,7 @@ export async function setInboxItemStatus(id: string, status: ReviewStatus) {
 export async function getInboxPayload() {
   const { settings, config } = await getSettingsWithConfig()
   const salaryPatterns = parseSalaryPatternsConfig(settings.dashboardConfigJson)
+  const accountKinds = await loadAccountKinds()
   const now = new Date()
   const cutoff = new Date(now.getTime() - 45 * DAY_MS)
   const dueLimit = new Date(now.getTime() + 7 * DAY_MS)
@@ -235,7 +237,12 @@ export async function getInboxPayload() {
       category?.name,
       category?.kind,
       tx.description ?? tx.normalizedDescription,
-      { salaryPatterns, merchantName: tx.merchantName, metadataJson: tx.metadataJson },
+      {
+        salaryPatterns,
+        merchantName: tx.merchantName,
+        metadataJson: tx.metadataJson,
+        accountKind: accountKindOf(accountKinds, tx.domainAccountId),
+      },
     )
     const lookup = normalizeText([tx.description, tx.normalizedDescription, category?.name].filter(Boolean).join(" "))
 

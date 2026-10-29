@@ -80,6 +80,7 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
   const categoryMap = new Map(
     categories.map((category) => [category.id, category]),
   );
+  const accountKindById = new Map(accounts.map((account) => [account.id, account.kind]));
   let inflow = ZERO;
   let outflow = ZERO;
   let operatingTransactionCount = 0;
@@ -102,6 +103,9 @@ export async function getOverviewMetrics(searchParams?: URLSearchParams) {
         salaryPatterns: settings.salaryPatterns,
         merchantName: transaction.merchantName,
         metadataJson: transaction.metadataJson,
+        accountKind: transaction.domainAccountId
+          ? accountKindById.get(transaction.domainAccountId)
+          : null,
       },
     );
 

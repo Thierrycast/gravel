@@ -1,4 +1,5 @@
 import { DomainTransactionDirection, Prisma } from "@prisma/client";
+import { accountKindOf, loadAccountKinds } from "@/lib/domain/analytics/account-kinds";
 
 import { parseNumberParam } from "@/lib/core/filters";
 import { RECURRING_DETECTION, PROJECTION } from "@/lib/domain/constants";
@@ -1018,6 +1019,7 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
   // so the summary card reflects actual income even when salary is not configured.
   const pastInternalTransferPairIds =
     detectInternalTransferPairIds(pastTransactions);
+  const accountKinds = await loadAccountKinds();
   const pastInflowTransactions = pastTransactions.filter((tx) => {
     if (tx.direction !== DomainTransactionDirection.INFLOW) return false;
     if (pastInternalTransferPairIds.has(tx.id)) return false;
@@ -1031,6 +1033,7 @@ export async function getProjectionPayload(searchParams?: URLSearchParams) {
         salaryPatterns: settings.salaryPatterns,
         merchantName: tx.merchantName,
         metadataJson: tx.metadataJson,
+        accountKind: accountKindOf(accountKinds, tx.domainAccountId),
       },
     );
     return classification === "income";
