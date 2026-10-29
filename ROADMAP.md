@@ -135,7 +135,7 @@ Checklist da revisão de ponta a ponta solicitada. Itens são marcados conforme 
 - [x] Página reorganizada: hero de saúde financeira (score do relatório consolidado) → ações recomendadas → comportamento → assinaturas ocultas → Benford (colapsável); PageHeader/container padrão
 
 ## Pontos de atenção futuros
-- "Implementações sugeridas" não iniciadas: DomainBudget + tools MCP de orçamento, webhooks/SSE de eventos, upload/parsing de boletos, `simulate_purchase_impact` e `get_goal_history` no MCP.
+- "Implementações sugeridas" ainda não iniciadas: DomainBudget + tools MCP de orçamento e upload/parsing de boletos. Já entregues: SSE de eventos (`/api/sync/events`), `simulate_purchase_impact` e `get_goal_history` no MCP (revisado em 2026-10-28).
 - Cartões sem fechamento/vencimento configurados continuam nas heurísticas antigas — configurar cada cartão em /settings › Cartões de crédito.
 - O deploy em produção aplica o schema automaticamente (`prisma db push` no entrypoint); os campos novos de billing entram sem passo manual.
 

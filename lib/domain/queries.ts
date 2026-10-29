@@ -1020,6 +1020,36 @@ export async function getUserSettings(searchParams?: URLSearchParams) {
   return base
 }
 
+/** Aporte de uma transação na meta: saída (valor negativo) soma, entrada abate. */
+function goalContribution(amount: Prisma.Decimal | number) {
+  return -Number(amount);
+}
+
+/**
+ * Série mensal de uma meta. Mesmo sinal que `enrichGoalWithAutoTransactions`:
+ * um resgate abate o acumulado em vez de contar como aporte.
+ */
+export function buildGoalHistorySeries(
+  transactions: Array<{ amount: Prisma.Decimal | number; occurredAt: Date }>,
+  openingAmount = 0,
+) {
+  const monthlyMap = new Map<string, number>();
+  for (const tx of transactions) {
+    const d = tx.occurredAt;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    monthlyMap.set(key, (monthlyMap.get(key) ?? 0) + goalContribution(tx.amount));
+  }
+
+  let cumulative = openingAmount;
+  return [...monthlyMap.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([label, addedAmount]) => {
+      cumulative += addedAmount;
+      const [y, m] = label.split("-").map(Number);
+      return { year: y, month: m, label, addedAmount, cumulativeAmount: cumulative };
+    });
+}
+
 export async function getGoalHistory(goalId: string, months = 12) {
   const goal = await prisma.goal.findUnique({ where: { id: goalId } });
   if (!goal) throw new Error(`Meta não encontrada: ${goalId}`);
@@ -1060,27 +1090,32 @@ export async function getGoalHistory(goalId: string, months = 12) {
   }
   if (orConditions.length > 0) filters.push({ OR: orConditions });
 
-  const transactions = await prisma.domainTransaction.findMany({
-    where: { AND: filters },
-    select: { amount: true, occurredAt: true },
-    orderBy: { occurredAt: "asc" },
-  });
+  // A janela não começa necessariamente no início da meta: o que entrou antes
+  // dela (e o valor lançado à mão) é o ponto de partida do acumulado, para o
+  // último ponto da série fechar com o progresso que a meta mostra.
+  const [transactions, before] = await Promise.all([
+    prisma.domainTransaction.findMany({
+      where: { AND: filters },
+      select: { amount: true, occurredAt: true },
+      orderBy: { occurredAt: "asc" },
+    }),
+    queryStart > startDate
+      ? prisma.domainTransaction.findMany({
+          where: {
+            AND: [
+              ...filters.filter((filter) => !("occurredAt" in filter)),
+              { occurredAt: { gte: startDate, lt: queryStart } },
+            ],
+          },
+          select: { amount: true },
+        })
+      : Promise.resolve([] as Array<{ amount: Prisma.Decimal }>),
+  ]);
 
-  const monthlyMap = new Map<string, number>();
-  for (const tx of transactions) {
-    const d = tx.occurredAt;
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    monthlyMap.set(key, (monthlyMap.get(key) ?? 0) + Math.abs(Number(tx.amount)));
-  }
-
-  let cumulative = 0;
-  const series = [...monthlyMap.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([label, addedAmount]) => {
-      cumulative += addedAmount;
-      const [y, m] = label.split("-").map(Number);
-      return { year: y, month: m, label, addedAmount, cumulativeAmount: cumulative };
-    });
+  const openingAmount =
+    enriched.manualAmount +
+    before.reduce((sum, tx) => sum + goalContribution(tx.amount), 0);
+  const series = buildGoalHistorySeries(transactions, openingAmount);
 
   return { goal: enriched, hasHistory: true, series };
 }

@@ -139,6 +139,7 @@ Você tem acesso ao servidor MCP `gravel-finance`. Use-o sempre que o usuário s
 *   **analyze_financial_health**: Indicadores automáticos de score financeiro e runway (meses de sobrevivência com o saldo atual).
 *   **compare_periods**: Comparação detalhada entre dois períodos financeiros.
 *   **project_future_cashflow**: Projeção matemática do saldo com base nas recorrências conhecidas e faturas futuras.
+*   **`simulate_purchase_impact`**: Simula uma compra (`amount` em BRL, `target_month` `YYYY-MM`, `description` opcional) sobre a projeção sem gravar nada. Devolve a projeção base, a simulada e o impacto: variação do saldo final, saldo do mês alvo e se a compra faz surgir um mês negativo.
 *   **get_insights**: Insights automáticos, alertas e análise forense (Lei de Benford e assinaturas ocultas).
 
 ### 🔍 Consultas e Listas
@@ -154,6 +155,7 @@ Você tem acesso ao servidor MCP `gravel-finance`. Use-o sempre que o usuário s
 *   **`get_people`**: Pessoas cadastradas com valores a receber (empréstimos + divisões).
 *   **`get_sync_items`**: Estado de sincronização de cada item Pluggy (status, executionStatus, último sync, erro, consentimento).
 *   **`get_goals`**: Exibe metas ativas e percentual de progresso.
+*   **`get_goal_history`**: Série mensal de uma meta com auto-tracking (`goal_id`, `months` de 1 a 60, padrão 12). Saída vinculada soma, entrada (resgate) abate, e o acumulado parte do valor manual e do que entrou antes da janela: o último ponto bate com o progresso da meta.
 *   **get_scenarios**: Cenários e eventos de simulação futuros.
 *   **get_financial_inbox**: Retorna pendências de conciliação.
 *   **get_monthly_close**: Retorna o checklist de fechamento.
